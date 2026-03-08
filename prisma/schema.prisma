@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Property {
+  id          Int       @id @default(autoincrement())
+  slug        String    @unique
+  name        String
+  description String    @db.Text
+  type        String    // "2BR" | "3BR" | "Studio" etc.
+  pricePerNight Decimal @db.Decimal(10, 2)
+  location    String
+  bedrooms    Int       @default(1)
+  bathrooms   Int       @default(1)
+  maxGuests   Int       @default(2)
+  images      String    @db.Text  // JSON array of image URLs
+  amenities   String    @db.Text  // JSON array
+  isFeatured  Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  bookings    Booking[]
+}
+
+model Booking {
+  id         Int      @id @default(autoincrement())
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId Int
+  guestName  String
+  guestEmail String
+  guestPhone String
+  checkIn    DateTime
+  checkOut   DateTime
+  guests     Int      @default(1)
+  totalPrice Decimal  @db.Decimal(10, 2)
+  status     String   @default("pending") // pending | confirmed | cancelled
+  notes      String?  @db.Text
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Testimonial {
+  id        Int      @id @default(autoincrement())
+  name      String
+  location  String
+  rating    Int      @default(5)
+  message   String   @db.Text
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+model ContactMessage {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String
+  phone     String
+  subject   String
+  message   String   @db.Text
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model AdminUser {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  password  String   // bcrypt hashed
+  name      String
+  createdAt DateTime @default(now())
+}

@@ -1,26 +1,75 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* ── Brand Colors ── */
+  --color-charcoal:   #2C2C2C;
+  --color-forest:     #3B5323;
+  --color-gold:       #C4A862;
+  --color-gold-dark:  #A8893F;
+  --color-cream:      #F9F5EE;
+  --color-offwhite:   #FDFAF5;
+
+  /* ── Typography ── */
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans:  "Open Sans", system-ui, sans-serif;
+
+  /* ── Shadows ── */
+  --shadow-card:       0 4px 24px rgba(44,44,44,.08);
+  --shadow-card-hover: 0 12px 40px rgba(44,44,44,.16);
+  --shadow-gold:       0 4px 20px rgba(196,168,98,.35);
+  --shadow-gold-lg:    0 8px 32px rgba(196,168,98,.50);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* ── Base ── */
+html { scroll-behavior: smooth; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Open Sans", system-ui, sans-serif;
+  background-color: #FDFAF5;
+  color: #2C2C2C;
+  -webkit-font-smoothing: antialiased;
 }
+
+/* ── Gold accent line ── */
+.gold-line {
+  width: 52px;
+  height: 3px;
+  background: linear-gradient(90deg, #C4A862, #A8893F);
+  border-radius: 9999px;
+}
+
+/* ── Scroll reveal ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.reveal.visible { opacity: 1; transform: none; }
+.reveal-d1 { transition-delay: 0.10s; }
+.reveal-d2 { transition-delay: 0.20s; }
+.reveal-d3 { transition-delay: 0.30s; }
+.reveal-d4 { transition-delay: 0.40s; }
+
+/* ── Navbar ── */
+#navbar {
+  background: transparent;
+  transition: background 0.35s ease, box-shadow 0.35s ease;
+}
+#navbar.scrolled {
+  background: rgba(253,250,245,0.97);
+  box-shadow: 0 2px 20px rgba(44,44,44,.10);
+  backdrop-filter: blur(8px);
+}
+#navbar.scrolled .nav-link { color: #2C2C2C; }
+#navbar.scrolled .nav-link:hover { color: #3B5323; }
+.nav-link {
+  color: rgba(255,255,255,0.88);
+  font-size: 14px;
+  font-weight: 600;
+  transition: color 0.2s;
+}
+.nav-link:hover { color: #C4A862; }
+
+/* ── Logo filter ── */
+#nav-logo img { filter: brightness(0) invert(1); transition: filter 0.35s; }
+#navbar.scrolled #nav-logo img { filter: none; }
