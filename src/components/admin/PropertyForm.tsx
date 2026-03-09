@@ -33,7 +33,7 @@ export default function PropertyForm({ property }: { property?: Property }) {
 
   useEffect(() => {
     if (isEdit && property?.slug) {
-      setExportUrl(`${window.location.origin}/api/calendar/${property.slug}`);
+      setExportUrl(`${window.location.origin}/api/calendar/${property.slug}.ics`);
     }
   }, [isEdit, property?.slug]);
 

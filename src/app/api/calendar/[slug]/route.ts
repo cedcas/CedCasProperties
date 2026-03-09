@@ -11,7 +11,9 @@ function toDtStamp(date: Date): string {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+  const rawSlug = (await params).slug;
+  // Support URLs ending in .ics (e.g. /api/calendar/the-lipa-retreat.ics)
+  const slug = rawSlug.replace(/\.ics$/i, "");
 
   const property = await prisma.property.findUnique({
     where: { slug },
