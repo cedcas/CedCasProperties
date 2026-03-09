@@ -16,10 +16,20 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
   const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
 
+  // Always start empty — never pre-fill from browser cache
   const [checkIn, setCheckIn]   = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [availability, setAvailability] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  const [dateError, setDateError] = useState("");
   const abortRef = useRef<AbortController | null>(null);
+
+  // Force-clear date inputs on every mount so browser autofill can't inject stale values
+  const checkInRef  = useRef<HTMLInputElement>(null);
+  const checkOutRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (checkInRef.current)  checkInRef.current.value  = "";
+    if (checkOutRef.current) checkOutRef.current.value = "";
+  }, []);
 
   const { nights, total } = useMemo(() => {
     if (!checkIn || !checkOut) return { nights: 0, total: 0 };
@@ -40,19 +50,28 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
     fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`, { signal: ctrl.signal })
       .then((r) => r.json())
       .then((data) => setAvailability(data.available ? "available" : "unavailable"))
-      .catch(() => setAvailability("idle")); // silently ignore abort/network errors
+      .catch(() => setAvailability("idle"));
   }, [checkIn, checkOut, slug]);
 
   const handleBook = () => {
+    // Require both dates before proceeding
+    if (!checkIn && !checkOut) {
+      setDateError("Please select your check-in and check-out dates to continue.");
+      return;
+    }
+    if (!checkIn) {
+      setDateError("Please select a check-in date.");
+      return;
+    }
+    if (!checkOut) {
+      setDateError("Please select a check-out date.");
+      return;
+    }
     if (availability === "unavailable") return;
-    const params = new URLSearchParams();
-    if (checkIn)  params.set("checkIn", checkIn);
-    if (checkOut) params.set("checkOut", checkOut);
-    const qs = params.toString();
-    router.push(`/properties/${slug}/book${qs ? `?${qs}` : ""}`);
+    setDateError("");
+    const params = new URLSearchParams({ checkIn, checkOut });
+    router.push(`/properties/${slug}/book?${params.toString()}`);
   };
-
-  const inputCls = "w-full px-3 py-2.5 rounded-[10px] border border-black/[.10] bg-[#F8F9FA] text-[13px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
 
   return (
     <div className="bg-white rounded-[20px] p-6 shadow-[0_8px_40px_rgba(44,44,44,.10)] border border-black/[.05]">
@@ -66,18 +85,21 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
 
       {/* Date pickers */}
       <div className="mb-4">
-        <div className="border border-black/[.10] rounded-[12px] overflow-hidden divide-y divide-black/[.08]">
+        <div className={`border rounded-[12px] overflow-hidden divide-y ${dateError ? "border-red-400 divide-red-200" : "border-black/[.10] divide-black/[.08]"}`}>
           {/* Check-in */}
           <div className="px-4 py-3">
             <label className="text-[10px] font-bold text-charcoal/40 uppercase tracking-wider block mb-1">
-              <i className="fa-regular fa-calendar mr-1.5" />Check-in
+              <i className="fa-regular fa-calendar mr-1.5" />Check-in <span className="text-red-400">*</span>
             </label>
             <input
+              ref={checkInRef}
               type="date"
               min={today}
               value={checkIn}
+              autoComplete="off"
               onChange={(e) => {
                 setCheckIn(e.target.value);
+                setDateError("");
                 if (checkOut && e.target.value >= checkOut) setCheckOut("");
               }}
               className="w-full text-[14px] font-medium text-charcoal bg-transparent focus:outline-none cursor-pointer"
@@ -86,20 +108,33 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
           {/* Check-out */}
           <div className="px-4 py-3">
             <label className="text-[10px] font-bold text-charcoal/40 uppercase tracking-wider block mb-1">
-              <i className="fa-regular fa-calendar-check mr-1.5" />Check-out
+              <i className="fa-regular fa-calendar-check mr-1.5" />Check-out <span className="text-red-400">*</span>
             </label>
             <input
+              ref={checkOutRef}
               type="date"
               min={checkIn || today}
               value={checkOut}
-              onChange={(e) => setCheckOut(e.target.value)}
+              autoComplete="off"
+              onChange={(e) => {
+                setCheckOut(e.target.value);
+                setDateError("");
+              }}
               className="w-full text-[14px] font-medium text-charcoal bg-transparent focus:outline-none cursor-pointer"
             />
           </div>
         </div>
 
+        {/* Missing-date error */}
+        {dateError && (
+          <div className="mt-2.5 flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-[10px] px-3 py-2.5">
+            <i className="fa-solid fa-circle-exclamation mt-0.5 flex-shrink-0" />
+            <span>{dateError}</span>
+          </div>
+        )}
+
         {/* Nights summary / availability feedback */}
-        {nights > 0 && availability !== "unavailable" && (
+        {!dateError && nights > 0 && availability !== "unavailable" && (
           <div className="flex items-center justify-between mt-3 px-1 text-[13px]">
             <span className="text-charcoal/50">{nights} night{nights !== 1 ? "s" : ""} × ₱{pricePerNight.toLocaleString()}</span>
             {availability === "checking"
