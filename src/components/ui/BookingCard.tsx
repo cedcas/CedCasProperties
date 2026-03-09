@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -18,6 +18,8 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
 
   const [checkIn, setCheckIn]   = useState("");
   const [checkOut, setCheckOut] = useState("");
+  const [availability, setAvailability] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  const abortRef = useRef<AbortController | null>(null);
 
   const { nights, total } = useMemo(() => {
     if (!checkIn || !checkOut) return { nights: 0, total: 0 };
@@ -25,7 +27,24 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
     return { nights: n, total: n * pricePerNight };
   }, [checkIn, checkOut, pricePerNight]);
 
+  // Check availability whenever both dates are valid
+  useEffect(() => {
+    if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) {
+      setAvailability("idle");
+      return;
+    }
+    abortRef.current?.abort();
+    const ctrl = new AbortController();
+    abortRef.current = ctrl;
+    setAvailability("checking");
+    fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((data) => setAvailability(data.available ? "available" : "unavailable"))
+      .catch(() => setAvailability("idle")); // silently ignore abort/network errors
+  }, [checkIn, checkOut, slug]);
+
   const handleBook = () => {
+    if (availability === "unavailable") return;
     const params = new URLSearchParams();
     if (checkIn)  params.set("checkIn", checkIn);
     if (checkOut) params.set("checkOut", checkOut);
@@ -79,11 +98,20 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
           </div>
         </div>
 
-        {/* Nights summary */}
-        {nights > 0 && (
+        {/* Nights summary / availability feedback */}
+        {nights > 0 && availability !== "unavailable" && (
           <div className="flex items-center justify-between mt-3 px-1 text-[13px]">
             <span className="text-charcoal/50">{nights} night{nights !== 1 ? "s" : ""} × ₱{pricePerNight.toLocaleString()}</span>
-            <span className="font-bold text-charcoal">₱{total.toLocaleString()}</span>
+            {availability === "checking"
+              ? <span className="text-charcoal/40 text-[12px]"><i className="fa-solid fa-circle-notch fa-spin mr-1" />Checking…</span>
+              : <span className="font-bold text-charcoal">₱{total.toLocaleString()}</span>
+            }
+          </div>
+        )}
+        {availability === "unavailable" && (
+          <div className="mt-3 flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-[10px] px-3 py-2.5">
+            <i className="fa-solid fa-calendar-xmark mt-0.5 flex-shrink-0" />
+            <span>We apologize, your selected dates are not available. Please select another date range.</span>
           </div>
         )}
       </div>
@@ -106,16 +134,19 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       {/* CTA */}
       <button
         onClick={handleBook}
-        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
-        style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}
+        disabled={availability === "unavailable" || availability === "checking"}
+        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
+        style={{ background: availability === "unavailable" ? "#9CA3AF" : "linear-gradient(135deg,#C4A862,#A8893F)" }}
       >
-        <i className="fa-solid fa-calendar-check" />
-        {nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}
+        <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} />
+        {availability === "unavailable" ? "Dates Not Available" : nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}
       </button>
 
-      <p className="text-center text-[11px] text-charcoal/30 mt-3">
-        We&apos;ll confirm availability within 24 hours
-      </p>
+      {availability === "available" && (
+        <p className="text-center text-[11px] text-green-600 mt-3">
+          <i className="fa-solid fa-circle-check mr-1" />These dates are available!
+        </p>
+      )}
 
       <div className="mt-4 pt-4 border-t border-black/[.06] flex items-center justify-center gap-4 text-[11.5px] text-charcoal/40">
         <span><i className="fa-solid fa-shield-halved mr-1 text-forest" /> Trusted host</span>
