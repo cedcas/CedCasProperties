@@ -9,6 +9,73 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
+  const checkInDate  = new Date(checkIn);
+  const checkOutDate = new Date(checkOut);
+
+  if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate) {
+    return NextResponse.json({ error: "Invalid check-in / check-out dates" }, { status: 400 });
+  }
+
+  // ── Availability check: DB bookings ──────────────────────────────────────
+  const property = await prisma.property.findUnique({
+    where: { id: Number(propertyId) },
+    select: {
+      airbnbIcsUrl: true,
+      bookings: {
+        where: { status: { in: ["confirmed", "pending"] } },
+        select: { checkIn: true, checkOut: true },
+      },
+    },
+  });
+
+  if (!property) return NextResponse.json({ error: "Property not found" }, { status: 404 });
+
+  const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
+    aStart < bEnd && aEnd > bStart;
+
+  for (const b of property.bookings) {
+    if (overlaps(checkInDate, checkOutDate, b.checkIn, b.checkOut)) {
+      return NextResponse.json({ error: "Those dates are already booked. Please choose different dates." }, { status: 409 });
+    }
+  }
+
+  // ── Availability check: Airbnb iCal ──────────────────────────────────────
+  if (property.airbnbIcsUrl) {
+    try {
+      const icsRes = await fetch(property.airbnbIcsUrl, {
+        headers: { "User-Agent": "CedCasProperties/1.0" },
+        signal: AbortSignal.timeout(5000),
+      });
+      if (icsRes.ok) {
+        const icsText = await icsRes.text();
+        const lines = icsText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+        let inEvent = false, evStart: Date | null = null, evEnd: Date | null = null;
+        const parseD = (s: string): Date | null => {
+          const c = s.trim();
+          if (/^\d{8}$/.test(c)) return new Date(`${c.slice(0,4)}-${c.slice(4,6)}-${c.slice(6,8)}T00:00:00Z`);
+          if (/^\d{8}T\d{6}/.test(c)) return new Date(`${c.slice(0,4)}-${c.slice(4,6)}-${c.slice(6,8)}T${c.slice(9,11)}:${c.slice(11,13)}:${c.slice(13,15)}${c.endsWith("Z")?"Z":""}`);
+          return null;
+        };
+        for (const raw of lines) {
+          const line = raw.trim();
+          if (line === "BEGIN:VEVENT")  { inEvent = true; evStart = null; evEnd = null; }
+          else if (line === "END:VEVENT") {
+            if (evStart && evEnd && overlaps(checkInDate, checkOutDate, evStart, evEnd)) {
+              return NextResponse.json({ error: "Those dates are not available (blocked on Airbnb). Please choose different dates." }, { status: 409 });
+            }
+            inEvent = false;
+          } else if (inEvent) {
+            if (/^DTSTART[;:]/.test(line)) evStart = parseD(line.split(":").slice(1).join(":"));
+            else if (/^DTEND[;:]/.test(line)) evEnd = parseD(line.split(":").slice(1).join(":"));
+          }
+        }
+      }
+    } catch {
+      // If Airbnb fetch fails, proceed — don't block the guest
+      console.warn("Airbnb iCal fetch failed during booking; skipping Airbnb check");
+    }
+  }
+
   // Save booking
   const booking = await prisma.booking.create({
     data: {

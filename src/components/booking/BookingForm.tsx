@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -34,9 +34,35 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
   const [step, setStep] = useState<"form" | "payment" | "done">("form");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [availabilityError, setAvailabilityError] = useState("");
 
-  const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
-    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
+  const checkAvailability = useCallback(async (checkIn: string, checkOut: string) => {
+    if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) return;
+    try {
+      const res = await fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`);
+      const data = await res.json();
+      if (!data.available) {
+        setAvailabilityError("These dates are not available. Please select different dates.");
+      } else {
+        setAvailabilityError("");
+      }
+    } catch {
+      // silently ignore — server will recheck on submit
+    }
+  }, [slug]);
+
+  const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setForm((p) => {
+      const next = { ...p, [name]: value };
+      if (name === "checkIn" || name === "checkOut") {
+        const ci = name === "checkIn"  ? value : p.checkIn;
+        const co = name === "checkOut" ? value : p.checkOut;
+        checkAvailability(ci, co);
+      }
+      return next;
+    });
+  };
 
   const { nights, total, airbnbTotal, savings } = useMemo(() => {
     if (!form.checkIn || !form.checkOut) return { nights: 0, total: 0, airbnbTotal: 0, savings: 0 };
@@ -52,6 +78,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
     e.preventDefault();
     if (!form.checkIn || !form.checkOut) { setError("Please select check-in and check-out dates."); return; }
     if (new Date(form.checkOut) <= new Date(form.checkIn)) { setError("Check-out must be after check-in."); return; }
+    if (availabilityError) { setError(availabilityError); return; }
     setError("");
     setStep("payment");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -66,11 +93,14 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ propertyId, ...form, totalPrice: total, paymentMethod }),
       });
-      if (!res.ok) throw new Error("Booking failed");
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? "Booking failed");
+      }
       setStep("done");
       window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch {
-      setError("Something went wrong. Please try again or contact us directly.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again or contact us directly.");
     } finally {
       setSubmitting(false);
     }
@@ -232,6 +262,12 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
             <div><label className={labelCls}>Check-in *</label><input name="checkIn" type="date" required min={todayStr} value={form.checkIn} onChange={handle} className={inputCls} /></div>
             <div><label className={labelCls}>Check-out *</label><input name="checkOut" type="date" required min={form.checkIn || todayStr} value={form.checkOut} onChange={handle} className={inputCls} /></div>
           </div>
+          {availabilityError && (
+            <div className="flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-[8px] px-3 py-2.5 mb-4">
+              <i className="fa-solid fa-calendar-xmark mt-0.5 flex-shrink-0" />
+              <span>{availabilityError}</span>
+            </div>
+          )}
           <div className="mb-4"><label className={labelCls}>Number of Guests *</label>
             <select name="guests" value={form.guests} onChange={handle} className={inputCls}>
               {Array.from({ length: maxGuests }, (_, i) => i + 1).map((n) => (

@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Property } from "@prisma/client";
 
@@ -21,12 +21,21 @@ export default function PropertyForm({ property }: { property?: Property }) {
     maxGuests:      property?.maxGuests?.toString()  ?? "2",
     isActive:       property?.isActive  ?? true,
     isFeatured:     property?.isFeatured ?? false,
+    airbnbIcsUrl:   (property as Property & { airbnbIcsUrl?: string | null })?.airbnbIcsUrl ?? "",
   });
+  const [exportUrl, setExportUrl] = useState("");
   const [amenities, setAmenities] = useState<string[]>(
     property ? JSON.parse(property.amenities || "[]") : []
   );
   const [saving, setSaving]   = useState(false);
   const [error, setError]     = useState("");
+  const [copied, setCopied]   = useState(false);
+
+  useEffect(() => {
+    if (isEdit && property?.slug) {
+      setExportUrl(`${window.location.origin}/api/calendar/${property.slug}`);
+    }
+  }, [isEdit, property?.slug]);
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -105,6 +114,63 @@ export default function PropertyForm({ property }: { property?: Property }) {
               {a}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* ── iCal / Airbnb Sync ─────────────────────────────────────────────── */}
+      <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
+        <div className="flex items-center gap-2 mb-1">
+          <h3 className="font-serif font-semibold text-charcoal">Airbnb iCal Sync</h3>
+          <span className="text-[10px] font-bold uppercase tracking-wider bg-[#FF5A5F]/10 text-[#FF5A5F] px-2 py-0.5 rounded-full">Airbnb</span>
+        </div>
+        <p className="text-[12px] text-charcoal/45 mb-5">
+          Keep CedCas and Airbnb calendars in sync so double-bookings never happen.
+        </p>
+
+        {/* Export URL (CedCas → Airbnb) */}
+        {isEdit && exportUrl && (
+          <div className="mb-5 p-4 rounded-[12px] bg-[#F0F7EA] border border-[#3B5323]/15">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#3B5323]/70 mb-2">
+              <i className="fa-solid fa-arrow-up-right-from-square mr-1.5" />
+              Step 1 — Paste this URL into Airbnb (Export)
+            </p>
+            <p className="text-[11.5px] text-charcoal/55 mb-3 leading-[1.6]">
+              Go to Airbnb → Listing → Availability → Export Calendar, then paste this URL. Airbnb will poll it every few hours.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                readOnly
+                value={exportUrl}
+                className="flex-1 px-3 py-2 rounded-[8px] border border-[#3B5323]/20 bg-white text-[12px] text-charcoal/70 font-mono select-all focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => { navigator.clipboard.writeText(exportUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                className="flex-shrink-0 px-3 py-2 rounded-[8px] text-[12px] font-semibold border transition-all duration-200"
+                style={copied ? { background: "#3B5323", color: "#fff", borderColor: "#3B5323" } : { background: "#fff", color: "#3B5323", borderColor: "#3B5323" }}
+              >
+                {copied ? <><i className="fa-solid fa-check mr-1" />Copied</> : <><i className="fa-regular fa-copy mr-1" />Copy</>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Airbnb Import URL (Airbnb → CedCas) */}
+        <div>
+          <label className={labelCls}>
+            <i className="fa-solid fa-arrow-down-to-line mr-1.5" />
+            {isEdit ? "Step 2 — " : ""}Airbnb Calendar URL (Import)
+          </label>
+          <p className="text-[11.5px] text-charcoal/45 mb-2 leading-[1.5]">
+            In Airbnb, go to Listing → Availability → Import Calendar and copy the .ics link they give you. Paste it here so CedCas knows when Airbnb is booked.
+          </p>
+          <input
+            name="airbnbIcsUrl"
+            value={form.airbnbIcsUrl}
+            onChange={handle}
+            placeholder="https://www.airbnb.com/calendar/ical/XXXXXXX.ics"
+            className={inputCls}
+          />
         </div>
       </div>
 

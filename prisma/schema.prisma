@@ -22,11 +22,12 @@ model Property {
   images        String    @db.Text  // JSON array of image URLs
   featuredImage String?   @db.Text  // URL of the featured/cover image
   amenities     String    @db.Text  // JSON array
-  isFeatured  Boolean   @default(false)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  bookings    Booking[]
+  isFeatured    Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  airbnbIcsUrl  String?   @db.Text  // Airbnb .ics import URL (Airbnb → CedCas sync)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  bookings      Booking[]
 }
 
 model Booking {

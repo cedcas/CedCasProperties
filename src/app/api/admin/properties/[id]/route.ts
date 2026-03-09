@@ -23,6 +23,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       amenities:     data.amenities,
       isActive:      data.isActive,
       isFeatured:    data.isFeatured,
+      airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
     },
   });
   return NextResponse.json(property);

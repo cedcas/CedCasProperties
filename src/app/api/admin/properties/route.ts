@@ -18,10 +18,11 @@ export async function POST(req: Request) {
       bedrooms:      parseInt(data.bedrooms),
       bathrooms:     parseInt(data.bathrooms),
       maxGuests:     parseInt(data.maxGuests),
-      amenities:     data.amenities ?? "[]",
-      images:        data.images    ?? "[]",
-      isActive:      data.isActive  ?? true,
-      isFeatured:    data.isFeatured ?? false,
+      amenities:     data.amenities   ?? "[]",
+      images:        data.images      ?? "[]",
+      isActive:      data.isActive    ?? true,
+      isFeatured:    data.isFeatured  ?? false,
+      airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
     },
   });
   return NextResponse.json(property, { status: 201 });
