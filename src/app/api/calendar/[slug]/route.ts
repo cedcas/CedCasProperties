@@ -1,8 +1,13 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-function toIcsDate(date: Date): string {
-  return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+// Airbnb requires DATE-only format (YYYYMMDD) for all-day blocking events
+function toDateOnly(date: Date): string {
+  return date.toISOString().split("T")[0].replace(/-/g, "");
+}
+
+// DTSTAMP must be a full datetime stamp
+function toDtStamp(date: Date): string {
+  return date.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
@@ -13,14 +18,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     include: {
       bookings: {
         where: { status: { in: ["confirmed", "pending"] } },
-        select: { id: true, checkIn: true, checkOut: true, guestName: true },
+        select: { id: true, checkIn: true, checkOut: true },
       },
     },
   });
 
   if (!property) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return new Response("Calendar not found", { status: 404 });
   }
+
+  const now = toDtStamp(new Date());
 
   const lines: string[] = [
     "BEGIN:VCALENDAR",
@@ -28,35 +35,35 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     "PRODID:-//CedCas Properties//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${property.name} – CedCas Properties`,
+    `X-WR-CALNAME:${property.name} - CedCas Properties`,
     "X-WR-TIMEZONE:Asia/Manila",
   ];
 
   for (const booking of property.bookings) {
-    const uid = `booking-${booking.id}@cedcasproperties.com`;
-    const dtstart = toIcsDate(booking.checkIn);
-    const dtend = toIcsDate(booking.checkOut);
-    const now = toIcsDate(new Date());
-
     lines.push(
       "BEGIN:VEVENT",
-      `UID:${uid}`,
+      `UID:booking-${booking.id}@cedcasproperties.com`,
       `DTSTAMP:${now}`,
-      `DTSTART:${dtstart}`,
-      `DTEND:${dtend}`,
-      `SUMMARY:Not available`,
-      `STATUS:CONFIRMED`,
+      `DTSTART;VALUE=DATE:${toDateOnly(booking.checkIn)}`,
+      `DTEND;VALUE=DATE:${toDateOnly(booking.checkOut)}`,
+      "SUMMARY:Not available",
+      "STATUS:CONFIRMED",
+      "TRANSP:OPAQUE",
       "END:VEVENT"
     );
   }
 
   lines.push("END:VCALENDAR");
 
-  return new Response(lines.join("\r\n"), {
+  // iCal spec requires CRLF line endings
+  const body = lines.join("\r\n") + "\r\n";
+
+  return new Response(body, {
     headers: {
       "Content-Type": "text/calendar; charset=utf-8",
       "Content-Disposition": `inline; filename="${slug}.ics"`,
       "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Access-Control-Allow-Origin": "*",
     },
   });
 }
