@@ -19,8 +19,9 @@ model Property {
   bedrooms    Int       @default(1)
   bathrooms   Int       @default(1)
   maxGuests   Int       @default(2)
-  images      String    @db.Text  // JSON array of image URLs
-  amenities   String    @db.Text  // JSON array
+  images        String    @db.Text  // JSON array of image URLs
+  featuredImage String?   @db.Text  // URL of the featured/cover image
+  amenities     String    @db.Text  // JSON array
   isFeatured  Boolean   @default(false)
   isActive    Boolean   @default(true)
   createdAt   DateTime  @default(now())

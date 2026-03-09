@@ -44,7 +44,10 @@ export default function PropertyForm({ property }: { property?: Property }) {
     setSaving(true);
     setError("");
     try {
-      const body = { ...form, amenities: JSON.stringify(amenities), images: "[]" };
+      // Don't send `images` on edit — images are managed by ImageManager separately
+      const body = isEdit
+        ? { ...form, amenities: JSON.stringify(amenities) }
+        : { ...form, amenities: JSON.stringify(amenities), images: "[]" };
       const url  = isEdit ? `/api/admin/properties/${property.id}` : "/api/admin/properties";
       const res  = await fetch(url, {
         method: isEdit ? "PUT" : "POST",

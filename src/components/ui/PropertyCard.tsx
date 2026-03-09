@@ -15,15 +15,16 @@ const AMENITY_ICONS: Record<string, string> = {
 export default function PropertyCard({ property, index }: { property: Property; index: number }) {
   const amenities: string[] = JSON.parse(property.amenities || "[]");
   const images: string[] = JSON.parse(property.images || "[]");
+  const coverImage = property.featuredImage || images[0] || null;
   const delayClass = index < 4 ? `reveal-d${index + 1}` : "reveal-d4";
 
   return (
     <div className={`bg-white rounded-[20px] overflow-hidden shadow-[0_4px_24px_rgba(44,44,44,.08)] hover:shadow-[0_12px_40px_rgba(44,44,44,.16)] hover:-translate-y-1.5 transition-all duration-350 reveal ${delayClass}`}>
       {/* Image */}
       <div className="relative h-[220px] overflow-hidden">
-        {images[0] ? (
+        {coverImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={images[0]} alt={property.name} className="w-full h-full object-cover" />
+          <img src={coverImage} alt={property.name} className="w-full h-full object-cover" />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center"
