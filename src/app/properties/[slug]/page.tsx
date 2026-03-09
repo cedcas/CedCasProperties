@@ -5,6 +5,7 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import PropertyGallery from "@/components/ui/PropertyGallery";
 import ScrollReveal from "@/components/ui/ScrollReveal";
+import BookingCard from "@/components/ui/BookingCard";
 
 export const dynamic = "force-dynamic";
 
@@ -125,45 +126,15 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 <span className="font-bold text-charcoal text-[1.4rem]">₱{Number(property.pricePerNight).toLocaleString()}</span>
                 <span className="text-charcoal/45 text-[13px]">/ night</span>
               </div>
-
-              <div className="bg-white rounded-[20px] p-7 shadow-[0_8px_40px_rgba(44,44,44,.10)] border border-black/[.05]">
-                <div className="hidden sm:flex items-baseline gap-1.5 mb-1">
-                  <span className="font-bold text-charcoal text-[1.8rem]">₱{Number(property.pricePerNight).toLocaleString()}</span>
-                  <span className="text-charcoal/40 text-[13px]">/ night</span>
-                </div>
-                <p className="hidden sm:block text-[12px] text-charcoal/35 mb-5">Entire unit · {property.type}</p>
-
-                <div className="space-y-2.5 mb-6">
-                  {[
-                    { icon: "users", text: `Up to ${property.maxGuests} guests` },
-                    { icon: "bed", text: `${property.bedrooms} bedroom${property.bedrooms !== 1 ? "s" : ""}` },
-                    { icon: "bath", text: `${property.bathrooms} bathroom${property.bathrooms !== 1 ? "s" : ""}` },
-                    { icon: "location-dot", text: property.location },
-                  ].map(({ icon, text }) => (
-                    <div key={text} className="flex items-center gap-2.5 text-[13px] text-charcoal/55">
-                      <i className={`fa-solid fa-${icon} text-forest w-4 text-center`} />
-                      {text}
-                    </div>
-                  ))}
-                </div>
-
-                <a
-                  href="/#contact"
-                  className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0"
-                  style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}
-                >
-                  <i className="fa-solid fa-calendar-check" /> Book this Property
-                </a>
-
-                <p className="text-center text-[11px] text-charcoal/30 mt-3">
-                  We&apos;ll confirm availability within 24 hours
-                </p>
-
-                <div className="mt-5 pt-5 border-t border-black/[.06] flex items-center justify-center gap-4 text-[11.5px] text-charcoal/40">
-                  <span><i className="fa-solid fa-shield-halved mr-1 text-forest" /> Trusted host</span>
-                  <span><i className="fa-solid fa-broom mr-1 text-forest" /> Spotlessly clean</span>
-                </div>
-              </div>
+              <BookingCard
+                slug={property.slug}
+                pricePerNight={Number(property.pricePerNight)}
+                maxGuests={property.maxGuests}
+                bedrooms={property.bedrooms}
+                bathrooms={property.bathrooms}
+                location={property.location}
+                type={property.type}
+              />
             </div>
 
           </div>
