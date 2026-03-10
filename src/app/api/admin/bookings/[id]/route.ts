@@ -3,8 +3,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,6 +22,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const nights = Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000);
 
     try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
         from:    "CedCas Properties <noreply@cedcasproperties.com>",
         to:      booking.guestEmail,
