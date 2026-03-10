@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -22,15 +24,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const nights = Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000);
 
     try {
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT) || 465,
-        secure: true,
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-      });
-
-      await transporter.sendMail({
-        from:    `"CedCas Properties" <${process.env.SMTP_USER}>`,
+      await resend.emails.send({
+        from:    "CedCas Properties <noreply@cedcasproperties.com>",
         to:      booking.guestEmail,
         subject: `✅ Booking Confirmed – ${booking.property.name}`,
         html: `

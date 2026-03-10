@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   const { propertyId, guestName, guestEmail, guestPhone, checkIn, checkOut, guests, totalPrice, paymentMethod, notes } = await req.json();
@@ -99,15 +101,8 @@ export async function POST(req: Request) {
 
   // Email to admin
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 465,
-      secure: true,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    });
-
-    await transporter.sendMail({
-      from:    `"CedCas Properties" <${process.env.SMTP_USER}>`,
+    await resend.emails.send({
+      from:    "CedCas Properties <noreply@cedcasproperties.com>",
       to:      "customerservice@cedcasproperties.com",
       replyTo: guestEmail,
       subject: `🏠 New Booking Request – ${booking.property.name}`,
