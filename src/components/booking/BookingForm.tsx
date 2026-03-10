@@ -14,17 +14,16 @@ interface Props {
   initialCheckOut?: string;
 }
 
-// QR code map — keyed by payment method and bedroom tier
+// QR code map — keyed by payment method only
 // These are static assets committed to the repo and cannot be changed without a new deployment
-const QR: Record<string, Record<number, string>> = {
-  gcash: { 1: "/qr/gcash-1br.jpg", 2: "/qr/gcash-2br.jpg" },
-  bpi:   { 1: "/qr/bpi-1br.png",   2: "/qr/bpi-2br.png" },
+const QR: Record<string, string> = {
+  gcash: "/qr/gcash.jpg",
+  bpi:   "/qr/bpi.png",
 };
 const AIRBNB_FEE_RATE = 0.142; // ~14.2% Airbnb service fee
 
 export default function BookingForm({ propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug, initialCheckIn = "", initialCheckOut = "" }: Props) {
   const router = useRouter();
-  const brKey = bedrooms >= 2 ? 2 : 1;
 
   const [form, setForm] = useState({
     guestName: "", guestEmail: "", guestPhone: "",
@@ -133,7 +132,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
 
   // ── Payment step ──
   if (step === "payment") {
-    const qrSrc = QR[paymentMethod][brKey];
+    const qrSrc = QR[paymentMethod];
     return (
       <div className="max-w-lg mx-auto">
         {/* Back */}
@@ -177,7 +176,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
         {/* QR Code */}
         <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5 text-center">
           <p className="text-[12px] font-semibold text-charcoal/40 uppercase tracking-wider mb-4">
-            Scan to Pay via {paymentMethod === "gcash" ? "GCash" : "BPI"} — {brKey === 1 ? "1-Bedroom" : "2-Bedroom"}
+            Scan to Pay via {paymentMethod === "gcash" ? "GCash" : "BPI"}
           </p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={qrSrc} alt={`${paymentMethod.toUpperCase()} QR Code`} className="w-56 h-auto mx-auto rounded-[8px]" />
