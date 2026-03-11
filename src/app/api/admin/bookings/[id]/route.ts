@@ -71,6 +71,39 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     } catch (err) {
       console.error("Confirmation email failed:", err);
     }
+
+    // Email to admin — confirmation summary
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from:    "CedCas Properties <noreply@cedcasproperties.com>",
+        to:      "customerservice@cedcasproperties.com",
+        subject: `✅ Booking Confirmed – ${booking.property.name}`,
+        html: `
+          <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#2C2C2C">
+            <div style="background:#3B5323;padding:24px 32px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;margin:0;font-size:20px">Booking Confirmed</h1>
+              <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">Payment verified — guest has been notified</p>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
+              <table style="width:100%;font-size:14px;border-collapse:collapse">
+                <tr><td style="padding:7px 0;color:#666;width:140px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guest</td><td>${booking.guestName}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Email</td><td><a href="mailto:${booking.guestEmail}">${booking.guestEmail}</a></td></tr>
+                <tr><td style="padding:7px 0;color:#666">Phone</td><td>${booking.guestPhone}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-in</td><td>${fmtDate(booking.checkIn)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(booking.checkOut)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guests</td><td>${booking.guests}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Total Paid</td><td style="font-weight:bold;font-size:16px;color:#3B5323">₱${Number(booking.totalPrice).toLocaleString()}</td></tr>
+              </table>
+            </div>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Admin confirmation email failed:", err);
+    }
   }
 
   return NextResponse.json(booking);
