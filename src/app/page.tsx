@@ -5,7 +5,6 @@ import Footer       from "@/components/layout/Footer";
 import Hero         from "@/components/sections/Hero";
 import Properties   from "@/components/sections/Properties";
 import WhyUs        from "@/components/sections/WhyUs";
-import Testimonials from "@/components/sections/Testimonials";
 import ContactForm  from "@/components/sections/ContactForm";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 
@@ -25,7 +24,6 @@ export default function Home() {
         <Hero />
         <Properties />
         <WhyUs />
-        <Testimonials />
         <ContactForm />
 
         {/* ── CTA Banner ── */}

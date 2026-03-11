@@ -2,10 +2,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-export default function AddTestimonialForm() {
+type Property = { id: number; name: string };
+
+export default function AddTestimonialForm({ properties }: { properties: Property[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: "", location: "", rating: "5", message: "" });
+  const [form, setForm] = useState({ propertyId: String(properties[0]?.id ?? ""), name: "", location: "", rating: "5", message: "" });
   const [saving, setSaving] = useState(false);
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
@@ -21,7 +23,7 @@ export default function AddTestimonialForm() {
     });
     setSaving(false);
     setOpen(false);
-    setForm({ name: "", location: "", rating: "5", message: "" });
+    setForm({ propertyId: String(properties[0]?.id ?? ""), name: "", location: "", rating: "5", message: "" });
     router.refresh();
   };
 
@@ -36,6 +38,12 @@ export default function AddTestimonialForm() {
       </button>
       {open && (
         <form onSubmit={handleSubmit} className="px-6 pb-6 border-t border-black/[.06] pt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="sm:col-span-2">
+            <label className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-1.5 block">Property *</label>
+            <select name="propertyId" required value={form.propertyId} onChange={handle} className={inputCls}>
+              {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
           <div><label className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-1.5 block">Guest Name *</label>
             <input name="name" required value={form.name} onChange={handle} placeholder="Maria Santos" className={inputCls} /></div>
           <div><label className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-1.5 block">Location *</label>
