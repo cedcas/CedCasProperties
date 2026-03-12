@@ -6,6 +6,7 @@ import Hero         from "@/components/sections/Hero";
 import Properties   from "@/components/sections/Properties";
 import WhyUs        from "@/components/sections/WhyUs";
 import ContactForm  from "@/components/sections/ContactForm";
+import DiscoverLipa from "@/components/sections/DiscoverLipa";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 
 export default function Home() {
@@ -24,6 +25,7 @@ export default function Home() {
         <Hero />
         <Properties />
         <WhyUs />
+        <DiscoverLipa />
         <ContactForm />
 
         {/* ── CTA Banner ── */}
