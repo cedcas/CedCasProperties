@@ -57,10 +57,10 @@ export default function Home() {
               className="font-serif font-bold text-white leading-[1.18] mb-5"
               style={{ fontSize: "clamp(2rem,4vw,3.2rem)" }}
             >
-              Ready to Experience<br />CedCas Comfort?
+              Ready to Experience<br />Our Comfort?
             </h2>
             <p className="text-white/60 text-[16px] leading-[1.7] max-w-[460px] mx-auto mb-11">
-              Book your stay today and discover why hundreds of guests call CedCas their home away
+              Book your stay today and discover why hundreds of guests call our properties their home away
               from home in Lipa, Batangas.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 mb-14">
