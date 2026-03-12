@@ -65,7 +65,7 @@ export default function Home() {
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 mb-14">
               <a
-                href="#contact"
+                href="/#properties"
                 className="inline-flex items-center gap-2 px-9 py-4 rounded-full text-[14px] font-semibold text-white"
                 style={{
                   background: "linear-gradient(135deg,#C4A862,#A8893F)",
