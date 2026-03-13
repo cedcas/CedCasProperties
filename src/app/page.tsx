@@ -84,15 +84,17 @@ export default function Home() {
             <div className="flex justify-center gap-4">
               {(
                 [
-                  ["fa-facebook-f", "Facebook"],
-                  ["fa-instagram",  "Instagram"],
-                  ["fa-tiktok",     "TikTok"],
-                  ["fa-airbnb",     "Airbnb"],
-                ] as [string, string][]
-              ).map(([icon, label]) => (
+                  ["fa-facebook-f", "Facebook",  "https://www.facebook.com/profile.php?id=61572535599006"],
+                  ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
+                  ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
+                  ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],
+                ] as [string, string, string][]
+              ).map(([icon, label, href]) => (
                 <a
                   key={label}
-                  href="#"
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={label}
                   className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#C4A862] hover:border-[#C4A862] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
                   style={{ background: "rgba(255,255,255,.08)" }}
