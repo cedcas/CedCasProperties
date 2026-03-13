@@ -4,11 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 
 const links = [
-  { label: "Properties", href: "#properties" },
-  { label: "About",      href: "#why" },
-  { label: "Amenities",  href: "#why" },
-  { label: "Location",   href: "#location" },
-  { label: "Contact",    href: "#contact" },
+  { label: "Properties", href: "/#properties" },
+  { label: "About",      href: "/#why" },
+  { label: "Location",   href: "/#location" },
+  { label: "Contact",    href: "/#contact" },
 ];
 
 export default function Navbar() {
@@ -53,7 +52,7 @@ export default function Navbar() {
             </a>
           ))}
           <a
-            href="#contact"
+            href="/#properties"
             className="ml-2 px-5 py-2 rounded-full text-[13px] font-semibold text-white"
             style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)", boxShadow: "0 4px 14px rgba(196,168,98,.40)" }}
           >
@@ -91,7 +90,7 @@ export default function Navbar() {
             </a>
           ))}
           <a
-            href="#contact"
+            href="/#properties"
             className="mt-1 text-center px-5 py-2.5 rounded-full text-[13px] font-semibold text-white"
             style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}
             onClick={() => setMenuOpen(false)}

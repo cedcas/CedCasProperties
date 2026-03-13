@@ -28,6 +28,7 @@ model Property {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   bookings      Booking[]
+  testimonials  Testimonial[]
 }
 
 model Booking {
@@ -49,13 +50,15 @@ model Booking {
 }
 
 model Testimonial {
-  id        Int      @id @default(autoincrement())
-  name      String
-  location  String
-  rating    Int      @default(5)
-  message   String   @db.Text
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+  id         Int      @id @default(autoincrement())
+  property   Property @relation(fields: [propertyId], references: [id])
+  propertyId Int
+  name       String
+  location   String
+  rating     Int      @default(5)
+  message    String   @db.Text
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
 }
 
 model ContactMessage {

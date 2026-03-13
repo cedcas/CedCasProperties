@@ -5,8 +5,8 @@ import Footer       from "@/components/layout/Footer";
 import Hero         from "@/components/sections/Hero";
 import Properties   from "@/components/sections/Properties";
 import WhyUs        from "@/components/sections/WhyUs";
-import Testimonials from "@/components/sections/Testimonials";
 import ContactForm  from "@/components/sections/ContactForm";
+import DiscoverLipa from "@/components/sections/DiscoverLipa";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 
 export default function Home() {
@@ -25,7 +25,7 @@ export default function Home() {
         <Hero />
         <Properties />
         <WhyUs />
-        <Testimonials />
+        <DiscoverLipa />
         <ContactForm />
 
         {/* ── CTA Banner ── */}
@@ -57,15 +57,15 @@ export default function Home() {
               className="font-serif font-bold text-white leading-[1.18] mb-5"
               style={{ fontSize: "clamp(2rem,4vw,3.2rem)" }}
             >
-              Ready to Experience<br />CedCas Comfort?
+              Ready to Experience<br />Our Comfort?
             </h2>
             <p className="text-white/60 text-[16px] leading-[1.7] max-w-[460px] mx-auto mb-11">
-              Book your stay today and discover why hundreds of guests call CedCas their home away
+              Book your stay today and discover why hundreds of guests call our properties their home away
               from home in Lipa, Batangas.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 mb-14">
               <a
-                href="#contact"
+                href="/#properties"
                 className="inline-flex items-center gap-2 px-9 py-4 rounded-full text-[14px] font-semibold text-white"
                 style={{
                   background: "linear-gradient(135deg,#C4A862,#A8893F)",
@@ -84,15 +84,17 @@ export default function Home() {
             <div className="flex justify-center gap-4">
               {(
                 [
-                  ["fa-facebook-f", "Facebook"],
-                  ["fa-instagram",  "Instagram"],
-                  ["fa-tiktok",     "TikTok"],
-                  ["fa-airbnb",     "Airbnb"],
-                ] as [string, string][]
-              ).map(([icon, label]) => (
+                  ["fa-facebook-f", "Facebook",  "https://www.facebook.com/profile.php?id=61572535599006"],
+                  ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
+                  ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
+                  ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],
+                ] as [string, string, string][]
+              ).map(([icon, label, href]) => (
                 <a
                   key={label}
-                  href="#"
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   aria-label={label}
                   className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#C4A862] hover:border-[#C4A862] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
                   style={{ background: "rgba(255,255,255,.08)" }}

@@ -81,8 +81,13 @@ export default function ContactForm() {
               <div>
                 <div className="font-semibold text-charcoal text-[14px] mb-3">Find Us Online</div>
                 <div className="flex gap-3">
-                  {[["fa-facebook-f","#"],["fa-instagram","#"],["fa-tiktok","#"],["fa-airbnb","#"]].map(([icon, href]) => (
-                    <a key={icon} href={href} className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
+                  {[
+                    ["fa-facebook-f", "https://www.facebook.com/profile.php?id=61572535599006"],
+                    ["fa-instagram",  "https://www.instagram.com/haven_inlipa/"],
+                    ["fa-tiktok",     "https://www.tiktok.com/@haven_inlipa"],
+                    ["fa-airbnb",     "https://airbnb.com/h/fullhousebellavita"],
+                  ].map(([icon, href]) => (
+                    <a key={icon} href={href} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
                       <i className={`fa-brands ${icon}`} />
                     </a>
                   ))}
