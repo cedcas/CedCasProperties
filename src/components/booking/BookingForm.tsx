@@ -275,7 +275,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
             </select>
           </div>
           <div><label className={labelCls}>Special Requests <span className="normal-case font-normal text-charcoal/30">(optional)</span></label>
-            <textarea name="notes" value={form.notes} onChange={handle} rows={2} placeholder="Early check-in, dietary needs, etc." className={`${inputCls} resize-none`} />
+            <textarea name="notes" value={form.notes} onChange={handle} rows={2} placeholder="Early Check-in, Late Checkout, Directions, etc." className={`${inputCls} resize-none`} />
           </div>
 
           {nights > 0 && (
