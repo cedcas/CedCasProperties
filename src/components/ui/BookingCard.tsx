@@ -10,9 +10,10 @@ interface Props {
   bathrooms: number;
   location: string;
   type: string;
+  propertyRules?: string | null;
 }
 
-export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, bathrooms, location, type }: Props) {
+export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, bathrooms, location, type, propertyRules }: Props) {
   const router = useRouter();
   const today = new Date().toISOString().split("T")[0];
 
@@ -21,6 +22,7 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
   const [checkOut, setCheckOut] = useState("");
   const [availability, setAvailability] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
   const [dateError, setDateError] = useState("");
+  const [rulesAgreed, setRulesAgreed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Force-clear date inputs on every mount so browser autofill can't inject stale values
@@ -40,6 +42,7 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
   // Check availability whenever both dates are valid
   useEffect(() => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability("idle");
       return;
     }
@@ -68,6 +71,13 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       return;
     }
     if (availability === "unavailable") return;
+
+    // Check property rules agreement if rules exist
+    if (propertyRules && !rulesAgreed) {
+      setDateError("Please agree to the property rules to continue.");
+      return;
+    }
+
     setDateError("");
     const params = new URLSearchParams({ checkIn, checkOut });
     router.push(`/properties/${slug}/book?${params.toString()}`);
@@ -166,15 +176,32 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
         ))}
       </div>
 
+      {/* Property Rules Agreement */}
+      {propertyRules && (
+        <div className="mb-4">
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={rulesAgreed}
+              onChange={(e) => setRulesAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
+            />
+            <span className="text-[12px] text-charcoal/70 leading-[1.5]">
+              I agree to the property rules and policies
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* CTA */}
       <button
         onClick={handleBook}
-        disabled={availability === "unavailable" || availability === "checking"}
+        disabled={availability === "unavailable" || availability === "checking" || (!!propertyRules && !rulesAgreed)}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
-        style={{ background: availability === "unavailable" ? "#9CA3AF" : "linear-gradient(135deg,#C4A862,#A8893F)" }}
+        style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#C4A862,#A8893F)" }}
       >
         <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} />
-        {availability === "unavailable" ? "Dates Not Available" : nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}
+        {availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}
       </button>
 
       {availability === "available" && (

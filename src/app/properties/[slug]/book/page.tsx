@@ -44,6 +44,7 @@ export default async function BookPage({
             slug={slug}
             initialCheckIn={checkIn ?? ""}
             initialCheckOut={checkOut ?? ""}
+            propertyRules={property.propertyRules}
           />
         </div>
       </main>

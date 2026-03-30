@@ -22,6 +22,7 @@ export default function PropertyForm({ property }: { property?: Property }) {
     isActive:       property?.isActive  ?? true,
     isFeatured:     property?.isFeatured ?? false,
     airbnbIcsUrl:   (property as Property & { airbnbIcsUrl?: string | null })?.airbnbIcsUrl ?? "",
+    propertyRules:  (property as Property & { propertyRules?: string | null })?.propertyRules ?? "",
   });
   const [exportUrl, setExportUrl] = useState("");
   const [amenities, setAmenities] = useState<string[]>(
@@ -114,6 +115,24 @@ export default function PropertyForm({ property }: { property?: Property }) {
               {a}
             </button>
           ))}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
+        <h3 className="font-serif font-semibold text-charcoal mb-5">Property Rules</h3>
+        <div>
+          <label className={labelCls}>House Rules & Policies</label>
+          <textarea
+            name="propertyRules"
+            value={form.propertyRules}
+            onChange={handle}
+            rows={6}
+            placeholder="Enter house rules, check-in/check-out policies, cancellation terms, pet policies, smoking rules, etc..."
+            className={`${inputCls} resize-none`}
+          />
+          <p className="text-[11px] text-charcoal/45 mt-2">
+            These rules will be displayed to guests during booking and must be agreed to before proceeding.
+          </p>
         </div>
       </div>
 

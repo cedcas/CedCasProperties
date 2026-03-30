@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   slug: string;
   initialCheckIn?: string;
   initialCheckOut?: string;
+  propertyRules?: string | null;
 }
 
 // QR code map — keyed by payment method only
@@ -22,7 +24,7 @@ const QR: Record<string, string> = {
 };
 const AIRBNB_FEE_RATE = 0.142; // ~14.2% Airbnb service fee
 
-export default function BookingForm({ propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug, initialCheckIn = "", initialCheckOut = "" }: Props) {
+export default function BookingForm({ propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug, initialCheckIn = "", initialCheckOut = "", propertyRules }: Props) {
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -34,6 +36,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
+  const [rulesAgreed, setRulesAgreed] = useState(false);
 
   const checkAvailability = useCallback(async (checkIn: string, checkOut: string) => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) return;
@@ -78,12 +81,25 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
     if (!form.checkIn || !form.checkOut) { setError("Please select check-in and check-out dates."); return; }
     if (new Date(form.checkOut) <= new Date(form.checkIn)) { setError("Check-out must be after check-in."); return; }
     if (availabilityError) { setError(availabilityError); return; }
+
+    // Check property rules agreement if rules exist
+    if (propertyRules && !rulesAgreed) {
+      setError("Please agree to the property rules to continue.");
+      return;
+    }
+
     setError("");
     setStep("payment");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handlePaid = async () => {
+    // Check property rules agreement if rules exist
+    if (propertyRules && !rulesAgreed) {
+      setError("Please agree to the property rules to continue.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     try {
@@ -122,10 +138,10 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
         <p className="text-charcoal/45 text-[14px] mb-8">
           A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your {paymentMethod === "gcash" ? "GCash" : "BPI"} payment (usually within a few hours).
         </p>
-        <a href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
+        <Link href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
           style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}>
           <i className="fa-solid fa-house" /> Back to Homepage
-        </a>
+        </Link>
       </div>
     );
   }
@@ -189,6 +205,24 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
         {error && (
           <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-[8px] px-3 py-2 mb-4">
             {error}
+          </div>
+        )}
+
+        {/* Property Rules Agreement (Payment Step) */}
+        {propertyRules && (
+          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5">
+            <h3 className="font-serif font-semibold text-charcoal mb-4">Confirm Property Rules Agreement</h3>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={rulesAgreed}
+                onChange={(e) => setRulesAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
+              />
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">
+                I agree to the property rules and policies
+              </span>
+            </label>
           </div>
         )}
 
@@ -288,6 +322,27 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
 
         {error && (
           <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-[8px] px-3 py-2">{error}</div>
+        )}
+
+        {/* Property Rules Agreement */}
+        {propertyRules && (
+          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)]">
+            <h3 className="font-serif font-semibold text-charcoal mb-4">Property Rules</h3>
+            <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line mb-4">
+              {propertyRules}
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={rulesAgreed}
+                onChange={(e) => setRulesAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
+              />
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">
+                I agree to the property rules and policies
+              </span>
+            </label>
+          </div>
         )}
 
         <button type="submit"
