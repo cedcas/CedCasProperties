@@ -1,36 +1,114 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CedCas Properties
+
+A modern property rental platform built with Next.js, Prisma, and MySQL. Enables property listing, booking management, and admin controls for CedCas Properties.
+
+[![CI](https://github.com/cedcas/CedCasProperties/actions/workflows/ci.yml/badge.svg)](https://github.com/cedcas/CedCasProperties/actions/workflows/ci.yml)
+
+## Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **ORM**: Prisma with MySQL
+- **Auth**: NextAuth.js
+- **Storage**: Vercel Blob
+- **Email**: Resend / Nodemailer
+- **Deployment**: Vercel
+
+## Project Structure
+
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── admin/              # Admin dashboard
+│   ├── api/                # API routes
+│   ├── properties/         # Property listing & detail pages
+│   ├── layout.tsx          # Root layout
+│   └── page.tsx            # Home page
+├── components/
+│   ├── admin/              # Admin-specific components
+│   ├── booking/            # Booking flow components
+│   ├── sections/           # Page section components
+│   └── ui/                 # Shared UI components
+└── lib/                    # Utility functions & shared logic
+
+prisma/
+├── schema.prisma           # Database schema
+└── seed.ts                 # Database seed script
+
+public/                     # Static assets
+.github/
+└── workflows/
+    └── ci.yml              # CI/CD pipeline (lint + build)
+```
+
+## Branching Strategy
+
+| Branch | Purpose |
+|--------|---------|
+| `main` | Production — deployed to Vercel |
+| `dev` | Integration branch — all features merge here first |
+| `feature/*` | Individual feature work — branch off `dev` |
+| `fix/*` | Bug fixes — branch off `dev` (or `main` for hotfixes) |
+
+**Workflow:**
+1. Create a `feature/<name>` branch from `dev`
+2. Open a PR targeting `dev`
+3. After review and CI passing, merge to `dev`
+4. Periodically, `dev` is merged to `main` for a production release
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 20+
+- MySQL database
+- `.env.local` file (see below)
+
+### Environment Variables
+
+```env
+DATABASE_URL=mysql://user:password@localhost:3306/cedcas
+NEXTAUTH_SECRET=your-secret
+NEXTAUTH_URL=http://localhost:3000
+BLOB_READ_WRITE_TOKEN=your-vercel-blob-token
+RESEND_API_KEY=your-resend-key
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Development
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm install
+npx prisma db push
+npx prisma generate
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+### Seed Database
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run seed
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Build
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run build
+```
 
-## Deploy on Vercel
+### Lint
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm run lint
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## CI/CD
+
+GitHub Actions runs on every push and PR to `main` and `dev`:
+
+- **Lint**: ESLint check
+- **Build**: Prisma generate + Next.js production build
+
+Deployments to production are handled automatically by Vercel on merge to `main`.
