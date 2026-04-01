@@ -5,11 +5,12 @@ import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 
 const NAV = [
-  { href: "/admin/dashboard",    icon: "fa-gauge-high",       label: "Dashboard" },
-  { href: "/admin/properties",   icon: "fa-house",            label: "Properties" },
-  { href: "/admin/bookings",     icon: "fa-calendar-check",   label: "Bookings" },
-  { href: "/admin/messages",     icon: "fa-envelope",         label: "Messages" },
-  { href: "/admin/testimonials", icon: "fa-star",             label: "Testimonials" },
+  { href: "/admin/dashboard",       icon: "fa-gauge-high",       label: "Dashboard" },
+  { href: "/admin/properties",      icon: "fa-house",            label: "Properties" },
+  { href: "/admin/bookings",        icon: "fa-calendar-check",   label: "Bookings" },
+  { href: "/admin/messages",        icon: "fa-envelope",         label: "Messages" },
+  { href: "/admin/testimonials",    icon: "fa-star",             label: "Testimonials" },
+  { href: "/admin/discount-codes",  icon: "fa-tag",              label: "Promo Codes" },
 ];
 
 export default function AdminSidebar({ user }: { user?: { name?: string | null; email?: string | null } }) {

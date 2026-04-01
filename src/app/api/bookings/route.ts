@@ -1,9 +1,25 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
+import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 
 export async function POST(req: Request) {
-  const { propertyId, guestName, guestEmail, guestPhone, checkIn, checkOut, guests, totalPrice, paymentMethod, notes } = await req.json();
+  const {
+    propertyId,
+    guestName,
+    guestEmail,
+    guestPhone,
+    checkIn,
+    checkOut,
+    guests,
+    totalPrice,
+    nightlyTotal: clientNightlyTotal,
+    paymentMethod,
+    stripePaymentIntentId,
+    discountCode: rawDiscountCode,
+    discountAmount: clientDiscountAmount,
+    notes,
+  } = await req.json();
 
   if (!propertyId || !guestName || !guestEmail || !guestPhone || !checkIn || !checkOut) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -16,10 +32,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid check-in / check-out dates" }, { status: 400 });
   }
 
-  // ── Availability check: DB bookings ──────────────────────────────────────
+  // ── Property lookup ───────────────────────────────────────────────────────
   const property = await prisma.property.findUnique({
     where: { id: Number(propertyId) },
     select: {
+      name: true,
+      pricePerNight: true,
       airbnbIcsUrl: true,
       bookings: {
         where: { status: { in: ["confirmed", "pending"] } },
@@ -30,6 +48,7 @@ export async function POST(req: Request) {
 
   if (!property) return NextResponse.json({ error: "Property not found" }, { status: 404 });
 
+  // ── Availability check: DB bookings ──────────────────────────────────────
   const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
     aStart < bEnd && aEnd > bStart;
 
@@ -71,35 +90,109 @@ export async function POST(req: Request) {
         }
       }
     } catch {
-      // If Airbnb fetch fails, proceed — don't block the guest
       console.warn("Airbnb iCal fetch failed during booking; skipping Airbnb check");
     }
   }
 
-  // Save booking
+  // ── Discount code validation ──────────────────────────────────────────────
+  let discountCode: string | null = null;
+  let discountAmount: number = 0;
+
+  if (rawDiscountCode) {
+    const codeUpper = rawDiscountCode.trim().toUpperCase();
+    const discount = await prisma.discountCode.findUnique({
+      where: { code: codeUpper },
+    });
+
+    if (discount && discount.isActive) {
+      if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
+        const nightlyBase = clientNightlyTotal ?? parseFloat(totalPrice);
+        if (discount.type === "percentage") {
+          discountAmount = Math.round(nightlyBase * (Number(discount.value) / 100) * 100) / 100;
+        } else {
+          discountAmount = Math.min(Number(discount.value), nightlyBase);
+        }
+        discountCode = codeUpper;
+      }
+    }
+  }
+
+  // ── Compute server-side pricing ──────────────────────────────────────────
+  const dailyRates = await getDailyRates(
+    Number(propertyId),
+    checkInDate,
+    checkOutDate,
+    Number(property.pricePerNight)
+  );
+  const serverNightlyTotal = sumDailyRates(dailyRates);
+  const stripeFee = paymentMethod === "stripe" ? calcStripeFee(serverNightlyTotal - discountAmount) : 0;
+  const computedTotal = serverNightlyTotal - discountAmount + stripeFee;
+
+  // ── Save booking ──────────────────────────────────────────────────────────
   const booking = await prisma.booking.create({
     data: {
       propertyId: Number(propertyId),
       guestName,
       guestEmail,
       guestPhone,
-      checkIn:   new Date(checkIn),
-      checkOut:  new Date(checkOut),
+      checkIn:   checkInDate,
+      checkOut:  checkOutDate,
       guests:    Number(guests) || 1,
-      totalPrice: parseFloat(totalPrice) || 0,
+      totalPrice: computedTotal,
+      nightlyTotal: serverNightlyTotal,
+      stripeFee:  stripeFee > 0 ? stripeFee : null,
+      discountCode: discountCode || null,
+      discountAmount: discountAmount > 0 ? discountAmount : null,
       paymentMethod: paymentMethod || null,
+      stripePaymentIntentId: stripePaymentIntentId || null,
       status:    "pending",
       notes:     notes || null,
     },
     include: { property: true },
   });
 
-  const nights = Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000);
+  // Increment discount code usage
+  if (discountCode) {
+    await prisma.discountCode.update({
+      where: { code: discountCode },
+      data: { usageCount: { increment: 1 } },
+    });
+  }
+
+  const nights = dailyRates.length;
   const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
 
-  // Email to admin
+  // Build itemized nightly rates HTML table rows
+  const hasVariedRates = dailyRates.some((r) => r.rate !== dailyRates[0].rate);
+  const nightlyBreakdownRows = hasVariedRates
+    ? dailyRates
+        .map((r) => `<tr><td style="padding:4px 0;color:#888;font-size:13px">${new Date(r.date).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})}</td><td style="text-align:right;font-size:13px">₱${r.rate.toLocaleString()}</td></tr>`)
+        .join("")
+    : `<tr><td style="padding:4px 0;color:#888;font-size:13px">${nights} night${nights!==1?"s":""} × ₱${dailyRates[0].rate.toLocaleString()}</td><td style="text-align:right;font-size:13px">₱${serverNightlyTotal.toLocaleString()}</td></tr>`;
+
+  const discountRow = discountAmount > 0
+    ? `<tr><td style="padding:4px 0;color:#2a7a2a;font-size:13px">Promo code (${discountCode})</td><td style="text-align:right;font-size:13px;color:#2a7a2a">−₱${discountAmount.toLocaleString()}</td></tr>`
+    : "";
+
+  const stripeFeeRow = stripeFee > 0
+    ? `<tr><td style="padding:4px 0;color:#888;font-size:13px">Stripe transaction fee (${(STRIPE_FEE_RATE * 100).toFixed(0)}%)</td><td style="text-align:right;font-size:13px">₱${stripeFee.toLocaleString()}</td></tr>`
+    : "";
+
+  const priceBreakdownHtml = `
+    <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:8px">
+      ${nightlyBreakdownRows}
+      ${discountRow}
+      ${stripeFeeRow}
+      <tr style="border-top:1px solid #e5e5e5">
+        <td style="padding:8px 0 4px;font-weight:bold">Total</td>
+        <td style="text-align:right;font-weight:bold;color:#335238">₱${computedTotal.toLocaleString()}</td>
+      </tr>
+    </table>`;
+
+  // ── Email to admin ────────────────────────────────────────────────────────
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
+    const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
     await resend.emails.send({
       from:    "HavenInLipa <noreply@haveninlipa.com>",
       to:      "customerservice@haveninlipa.com",
@@ -121,12 +214,17 @@ export async function POST(req: Request) {
               <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(checkOut)}</td></tr>
               <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
               <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold;text-transform:uppercase">${paymentMethod || "N/A"}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Total</td><td style="font-weight:bold;font-size:16px;color:#335238">₱${Number(totalPrice).toLocaleString()}</td></tr>
+              <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
               ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
             </table>
+            <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">
+              <strong style="font-size:13px">Price Breakdown</strong>
+              ${priceBreakdownHtml}
+            </div>
             <div style="margin-top:20px;padding:14px;background:#FFF0F3;border-left:3px solid #FF5371;border-radius:4px;font-size:13px;color:#666">
-              Please verify the payment in your ${paymentMethod === "gcash" ? "GCash" : "BPI"} app and update the booking status to <strong>Confirmed</strong> in the admin panel.
+              ${paymentMethod === "stripe"
+                ? "Payment was collected via Stripe. Verify in your Stripe dashboard and update the booking status to <strong>Confirmed</strong>."
+                : `Please verify the payment in your ${pmLabel} app and update the booking status to <strong>Confirmed</strong> in the admin panel.`}
             </div>
           </div>
         </div>
@@ -136,9 +234,10 @@ export async function POST(req: Request) {
     console.error("Admin email failed:", err);
   }
 
-  // Email to booker — acknowledgment
+  // ── Email to booker — acknowledgment ──────────────────────────────────────
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
+    const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
     await resend.emails.send({
       from:    "HavenInLipa <noreply@haveninlipa.com>",
       to:      guestEmail,
@@ -162,9 +261,12 @@ export async function POST(req: Request) {
                 <tr><td style="padding:5px 0;color:#666">Check-out</td><td><strong>${fmtDate(checkOut)}</strong></td></tr>
                 <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
                 <tr><td style="padding:5px 0;color:#666">Guests</td><td>${guests}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Payment via</td><td style="text-transform:uppercase;font-weight:bold">${paymentMethod || "N/A"}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Total</td><td style="font-weight:bold;color:#335238">₱${Number(totalPrice).toLocaleString()}</td></tr>
+                <tr><td style="padding:5px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
               </table>
+              <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0e8f0">
+                <strong style="font-size:13px;color:#335238">Price Breakdown</strong>
+                ${priceBreakdownHtml}
+              </div>
             </div>
             <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
               If you have any questions, feel free to reach out to us:
