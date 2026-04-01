@@ -19,15 +19,13 @@ export default function AdminSidebar({ user }: { user?: { name?: string | null; 
     <aside className="fixed left-0 top-0 bottom-0 w-64 bg-[#1c1c1c] flex flex-col z-40 shadow-[4px_0_24px_rgba(0,0,0,.18)]">
       {/* Logo */}
       <div className="px-6 py-5 border-b border-white/[.07]">
-        <div style={{ width: 140, height: 40, overflow: "hidden" }}>
-          <Image
-            src="/brand-assets/Transparent Logo.png"
-            alt="CedCas Properties"
-            width={140}
-            height={99}
-            style={{ marginTop: -26, filter: "brightness(0) invert(1)" }}
-          />
-        </div>
+        <Image
+          src="/brand-assets/Transparent Logo.png"
+          alt="HavenInLipa"
+          width={80}
+          height={80}
+          className="h-[40px] w-auto"
+        />
         <span className="text-[10px] text-white/30 tracking-[.15em] uppercase mt-1 block">Admin Portal</span>
       </div>
 

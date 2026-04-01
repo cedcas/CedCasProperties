@@ -34,10 +34,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//CedCas Properties//EN",
+    "PRODID:-//HavenInLipa//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${property.name} - CedCas Properties`,
+    `X-WR-CALNAME:${property.name} - HavenInLipa`,
     "X-WR-TIMEZONE:Asia/Manila",
   ];
 

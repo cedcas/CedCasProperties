@@ -38,7 +38,7 @@ export default function LoginPage() {
             <div style={{ width: 160, height: 46, overflow: "hidden" }} className="mb-4">
               <Image
                 src="/brand-assets/Transparent Logo.png"
-                alt="CedCas Properties"
+                alt="HavenInLipa"
                 width={160}
                 height={113}
                 style={{ marginTop: -29 }}
@@ -99,7 +99,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-white/30 text-[12px] mt-5">
-          CedCas Properties Admin &copy; {new Date().getFullYear()}
+          HavenInLipa Admin &copy; {new Date().getFullYear()}
         </p>
       </div>
 
