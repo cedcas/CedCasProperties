@@ -6,7 +6,7 @@ export default function Hero() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 80% 80% at 30% 60%, rgba(59,83,35,.55) 0%, transparent 65%), linear-gradient(158deg, #0f1f08 0%, #1e3310 35%, #2d4820 62%, #2C2C2C 100%)",
+            "radial-gradient(ellipse 70% 70% at 15% 35%, rgba(255,83,113,.22) 0%, transparent 60%), radial-gradient(ellipse 60% 60% at 85% 75%, rgba(139,205,184,.18) 0%, transparent 55%), linear-gradient(158deg, #062d28 0%, #0a3530 35%, #0f3d38 62%, #0a2525 100%)",
         }}
       />
       <div
@@ -20,11 +20,11 @@ export default function Hero() {
 
       <div className="relative z-[1] max-w-6xl mx-auto px-6 pt-32 pb-28 flex flex-col items-center text-center">
         <div className="flex items-center gap-2.5 mb-7 reveal">
-          <span className="block w-8 h-px bg-[#C4A862]" />
-          <span className="text-[#C4A862] text-[11px] font-semibold tracking-[.22em] uppercase">
+          <span className="block w-8 h-px bg-[#FFDD3F]" />
+          <span className="text-[#FFDD3F] text-[11px] font-semibold tracking-[.22em] uppercase">
             Lipa City, Batangas
           </span>
-          <span className="block w-8 h-px bg-[#C4A862]" />
+          <span className="block w-8 h-px bg-[#FFDD3F]" />
         </div>
 
         <h1
@@ -32,7 +32,7 @@ export default function Hero() {
           style={{ fontSize: "clamp(2.4rem, 6vw, 4.5rem)" }}
         >
           Your Home Away<br />
-          <span style={{ color: "#C4A862" }}>From Home</span> in<br />
+          <span style={{ color: "#FFDD3F" }}>From Home</span> in<br />
           Lipa, Batangas
         </h1>
 
@@ -48,8 +48,8 @@ export default function Hero() {
             href="#properties"
             className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-[14px] font-semibold text-white"
             style={{
-              background: "linear-gradient(135deg,#C4A862,#A8893F)",
-              boxShadow: "0 4px 20px rgba(196,168,98,.40)",
+              background: "linear-gradient(135deg,#FF5371,#E03D5A)",
+              boxShadow: "0 4px 20px rgba(255,83,113,.40)",
             }}
           >
             <i className="fa-solid fa-house" /> Explore Properties
@@ -78,7 +78,7 @@ export default function Hero() {
             { icon: "fa-location-dot", value: "Lipa City", label: "Batangas" },
           ].map(({ icon, value, label }) => (
             <div key={label} className="flex items-center gap-2.5">
-              <i className={`fa-solid ${icon} text-[#C4A862] text-[15px]`} />
+              <i className={`fa-solid ${icon} text-[#FFDD3F] text-[15px]`} />
               <span className="text-white font-bold text-[15px]">{value}</span>
               <span className="text-white/50 text-[13px]">{label}</span>
             </div>
