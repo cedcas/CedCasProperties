@@ -68,7 +68,7 @@ export default function Navbar() {
             <span
               key={i}
               className="block w-5 h-0.5 rounded transition-all duration-200"
-              style={{ background: scrolled ? "#335238" : "white" }}
+              style={{ background: "#2C2C2C" }}
             />
           ))}
         </button>

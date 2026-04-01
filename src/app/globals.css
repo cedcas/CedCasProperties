@@ -68,12 +68,12 @@ body {
 #navbar.scrolled .nav-link { color: #335238; }
 #navbar.scrolled .nav-link:hover { color: #4CA750; }
 .nav-link {
-  color: rgba(255,255,255,0.88);
+  color: rgba(44,44,44,0.80);
   font-size: 14px;
   font-weight: 600;
   transition: color 0.2s;
 }
-.nav-link:hover { color: #FFDD3F; }
+.nav-link:hover { color: #FF5371; }
 
 /* ── Logo ── */
 #nav-logo img { transition: filter 0.35s; }
