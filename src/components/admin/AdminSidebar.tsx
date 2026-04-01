@@ -39,7 +39,7 @@ export default function AdminSidebar({ user }: { user?: { name?: string | null; 
               href={href}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-[10px] text-[13.5px] font-medium transition-all duration-200 ${
                 active
-                  ? "bg-[#C4A862]/15 text-[#C4A862]"
+                  ? "bg-[#FF5371]/15 text-[#FF5371]"
                   : "text-white/55 hover:text-white hover:bg-white/[.06]"
               }`}
             >

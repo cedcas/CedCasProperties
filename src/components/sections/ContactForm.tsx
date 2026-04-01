@@ -38,17 +38,17 @@ export default function ContactForm() {
   return (
     <section id="contact" className="py-28 bg-offwhite relative overflow-hidden">
       <div className="absolute inset-0 pointer-events-none opacity-40" style={{ backgroundImage: "radial-gradient(circle at 1px 1px,rgba(59,83,35,.06) 1px,transparent 0)", backgroundSize: "28px 28px" }} />
-      <div className="absolute top-0 right-0 w-[420px] h-[420px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle at top right,rgba(196,168,98,.07) 0%,transparent 65%)", transform: "translate(30%,-30%)" }} />
+      <div className="absolute top-0 right-0 w-[420px] h-[420px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle at top right,rgba(255,83,113,.07) 0%,transparent 65%)", transform: "translate(30%,-30%)" }} />
 
       <div className="relative z-[1] max-w-6xl mx-auto px-6">
 
         <div className="flex flex-col items-center text-center reveal mb-14">
           <span className="flex items-center gap-2 text-forest text-[11px] font-semibold tracking-[.18em] uppercase mb-3">
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />Get in Touch
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />Get in Touch
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
           </span>
           <h2 className="font-serif font-semibold text-charcoal leading-tight mb-3" style={{ fontSize: "clamp(2rem,4vw,3rem)" }}>Contact Us</h2>
-          <div className="gold-line mx-auto" />
+          <div className="coral-line mx-auto" />
           <p className="text-charcoal/55 text-[16px] leading-[1.7] max-w-[520px] mt-5">
             Have questions about our properties? We&apos;d love to hear from you.
           </p>
@@ -145,7 +145,7 @@ export default function ContactForm() {
                 type="submit"
                 disabled={status === "sending"}
                 className="w-full inline-flex items-center justify-center gap-2.5 px-8 py-4 rounded-full text-[14px] font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)", boxShadow: "0 4px 20px rgba(196,168,98,.35)" }}
+                style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)", boxShadow: "0 4px 20px rgba(255,83,113,.35)" }}
               >
                 <i className={`fa-solid ${status === "sending" ? "fa-spinner fa-spin" : "fa-paper-plane"}`} />
                 {status === "sending" ? "Sending…" : "Send Message"}

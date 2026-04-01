@@ -17,7 +17,7 @@ export default async function PropertiesPage() {
         <Link
           href="/admin/properties/new"
           className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}
+          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}
         >
           <i className="fa-solid fa-plus" /> Add Property
         </Link>
@@ -54,7 +54,7 @@ export default async function PropertiesPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4">
-                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${p.isFeatured ? "bg-[#C4A862]/15 text-[#A8893F]" : "bg-black/5 text-charcoal/40"}`}>
+                    <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${p.isFeatured ? "bg-[#FF5371]/15 text-[#E03D5A]" : "bg-black/5 text-charcoal/40"}`}>
                       {p.isFeatured ? "Featured" : "—"}
                     </span>
                   </td>
