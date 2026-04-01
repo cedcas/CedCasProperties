@@ -32,7 +32,7 @@ jobs:
       - name: Generate Prisma client (for types)
         run: npx prisma generate
         env:
-          DATABASE_URL: mysql://user:password@localhost:3306/cedcas
+          DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
       - run: npm run typecheck
 
   build:
@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Required for Prisma generate (no real DB needed for build check)
-      DATABASE_URL: mysql://user:password@localhost:3306/cedcas
+      DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
       NEXTAUTH_SECRET: ci-secret-placeholder
       NEXTAUTH_URL: http://localhost:3000
     steps:

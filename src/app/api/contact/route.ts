@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     await transporter.sendMail({
       from:    `"HavenInLipa Website" <${process.env.SMTP_USER}>`,
-      to:      "customerservice@cedcasproperties.com",
+      to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,
       html: `

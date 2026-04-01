@@ -58,7 +58,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@cedcasproperties.com"
+                placeholder="admin@haveninlipa.com"
                 className="w-full px-4 py-3 rounded-[10px] border border-black/[.10] bg-offwhite text-[14px] text-charcoal placeholder-charcoal/30 focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-all duration-200"
               />
             </div>

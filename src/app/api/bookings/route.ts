@@ -101,8 +101,8 @@ export async function POST(req: Request) {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from:    "HavenInLipa <noreply@cedcasproperties.com>",
-      to:      "customerservice@cedcasproperties.com",
+      from:    "HavenInLipa <noreply@haveninlipa.com>",
+      to:      "customerservice@haveninlipa.com",
       replyTo: guestEmail,
       subject: `🏠 New Booking Request – ${booking.property.name}`,
       html: `
@@ -140,7 +140,7 @@ export async function POST(req: Request) {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from:    "HavenInLipa <noreply@cedcasproperties.com>",
+      from:    "HavenInLipa <noreply@haveninlipa.com>",
       to:      guestEmail,
       subject: `📋 Booking Request Received – ${booking.property.name}`,
       html: `
@@ -170,7 +170,7 @@ export async function POST(req: Request) {
               If you have any questions, feel free to reach out to us:
             </p>
             <div style="font-size:14px;color:#444">
-              📧 <a href="mailto:customerservice@cedcasproperties.com" style="color:#335238">customerservice@cedcasproperties.com</a><br/>
+              📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
               📞 +639066554415
             </div>
             <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;text-align:center">

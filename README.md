@@ -1,6 +1,6 @@
-# CedCas Properties
+# HavenInLipa
 
-A modern property rental platform built with Next.js, Prisma, and MySQL. Enables property listing, booking management, and admin controls for CedCas Properties.
+A modern property rental platform built with Next.js, Prisma, and MySQL. Enables property listing, booking management, and admin controls for HavenInLipa.
 
 [![CI](https://github.com/cedcas/CedCasProperties/actions/workflows/ci.yml/badge.svg)](https://github.com/cedcas/CedCasProperties/actions/workflows/ci.yml)
 
@@ -153,7 +153,7 @@ Vercel is connected to the `main` branch. Pushes to `main` trigger an automatic 
 
 - `DATABASE_URL` — production Hostinger MySQL URL
 - `NEXTAUTH_SECRET` — production secret (different from local)
-- `NEXTAUTH_URL` — production domain (e.g. `https://cedcasproperties.com`)
+- `NEXTAUTH_URL` — production domain (e.g. `https://haveninlipa.com`)
 - `BLOB_READ_WRITE_TOKEN` — Vercel Blob token
 - `RESEND_API_KEY` — Resend key
 

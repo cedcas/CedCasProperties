@@ -66,8 +66,8 @@ export default function Footer() {
               </div>
               <div className="flex gap-3 items-center">
                 <i className="fa-solid fa-envelope text-[#FF5371] text-[14px] flex-shrink-0" />
-                <a href="mailto:customerservice@cedcasproperties.com" className="hover:text-[#FF5371] transition-colors break-all">
-                  customerservice@cedcasproperties.com
+                <a href="mailto:customerservice@haveninlipa.com" className="hover:text-[#FF5371] transition-colors break-all">
+                  customerservice@haveninlipa.com
                 </a>
               </div>
             </div>

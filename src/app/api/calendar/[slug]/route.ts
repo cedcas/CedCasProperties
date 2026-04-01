@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   for (const booking of property.bookings) {
     lines.push(
       "BEGIN:VEVENT",
-      `UID:booking-${booking.id}@cedcasproperties.com`,
+      `UID:booking-${booking.id}@haveninlipa.com`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${toDateOnly(booking.checkIn)}`,
       `DTEND;VALUE=DATE:${toDateOnly(booking.checkOut)}`,

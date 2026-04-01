@@ -24,7 +24,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
-        from:    "HavenInLipa <noreply@cedcasproperties.com>",
+        from:    "HavenInLipa <noreply@haveninlipa.com>",
         to:      booking.guestEmail,
         subject: `✅ Booking Confirmed – ${booking.property.name}`,
         html: `
@@ -56,7 +56,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                 If you have any questions before your stay, don't hesitate to reach out to us:
               </p>
               <div style="font-size:14px;color:#444">
-                📧 <a href="mailto:customerservice@cedcasproperties.com" style="color:#335238">customerservice@cedcasproperties.com</a><br/>
+                📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
                 📞 +639066554415
               </div>
 
@@ -76,8 +76,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
       await resend.emails.send({
-        from:    "HavenInLipa <noreply@cedcasproperties.com>",
-        to:      "customerservice@cedcasproperties.com",
+        from:    "HavenInLipa <noreply@haveninlipa.com>",
+        to:      "customerservice@haveninlipa.com",
         subject: `✅ Booking Confirmed – ${booking.property.name}`,
         html: `
           <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">

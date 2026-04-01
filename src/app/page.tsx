@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import Navbar       from "@/components/layout/Navbar";
 import Footer       from "@/components/layout/Footer";
 import Hero         from "@/components/sections/Hero";
@@ -64,7 +65,7 @@ export default function Home() {
               from home in Lipa, Batangas.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4 mb-14">
-              <a
+              <Link
                 href="/#properties"
                 className="inline-flex items-center gap-2 px-9 py-4 rounded-full text-[14px] font-semibold text-white"
                 style={{
@@ -73,7 +74,7 @@ export default function Home() {
                 }}
               >
                 <i className="fa-solid fa-calendar-check" /> Book Your Stay Today
-              </a>
+              </Link>
               <a
                 href="#properties"
                 className="inline-flex items-center gap-2 px-9 py-4 rounded-full text-[14px] font-semibold text-white border-2 border-white/40 hover:bg-white/10 transition-all duration-300"
