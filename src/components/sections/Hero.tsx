@@ -34,7 +34,7 @@ export default function Hero() {
             alt="HavenInLipa"
             width={320}
             height={320}
-            className="h-[156px] w-auto mx-auto"
+            className="h-[312px] w-auto mx-auto"
             style={{ filter: "drop-shadow(0 4px 18px rgba(255,83,113,.18))" }}
             priority
           />

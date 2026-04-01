@@ -1,6 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
 const links = [
@@ -29,19 +28,7 @@ export default function Navbar() {
         scrolled ? "scrolled" : ""
       }`}
     >
-      <div className="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-between">
-        {/* Logo */}
-        <Link href="/" id="nav-logo" aria-label="HavenInLipa" className="flex-shrink-0">
-          <Image
-            src="/brand-assets/Transparent Logo.png"
-            alt="HavenInLipa"
-            width={120}
-            height={120}
-            className="h-[52px] w-auto"
-            priority
-          />
-        </Link>
-
+      <div className="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-end">
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-7">
           {links.map((l) => (
