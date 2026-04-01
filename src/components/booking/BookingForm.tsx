@@ -128,7 +128,7 @@ export default function BookingForm({
       const res = await fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`);
       const data = await res.json();
       if (!data.available) {
-        setAvailabilityError("These dates are not available. Please select different dates.");
+        setAvailabilityError("Those dates are already booked. Please choose different dates.");
       } else {
         setAvailabilityError("");
       }
@@ -211,7 +211,7 @@ export default function BookingForm({
   const applyDiscountCode = async () => {
     if (!discountCodeInput.trim()) return;
     if (computedNightlyTotal <= 0) {
-      setDiscountError("Please select dates first.");
+      setDiscountError("Please choose your stay dates first so we can calculate your discount.");
       return;
     }
     setDiscountLoading(true);
@@ -224,13 +224,13 @@ export default function BookingForm({
       });
       const data = await res.json();
       if (!res.ok) {
-        setDiscountError(data.error ?? "Invalid code");
+        setDiscountError(data.error ?? "That code isn't valid. Please double-check and try again.");
         setAppliedDiscount(null);
       } else {
         setAppliedDiscount(data);
       }
     } catch {
-      setDiscountError("Could not validate code. Please try again.");
+      setDiscountError("We couldn't verify that code. Please try again.");
     } finally {
       setDiscountLoading(false);
     }
@@ -328,8 +328,11 @@ export default function BookingForm({
           Thank you, <strong>{form.guestName}</strong>! We&apos;ve received your booking request for <strong>{propertyName}</strong>.
         </p>
         <p className="text-charcoal/45 text-[14px] mb-8">
-          A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your{" "}
-          {paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI" : "Stripe"} payment (usually within a few hours).
+          {paymentMethod === "stripe"
+            ? <>Your card payment went through — a confirmation will be sent to <strong>{form.guestEmail}</strong> shortly.</>
+            : <>A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your{" "}
+              {paymentMethod === "gcash" ? "GCash" : "BPI"} payment — usually within a few hours.</>
+          }
         </p>
         <Link href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
           style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
@@ -385,13 +388,13 @@ export default function BookingForm({
             }
             {discountAmount > 0 && (
               <div className="flex justify-between text-green-700">
-                <span>Promo code ({appliedDiscount?.code})</span>
+                <span>Promo ({appliedDiscount?.code})</span>
                 <span>−₱{Math.round(discountAmount).toLocaleString()}</span>
               </div>
             )}
             {stripeFeePHP > 0 && (
               <div className="flex justify-between text-charcoal/50">
-                <span>Stripe fee ({(STRIPE_FEE_RATE*100).toFixed(0)}%)</span>
+                <span>Card processing fee ({(STRIPE_FEE_RATE*100).toFixed(0)}%)</span>
                 <span>₱{Math.round(stripeFeePHP).toLocaleString()}</span>
               </div>
             )}
@@ -404,12 +407,12 @@ export default function BookingForm({
 
         {/* Payment method toggle */}
         <div className="mb-5">
-          <p className={labelCls}>Select Payment Method</p>
+          <p className={labelCls}>How would you like to pay?</p>
           <div className="grid grid-cols-3 gap-2">
             {(["gcash", "bpi", "stripe"] as const).map((m) => (
               <button key={m} type="button" onClick={() => setPaymentMethod(m)}
                 className={`py-3 rounded-[12px] font-semibold text-[13px] border-2 transition-all duration-200 relative ${paymentMethod === m ? "border-forest bg-forest/5 text-forest" : "border-black/[.10] text-charcoal/50 hover:border-charcoal/20"}`}>
-                {m === "gcash" ? "💙 GCash" : m === "bpi" ? "🏦 BPI" : "💳 Stripe"}
+                {m === "gcash" ? "💙 GCash" : m === "bpi" ? "🏦 BPI" : "💳 Card"}
                 {m !== "stripe" && (
                   <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-green-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap">
                     No Fee
@@ -421,7 +424,7 @@ export default function BookingForm({
           {paymentMethod === "stripe" && (
             <div className="mt-2 p-2.5 bg-amber-50 border border-amber-200 rounded-[8px] text-[12px] text-amber-800">
               <i className="fa-solid fa-circle-info mr-1" />
-              A 6% transaction fee is added for card payments. GCash and BPI have no additional fees.
+              Card payments include a 6% processing fee. Pay with GCash or BPI to avoid this charge.
             </div>
           )}
         </div>
@@ -430,7 +433,7 @@ export default function BookingForm({
         {paymentMethod === "stripe" && stripeClientSecret && (
           <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5">
             <p className="text-[12px] font-semibold text-charcoal/40 uppercase tracking-wider mb-4">
-              Secure Card Payment
+              Pay Securely by Card
             </p>
             <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret, appearance: { theme: "stripe" } }}>
               <StripePaymentForm
@@ -458,7 +461,7 @@ export default function BookingForm({
             <img src={qrSrc} alt={`${paymentMethod.toUpperCase()} QR Code`} className="w-56 h-auto mx-auto rounded-[8px]" />
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-[8px] text-[12px] text-amber-800">
               <i className="fa-solid fa-circle-info mr-1.5" />
-              Transfer exactly <strong>₱{Math.round(total).toLocaleString()}</strong> using the QR above. Include your name in the remarks.
+              Please transfer exactly <strong>₱{Math.round(total).toLocaleString()}</strong> using the QR code above. Add your name in the payment remarks so we can confirm faster.
             </div>
           </div>
         )}
@@ -472,11 +475,11 @@ export default function BookingForm({
         {/* Property Rules (payment step) */}
         {propertyRules && (
           <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5">
-            <h3 className="font-serif font-semibold text-charcoal mb-4">Confirm Property Rules Agreement</h3>
+            <h3 className="font-serif font-semibold text-charcoal mb-4">House Rules</h3>
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" checked={rulesAgreed} onChange={(e) => setRulesAgreed(e.target.checked)}
                 className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2" />
-              <span className="text-[13px] text-charcoal/70 leading-[1.5]">I agree to the property rules and policies</span>
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">I&apos;ve read and agree to the property rules</span>
             </label>
           </div>
         )}
@@ -488,11 +491,11 @@ export default function BookingForm({
             style={{ background: "linear-gradient(135deg,#335238,#1e3c25)" }}>
             {submitting
               ? <><i className="fa-solid fa-spinner fa-spin" /> Processing…</>
-              : <><i className="fa-solid fa-check-circle" /> I Paid — Submit Booking</>}
+              : <><i className="fa-solid fa-check-circle" /> I&apos;ve Paid — Confirm My Booking</>}
           </button>
         )}
         <p className="text-center text-[11px] text-charcoal/35 mt-3">
-          Your booking will be confirmed once payment is verified (usually within a few hours).
+          We&apos;ll confirm your booking once we&apos;ve verified your payment — usually within a few hours.
         </p>
       </div>
     );
@@ -574,7 +577,7 @@ export default function BookingForm({
           {nights > 0 && (
             <div className="mt-4 pt-4 border-t border-black/[.06] space-y-1.5 text-[13px]">
               {ratesLoading ? (
-                <div className="text-charcoal/40 text-[12px]"><i className="fa-solid fa-spinner fa-spin mr-1" /> Calculating rates…</div>
+                <div className="text-charcoal/40 text-[12px]"><i className="fa-solid fa-spinner fa-spin mr-1" /> Checking rates…</div>
               ) : hasVariedRates ? (
                 <>
                   {dailyRates.map((r) => (
@@ -607,7 +610,7 @@ export default function BookingForm({
         {/* Discount code */}
         {nights > 0 && (
           <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)]">
-            <h3 className="font-serif font-semibold text-charcoal mb-4">Promo Code</h3>
+            <h3 className="font-serif font-semibold text-charcoal mb-4">Have a Promo Code?</h3>
             {appliedDiscount ? (
               <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-[10px]">
                 <div>
@@ -626,7 +629,7 @@ export default function BookingForm({
                   type="text"
                   value={discountCodeInput}
                   onChange={(e) => { setDiscountCodeInput(e.target.value.toUpperCase()); setDiscountError(""); }}
-                  placeholder="Enter promo code"
+                  placeholder="Enter your code"
                   className={`${inputCls} flex-1`}
                   onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), applyDiscountCode())}
                 />
@@ -653,12 +656,12 @@ export default function BookingForm({
         {/* Property Rules */}
         {propertyRules && (
           <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)]">
-            <h3 className="font-serif font-semibold text-charcoal mb-4">Property Rules</h3>
+            <h3 className="font-serif font-semibold text-charcoal mb-4">House Rules</h3>
             <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line mb-4">{propertyRules}</div>
             <label className="flex items-start gap-3 cursor-pointer">
               <input type="checkbox" checked={rulesAgreed} onChange={(e) => setRulesAgreed(e.target.checked)}
                 className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2" />
-              <span className="text-[13px] text-charcoal/70 leading-[1.5]">I agree to the property rules and policies</span>
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">I&apos;ve read and agree to the house rules</span>
             </label>
           </div>
         )}
@@ -666,7 +669,7 @@ export default function BookingForm({
         <button type="submit" disabled={submitting}
           className="w-full py-4 rounded-full text-[15px] font-semibold text-white hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
-          {submitting ? <><i className="fa-solid fa-spinner fa-spin" /> Setting up payment…</> : <>Continue to Payment <i className="fa-solid fa-arrow-right ml-1.5 text-[13px]" /></>}
+          {submitting ? <><i className="fa-solid fa-spinner fa-spin" /> Preparing your booking…</> : <>Continue to Payment <i className="fa-solid fa-arrow-right ml-1.5 text-[13px]" /></>}
         </button>
       </form>
     </div>
