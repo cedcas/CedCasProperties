@@ -6,7 +6,7 @@ export default function Hero() {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(ellipse 70% 70% at 15% 35%, rgba(255,83,113,.22) 0%, transparent 60%), radial-gradient(ellipse 60% 60% at 85% 75%, rgba(139,205,184,.18) 0%, transparent 55%), linear-gradient(158deg, #062d28 0%, #0a3530 35%, #0f3d38 62%, #0a2525 100%)",
+            "radial-gradient(ellipse 70% 70% at 15% 35%, rgba(255,83,113,.22) 0%, transparent 60%), radial-gradient(ellipse 60% 60% at 85% 75%, rgba(139,205,184,.18) 0%, transparent 55%), linear-gradient(158deg, #1e3326 0%, #27402e 35%, #2f4a38 62%, #335238 100%)",
         }}
       />
       <div
@@ -20,11 +20,11 @@ export default function Hero() {
 
       <div className="relative z-[1] max-w-6xl mx-auto px-6 pt-32 pb-28 flex flex-col items-center text-center">
         <div className="flex items-center gap-2.5 mb-7 reveal">
-          <span className="block w-8 h-px bg-[#FFDD3F]" />
-          <span className="text-[#FFDD3F] text-[11px] font-semibold tracking-[.22em] uppercase">
+          <span className="block w-8 h-px bg-[#8BCDB8]" />
+          <span className="text-[#8BCDB8] text-[11px] font-semibold tracking-[.22em] uppercase">
             Lipa City, Batangas
           </span>
-          <span className="block w-8 h-px bg-[#FFDD3F]" />
+          <span className="block w-8 h-px bg-[#8BCDB8]" />
         </div>
 
         <h1
@@ -32,7 +32,7 @@ export default function Hero() {
           style={{ fontSize: "clamp(2.4rem, 6vw, 4.5rem)" }}
         >
           Your Home Away<br />
-          <span style={{ color: "#FFDD3F" }}>From Home</span> in<br />
+          <span style={{ color: "#FF5371" }}>From Home</span> in<br />
           Lipa, Batangas
         </h1>
 
@@ -78,7 +78,7 @@ export default function Hero() {
             { icon: "fa-location-dot", value: "Lipa City", label: "Batangas" },
           ].map(({ icon, value, label }) => (
             <div key={label} className="flex items-center gap-2.5">
-              <i className={`fa-solid ${icon} text-[#FFDD3F] text-[15px]`} />
+              <i className={`fa-solid ${icon} text-[#8BCDB8] text-[15px]`} />
               <span className="text-white font-bold text-[15px]">{value}</span>
               <span className="text-white/50 text-[13px]">{label}</span>
             </div>
