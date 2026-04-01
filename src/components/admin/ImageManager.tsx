@@ -96,13 +96,13 @@ export default function ImageManager({ propertyId, initialImages, initialFeature
           {images.map((url) => {
             const isFeat = url === featured;
             return (
-              <div key={url} className={`relative rounded-[10px] overflow-hidden group border-2 transition-all duration-200 ${isFeat ? "border-[#C4A862]" : "border-transparent"}`}>
+              <div key={url} className={`relative rounded-[10px] overflow-hidden group border-2 transition-all duration-200 ${isFeat ? "border-[#FF5371]" : "border-transparent"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt="" className="w-full h-[110px] object-cover" />
 
                 {/* Featured badge */}
                 {isFeat && (
-                  <div className="absolute top-2 left-2 bg-[#C4A862] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  <div className="absolute top-2 left-2 bg-[#FF5371] text-white text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
                     <i className="fa-solid fa-star text-[8px]" /> Featured
                   </div>
                 )}
@@ -114,7 +114,7 @@ export default function ImageManager({ propertyId, initialImages, initialFeature
                       type="button"
                       onClick={() => setAsFeatured(url)}
                       title="Set as featured"
-                      className="w-8 h-8 rounded-full bg-[#C4A862] text-white flex items-center justify-center hover:bg-[#A8893F] transition-colors"
+                      className="w-8 h-8 rounded-full bg-[#FF5371] text-white flex items-center justify-center hover:bg-[#E03D5A] transition-colors"
                     >
                       <i className="fa-solid fa-star text-[11px]" />
                     </button>

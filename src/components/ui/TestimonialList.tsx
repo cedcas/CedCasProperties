@@ -26,10 +26,10 @@ export default function TestimonialList({ testimonials }: { testimonials: Testim
           >
             <div className="flex gap-1 mb-4">
               {Array.from({ length: 5 }).map((_, j) => (
-                <i key={j} className={`fa-solid fa-star text-[13px] ${j < t.rating ? "text-[#C4A862]" : "text-black/15"}`} />
+                <i key={j} className={`fa-solid fa-star text-[13px] ${j < t.rating ? "text-[#FF5371]" : "text-black/15"}`} />
               ))}
             </div>
-            <div className="absolute top-5 right-6 text-[#C4A862] opacity-10" style={{ fontSize: 52, fontFamily: "Georgia", lineHeight: 1 }}>&ldquo;</div>
+            <div className="absolute top-5 right-6 text-[#FF5371] opacity-10" style={{ fontSize: 52, fontFamily: "Georgia", lineHeight: 1 }}>&ldquo;</div>
             <p className="text-charcoal/70 text-[14px] leading-[1.75] mb-6 relative z-[1]">
               &ldquo;{t.message}&rdquo;
             </p>
@@ -40,7 +40,7 @@ export default function TestimonialList({ testimonials }: { testimonials: Testim
               <div>
                 <div className="font-semibold text-charcoal text-[13.5px]">{t.name}</div>
                 <div className="text-charcoal/45 text-[11.5px] flex items-center gap-1.5 mt-0.5">
-                  <i className="fa-solid fa-location-dot text-[#C4A862] text-[10px]" />{t.location}
+                  <i className="fa-solid fa-location-dot text-[#FF5371] text-[10px]" />{t.location}
                 </div>
               </div>
               <div className="ml-auto">

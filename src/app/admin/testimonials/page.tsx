@@ -41,7 +41,7 @@ export default async function TestimonialsPage() {
                 </div>
                 <div className="flex gap-0.5 mb-3">
                   {Array.from({ length: 5 }).map((_, i) => (
-                    <i key={i} className={`fa-solid fa-star text-[12px] ${i < t.rating ? "text-[#C4A862]" : "text-black/15"}`} />
+                    <i key={i} className={`fa-solid fa-star text-[12px] ${i < t.rating ? "text-[#FF5371]" : "text-black/15"}`} />
                   ))}
                 </div>
                 <p className="text-[13.5px] text-charcoal/65 leading-[1.65]">{t.message}</p>

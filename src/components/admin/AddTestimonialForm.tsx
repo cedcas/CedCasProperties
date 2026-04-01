@@ -57,7 +57,7 @@ export default function AddTestimonialForm({ properties }: { properties: Propert
           <div className="sm:col-span-2 flex gap-3">
             <button type="submit" disabled={saving}
               className="px-6 py-2.5 rounded-full text-[13px] font-semibold text-white disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}>
+              style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
               {saving ? "Saving…" : "Add Testimonial"}
             </button>
             <button type="button" onClick={() => setOpen(false)}

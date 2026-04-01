@@ -85,7 +85,7 @@ export default function LoginPage() {
               type="submit"
               disabled={loading}
               className="w-full py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-300 hover:-translate-y-0.5 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)", boxShadow: "0 4px 20px rgba(196,168,98,.35)" }}
+              style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)", boxShadow: "0 4px 20px rgba(255,83,113,.35)" }}
             >
               {loading ? (
                 <span className="flex items-center justify-center gap-2">

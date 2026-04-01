@@ -31,16 +31,16 @@ export default function Hero() {
           className="font-serif font-bold text-white leading-[1.12] mb-6 reveal reveal-d1"
           style={{ fontSize: "clamp(2.4rem, 6vw, 4.5rem)" }}
         >
-          Your Home Away<br />
-          <span style={{ color: "#FF5371" }}>From Home</span> in<br />
-          Lipa, Batangas
+          Stay in Style,<br />
+          <span style={{ color: "#FF5371" }}>Live in Comfort</span><br />
+          in Lipa, Batangas
         </h1>
 
         <p
           className="text-white/65 leading-[1.75] max-w-[560px] mb-10 reveal reveal-d2"
           style={{ fontSize: "clamp(1rem, 2vw, 1.15rem)" }}
         >
-          Discover thoughtfully furnished short-term rentals perfect for families, weekend getaways, and business travelers in the heart of Batangas.
+          Upscale short-term rentals thoughtfully designed for families, weekend escapes, and business stays — right in the heart of Batangas.
         </p>
 
         <div className="flex flex-wrap gap-4 justify-center mb-16 reveal reveal-d3">

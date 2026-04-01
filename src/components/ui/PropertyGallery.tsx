@@ -74,7 +74,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
         <div className="flex gap-2 mt-2 overflow-x-auto pb-1">
           {images.map((url, i) => (
             <button key={url} onClick={() => setLightbox(i)}
-              className={`flex-shrink-0 w-16 h-12 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${lightbox === i ? "border-gold" : "border-transparent hover:border-gold/50"}`}>
+              className={`flex-shrink-0 w-16 h-12 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${lightbox === i ? "border-coral" : "border-transparent hover:border-coral/50"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img src={url} alt="" className="w-full h-full object-cover" />
             </button>
@@ -132,7 +132,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
           <div className="flex-shrink-0 flex gap-2 px-6 py-4 overflow-x-auto justify-center" onClick={(e) => e.stopPropagation()}>
             {images.map((url, i) => (
               <button key={url} onClick={() => setLightbox(i)}
-                className={`flex-shrink-0 w-14 h-10 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${i === lightbox ? "border-[#C4A862] opacity-100" : "border-transparent opacity-50 hover:opacity-80"}`}>
+                className={`flex-shrink-0 w-14 h-10 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${i === lightbox ? "border-[#FF5371] opacity-100" : "border-transparent opacity-50 hover:opacity-80"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={url} alt="" className="w-full h-full object-cover" />
               </button>

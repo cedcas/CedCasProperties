@@ -12,14 +12,14 @@ export default function WhyUs() {
 
         <div className="flex flex-col items-center text-center reveal mb-14">
           <span className="flex items-center gap-2 text-forest text-[11px] font-semibold tracking-[.18em] uppercase mb-3">
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
             Our Difference
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
           </span>
           <h2 className="font-serif font-semibold text-charcoal leading-tight mb-3" style={{ fontSize: "clamp(2rem,4vw,3rem)" }}>
             Why Choose Us?
           </h2>
-          <div className="gold-line mx-auto" />
+          <div className="coral-line mx-auto" />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-7">

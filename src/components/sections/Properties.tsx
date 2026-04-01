@@ -19,9 +19,9 @@ export default async function Properties() {
 
         <div className="flex flex-col items-center text-center reveal mb-14">
           <span className="flex items-center gap-2 text-forest text-[11px] font-semibold tracking-[.18em] uppercase mb-3">
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
             Our Listings
-            <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+            <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
           </span>
           <h2
             className="font-serif font-semibold text-charcoal leading-tight mb-3"
@@ -29,7 +29,7 @@ export default async function Properties() {
           >
             Our Rentals
           </h2>
-          <div className="gold-line mx-auto" />
+          <div className="coral-line mx-auto" />
           <p className="text-charcoal/55 text-[16px] leading-[1.7] max-w-[500px] mt-5">
             Each property is personally maintained and designed for a clean, comfortable stay.
           </p>
