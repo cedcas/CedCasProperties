@@ -36,12 +36,14 @@ const STRIPE_FEE_RATE = 0.06;
 // ── Stripe payment inner component ──────────────────────────────────────────
 function StripePaymentForm({
   clientSecret,
+  total,
   onSuccess,
   onError,
   submitting,
   setSubmitting,
 }: {
   clientSecret: string;
+  total: number;
   onSuccess: (paymentIntentId: string) => void;
   onError: (msg: string) => void;
   submitting: boolean;
@@ -82,7 +84,7 @@ function StripePaymentForm({
       >
         {submitting
           ? <><i className="fa-solid fa-spinner fa-spin" /> Processing…</>
-          : <><i className="fa-solid fa-lock" /> Pay ₱{/* amount shown by parent */}</>}
+          : <><i className="fa-solid fa-lock" /> Pay ₱{Math.round(total).toLocaleString()}</>}
       </button>
     </form>
   );
@@ -433,6 +435,7 @@ export default function BookingForm({
             <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret, appearance: { theme: "stripe" } }}>
               <StripePaymentForm
                 clientSecret={stripeClientSecret}
+                total={total}
                 submitting={submitting}
                 setSubmitting={setSubmitting}
                 onSuccess={(piId) => {
