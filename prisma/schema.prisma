@@ -22,6 +22,7 @@ model Property {
   images        String    @db.Text  // JSON array of image URLs
   featuredImage String?   @db.Text  // URL of the featured/cover image
   amenities     String    @db.Text  // JSON array
+  propertyRules String?   @db.Text  // House rules and policies
   isFeatured    Boolean   @default(false)
   isActive      Boolean   @default(true)
   airbnbIcsUrl  String?   @db.Text  // Airbnb .ics import URL (Airbnb → CedCas sync)

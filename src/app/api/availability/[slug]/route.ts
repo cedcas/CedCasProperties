@@ -89,7 +89,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   if (property.airbnbIcsUrl) {
     try {
       const res = await fetch(property.airbnbIcsUrl, {
-        headers: { "User-Agent": "CedCasProperties/1.0" },
+        headers: { "User-Agent": "HavenInLipa/1.0" },
         // 5-second timeout
         signal: AbortSignal.timeout(5000),
       });

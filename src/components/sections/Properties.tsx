@@ -5,7 +5,7 @@ export default async function Properties() {
   let properties: Awaited<ReturnType<typeof prisma.property.findMany>> = [];
   try {
     properties = await prisma.property.findMany({
-      where: { isActive: true, isFeatured: true },
+      where: { isActive: true },
       orderBy: { createdAt: "desc" },
       take: 6,
     });
@@ -35,16 +35,23 @@ export default async function Properties() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7">
-          {properties.length > 0 ? (
-            properties.map((p, i) => (
-              <PropertyCard key={p.id} property={p} index={i} />
-            ))
-          ) : (
-            // Fallback static cards when DB is not yet connected
-            <StaticPropertyCards />
-          )}
-        </div>
+        {(() => {
+          const count = properties.length;
+          const gridClass =
+            count === 0 ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7"
+            : count === 1 ? "grid grid-cols-1 gap-7 max-w-sm mx-auto"
+            : count === 2 ? "grid grid-cols-1 sm:grid-cols-2 gap-7 max-w-2xl mx-auto"
+            : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-7";
+          return (
+            <div className={gridClass}>
+              {count > 0 ? (
+                properties.map((p, i) => <PropertyCard key={p.id} property={p} index={i} />)
+              ) : (
+                <StaticPropertyCards />
+              )}
+            </div>
+          );
+        })()}
 
       </div>
     </section>

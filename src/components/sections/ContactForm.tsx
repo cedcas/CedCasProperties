@@ -62,7 +62,7 @@ export default function ContactForm() {
               {[
                 { icon: "fa-location-dot", title: "Our Location", content: <>Lipa City, Batangas<br />Philippines</> },
                 { icon: "fa-phone", title: "Phone / WhatsApp", content: <a href="tel:+639066554415" className="hover:text-forest transition-colors">+63 906 655 4415</a> },
-                { icon: "fa-envelope", title: "Email", content: <a href="mailto:customerservice@cedcasproperties.com" className="hover:text-forest transition-colors break-all">customerservice@cedcasproperties.com</a> },
+                { icon: "fa-envelope", title: "Email", content: <a href="mailto:customerservice@haveninlipa.com" className="hover:text-forest transition-colors break-all">customerservice@haveninlipa.com</a> },
               ].map((item, i) => (
                 <div key={item.title}>
                   {i > 0 && <div className="w-full h-px bg-black/[.06] -mt-3.5 mb-3.5" />}

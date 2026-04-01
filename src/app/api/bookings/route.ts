@@ -43,7 +43,7 @@ export async function POST(req: Request) {
   if (property.airbnbIcsUrl) {
     try {
       const icsRes = await fetch(property.airbnbIcsUrl, {
-        headers: { "User-Agent": "CedCasProperties/1.0" },
+        headers: { "User-Agent": "HavenInLipa/1.0" },
         signal: AbortSignal.timeout(5000),
       });
       if (icsRes.ok) {
@@ -101,13 +101,13 @@ export async function POST(req: Request) {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from:    "CedCas Properties <noreply@cedcasproperties.com>",
-      to:      "customerservice@cedcasproperties.com",
+      from:    "HavenInLipa <noreply@haveninlipa.com>",
+      to:      "customerservice@haveninlipa.com",
       replyTo: guestEmail,
       subject: `🏠 New Booking Request – ${booking.property.name}`,
       html: `
-        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#2C2C2C">
-          <div style="background:#3B5323;padding:24px 32px;border-radius:8px 8px 0 0">
+        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+          <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
             <h1 style="color:#fff;margin:0;font-size:20px">New Booking Request</h1>
             <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">Awaiting payment verification</p>
           </div>
@@ -122,10 +122,10 @@ export async function POST(req: Request) {
               <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
               <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
               <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold;text-transform:uppercase">${paymentMethod || "N/A"}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Total</td><td style="font-weight:bold;font-size:16px;color:#3B5323">₱${Number(totalPrice).toLocaleString()}</td></tr>
+              <tr><td style="padding:7px 0;color:#666">Total</td><td style="font-weight:bold;font-size:16px;color:#335238">₱${Number(totalPrice).toLocaleString()}</td></tr>
               ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
             </table>
-            <div style="margin-top:20px;padding:14px;background:#FFF8EC;border-left:3px solid #C4A862;border-radius:4px;font-size:13px;color:#666">
+            <div style="margin-top:20px;padding:14px;background:#FFF0F3;border-left:3px solid #FF5371;border-radius:4px;font-size:13px;color:#666">
               Please verify the payment in your ${paymentMethod === "gcash" ? "GCash" : "BPI"} app and update the booking status to <strong>Confirmed</strong> in the admin panel.
             </div>
           </div>
@@ -140,12 +140,12 @@ export async function POST(req: Request) {
   try {
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
-      from:    "CedCas Properties <noreply@cedcasproperties.com>",
+      from:    "HavenInLipa <noreply@haveninlipa.com>",
       to:      guestEmail,
       subject: `📋 Booking Request Received – ${booking.property.name}`,
       html: `
-        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#2C2C2C">
-          <div style="background:#3B5323;padding:24px 32px;border-radius:8px 8px 0 0">
+        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+          <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
             <h1 style="color:#fff;margin:0;font-size:20px">We Received Your Booking Request!</h1>
             <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">We'll verify your payment and confirm shortly</p>
           </div>
@@ -154,8 +154,8 @@ export async function POST(req: Request) {
             <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:24px">
               Thank you for your booking request at <strong>${booking.property.name}</strong>. We've received your payment submission and are currently verifying it. You'll receive a confirmation email once your booking is approved.
             </p>
-            <div style="background:#F9F5EE;border-radius:8px;padding:20px 24px;margin-bottom:24px">
-              <h2 style="margin:0 0 16px;font-size:15px;color:#3B5323">Booking Summary</h2>
+            <div style="background:#FFF8FA;border-radius:8px;padding:20px 24px;margin-bottom:24px">
+              <h2 style="margin:0 0 16px;font-size:15px;color:#335238">Booking Summary</h2>
               <table style="width:100%;font-size:14px;border-collapse:collapse">
                 <tr><td style="padding:5px 0;color:#666;width:130px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
                 <tr><td style="padding:5px 0;color:#666">Check-in</td><td><strong>${fmtDate(checkIn)}</strong></td></tr>
@@ -163,18 +163,18 @@ export async function POST(req: Request) {
                 <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
                 <tr><td style="padding:5px 0;color:#666">Guests</td><td>${guests}</td></tr>
                 <tr><td style="padding:5px 0;color:#666">Payment via</td><td style="text-transform:uppercase;font-weight:bold">${paymentMethod || "N/A"}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Total</td><td style="font-weight:bold;color:#3B5323">₱${Number(totalPrice).toLocaleString()}</td></tr>
+                <tr><td style="padding:5px 0;color:#666">Total</td><td style="font-weight:bold;color:#335238">₱${Number(totalPrice).toLocaleString()}</td></tr>
               </table>
             </div>
             <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
               If you have any questions, feel free to reach out to us:
             </p>
             <div style="font-size:14px;color:#444">
-              📧 <a href="mailto:customerservice@cedcasproperties.com" style="color:#3B5323">customerservice@cedcasproperties.com</a><br/>
+              📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
               📞 +639066554415
             </div>
             <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;text-align:center">
-              CedCas Properties — Where Comfort Feels Like Home.<br/>
+              HavenInLipa — Stay in Style, Live in Comfort.<br/>
               Lipa City, Batangas, Philippines
             </div>
           </div>

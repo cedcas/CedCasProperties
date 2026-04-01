@@ -34,17 +34,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
   const lines: string[] = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//CedCas Properties//EN",
+    "PRODID:-//HavenInLipa//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    `X-WR-CALNAME:${property.name} - CedCas Properties`,
+    `X-WR-CALNAME:${property.name} - HavenInLipa`,
     "X-WR-TIMEZONE:Asia/Manila",
   ];
 
   for (const booking of property.bookings) {
     lines.push(
       "BEGIN:VEVENT",
-      `UID:booking-${booking.id}@cedcasproperties.com`,
+      `UID:booking-${booking.id}@haveninlipa.com`,
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${toDateOnly(booking.checkIn)}`,
       `DTEND;VALUE=DATE:${toDateOnly(booking.checkOut)}`,

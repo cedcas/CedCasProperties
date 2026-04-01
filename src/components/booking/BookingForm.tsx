@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   slug: string;
   initialCheckIn?: string;
   initialCheckOut?: string;
+  propertyRules?: string | null;
 }
 
 // QR code map — keyed by payment method only
@@ -22,7 +24,7 @@ const QR: Record<string, string> = {
 };
 const AIRBNB_FEE_RATE = 0.142; // ~14.2% Airbnb service fee
 
-export default function BookingForm({ propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug, initialCheckIn = "", initialCheckOut = "" }: Props) {
+export default function BookingForm({ propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug, initialCheckIn = "", initialCheckOut = "", propertyRules }: Props) {
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -34,6 +36,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
+  const [rulesAgreed, setRulesAgreed] = useState(false);
 
   const checkAvailability = useCallback(async (checkIn: string, checkOut: string) => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) return;
@@ -78,12 +81,25 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
     if (!form.checkIn || !form.checkOut) { setError("Please select check-in and check-out dates."); return; }
     if (new Date(form.checkOut) <= new Date(form.checkIn)) { setError("Check-out must be after check-in."); return; }
     if (availabilityError) { setError(availabilityError); return; }
+
+    // Check property rules agreement if rules exist
+    if (propertyRules && !rulesAgreed) {
+      setError("Please agree to the property rules to continue.");
+      return;
+    }
+
     setError("");
     setStep("payment");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handlePaid = async () => {
+    // Check property rules agreement if rules exist
+    if (propertyRules && !rulesAgreed) {
+      setError("Please agree to the property rules to continue.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
     try {
@@ -122,10 +138,10 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
         <p className="text-charcoal/45 text-[14px] mb-8">
           A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your {paymentMethod === "gcash" ? "GCash" : "BPI"} payment (usually within a few hours).
         </p>
-        <a href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}>
+        <Link href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
+          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
           <i className="fa-solid fa-house" /> Back to Homepage
-        </a>
+        </Link>
       </div>
     );
   }
@@ -192,10 +208,28 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
           </div>
         )}
 
+        {/* Property Rules Agreement (Payment Step) */}
+        {propertyRules && (
+          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5">
+            <h3 className="font-serif font-semibold text-charcoal mb-4">Confirm Property Rules Agreement</h3>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={rulesAgreed}
+                onChange={(e) => setRulesAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
+              />
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">
+                I agree to the property rules and policies
+              </span>
+            </label>
+          </div>
+        )}
+
         {/* I Paid button */}
         <button onClick={handlePaid} disabled={submitting}
           className="w-full py-4 rounded-full text-[15px] font-semibold text-white disabled:opacity-60 hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2"
-          style={{ background: "linear-gradient(135deg,#3B5323,#2d4820)" }}>
+          style={{ background: "linear-gradient(135deg,#335238,#1e3c25)" }}>
           {submitting
             ? <><i className="fa-solid fa-spinner fa-spin" /> Processing…</>
             : <><i className="fa-solid fa-check-circle" /> I Paid — Submit Booking</>}
@@ -211,17 +245,17 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
   return (
     <div className="max-w-lg mx-auto">
       {/* Value proposition */}
-      <div className="rounded-[14px] overflow-hidden mb-7" style={{ background: "linear-gradient(135deg,#1e3310,#3B5323)" }}>
+      <div className="rounded-[14px] overflow-hidden mb-7" style={{ background: "linear-gradient(135deg,#162a1c,#335238)" }}>
         <div className="px-6 py-5">
           <div className="flex items-center gap-2 mb-3">
-            <span className="text-[#C4A862] text-[11px] font-bold uppercase tracking-wider">💰 Book Direct &amp; Save</span>
+            <span className="text-[#FF5371] text-[11px] font-bold uppercase tracking-wider">💰 Book Direct &amp; Save</span>
           </div>
           <h3 className="text-white font-serif font-semibold text-[1.1rem] leading-snug mb-2">
             Skip the Airbnb fees. Pay only the nightly rate.
           </h3>
           <p className="text-white/65 text-[13px] leading-[1.6]">
             Booking on Airbnb adds a ~14% service fee on top of the nightly rate — money that goes to the platform, not to your stay.
-            Book directly with CedCas and that fee stays in your pocket.
+            Book directly with HavenInLipa and that fee stays in your pocket.
           </p>
           {nights > 0 && (
             <div className="mt-4 grid grid-cols-3 gap-2 pt-4 border-t border-white/10">
@@ -234,8 +268,8 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
                 <div className="text-white/60 font-bold text-[1rem] line-through">₱{Math.round(airbnbTotal).toLocaleString()}</div>
               </div>
               <div className="text-center">
-                <div className="text-[#C4A862] text-[10px] uppercase tracking-wide font-bold">You save</div>
-                <div className="text-[#C4A862] font-bold text-[1rem]">₱{Math.round(savings).toLocaleString()}</div>
+                <div className="text-[#FF5371] text-[10px] uppercase tracking-wide font-bold">You save</div>
+                <div className="text-[#FF5371] font-bold text-[1rem]">₱{Math.round(savings).toLocaleString()}</div>
               </div>
             </div>
           )}
@@ -275,7 +309,7 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
             </select>
           </div>
           <div><label className={labelCls}>Special Requests <span className="normal-case font-normal text-charcoal/30">(optional)</span></label>
-            <textarea name="notes" value={form.notes} onChange={handle} rows={2} placeholder="Early check-in, dietary needs, etc." className={`${inputCls} resize-none`} />
+            <textarea name="notes" value={form.notes} onChange={handle} rows={2} placeholder="Early Check-in, Late Checkout, Directions, etc." className={`${inputCls} resize-none`} />
           </div>
 
           {nights > 0 && (
@@ -290,9 +324,30 @@ export default function BookingForm({ propertyId, propertyName, propertyType, pr
           <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-[8px] px-3 py-2">{error}</div>
         )}
 
+        {/* Property Rules Agreement */}
+        {propertyRules && (
+          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)]">
+            <h3 className="font-serif font-semibold text-charcoal mb-4">Property Rules</h3>
+            <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line mb-4">
+              {propertyRules}
+            </div>
+            <label className="flex items-start gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={rulesAgreed}
+                onChange={(e) => setRulesAgreed(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
+              />
+              <span className="text-[13px] text-charcoal/70 leading-[1.5]">
+                I agree to the property rules and policies
+              </span>
+            </label>
+          </div>
+        )}
+
         <button type="submit"
           className="w-full py-4 rounded-full text-[15px] font-semibold text-white hover:-translate-y-0.5 transition-all duration-200"
-          style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}>
+          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
           Continue to Payment <i className="fa-solid fa-arrow-right ml-1.5 text-[13px]" />
         </button>
       </form>

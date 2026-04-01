@@ -31,8 +31,8 @@ export async function POST(req: Request) {
     });
 
     await transporter.sendMail({
-      from:    `"CedCas Properties Website" <${process.env.SMTP_USER}>`,
-      to:      "customerservice@cedcasproperties.com",
+      from:    `"HavenInLipa Website" <${process.env.SMTP_USER}>`,
+      to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,
       html: `

@@ -137,6 +137,18 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               </div>
             )}
 
+            {/* Property Rules */}
+            {property.propertyRules && (
+              <div>
+                <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">House Rules</h2>
+                <div className="bg-white rounded-[12px] p-6 border border-black/[.06]">
+                  <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line">
+                    {property.propertyRules}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Guest Reviews */}
             <Testimonials propertyId={property.id} />
           </div>
@@ -151,6 +163,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               bathrooms={property.bathrooms}
               location={property.location}
               type={property.type}
+              propertyRules={property.propertyRules}
             />
           </div>
 

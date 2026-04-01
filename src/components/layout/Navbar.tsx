@@ -31,17 +31,15 @@ export default function Navbar() {
     >
       <div className="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-between">
         {/* Logo */}
-        <Link href="/" id="nav-logo" aria-label="CedCas Properties" className="flex-shrink-0">
-          <div style={{ width: 180, height: 52, overflow: "hidden" }}>
-            <Image
-              src="/brand-assets/Transparent Logo.png"
-              alt="CedCas Properties"
-              width={180}
-              height={127}
-              style={{ marginTop: -33 }}
-              priority
-            />
-          </div>
+        <Link href="/" id="nav-logo" aria-label="HavenInLipa" className="flex-shrink-0">
+          <Image
+            src="/brand-assets/Transparent Logo.png"
+            alt="HavenInLipa"
+            width={120}
+            height={120}
+            className="h-[52px] w-auto"
+            priority
+          />
         </Link>
 
         {/* Desktop links */}
@@ -51,13 +49,13 @@ export default function Navbar() {
               {l.label}
             </a>
           ))}
-          <a
+          <Link
             href="/#properties"
             className="ml-2 px-5 py-2 rounded-full text-[13px] font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)", boxShadow: "0 4px 14px rgba(196,168,98,.40)" }}
+            style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)", boxShadow: "0 4px 14px rgba(255,83,113,.40)" }}
           >
             Book Now
-          </a>
+          </Link>
         </div>
 
         {/* Hamburger */}
@@ -70,7 +68,7 @@ export default function Navbar() {
             <span
               key={i}
               className="block w-5 h-0.5 rounded transition-all duration-200"
-              style={{ background: scrolled ? "#2C2C2C" : "white" }}
+              style={{ background: scrolled ? "#335238" : "white" }}
             />
           ))}
         </button>
@@ -89,14 +87,14 @@ export default function Navbar() {
               {l.label}
             </a>
           ))}
-          <a
+          <Link
             href="/#properties"
             className="mt-1 text-center px-5 py-2.5 rounded-full text-[13px] font-semibold text-white"
-            style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}
+            style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}
             onClick={() => setMenuOpen(false)}
           >
             Book Now
-          </a>
+          </Link>
         </div>
       )}
     </nav>

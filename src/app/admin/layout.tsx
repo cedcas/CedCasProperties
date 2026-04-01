@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Admin — CedCas Properties" };
+export const metadata = { title: "Admin — HavenInLipa" };
 
 export default async function AdminLayout({
   children,
