@@ -471,6 +471,14 @@ export default function BookingForm({
           )}
         </div>
 
+        {/* Stripe loading state while payment intent is being created */}
+        {paymentMethod === "stripe" && !stripeClientSecret && submitting && (
+          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5 flex items-center justify-center gap-3 text-charcoal/50 text-[13px]">
+            <i className="fa-solid fa-spinner fa-spin" />
+            Setting up secure payment…
+          </div>
+        )}
+
         {/* Stripe payment form */}
         {paymentMethod === "stripe" && stripeClientSecret && (
           <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5">
