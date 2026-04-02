@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   const { name, email, phone, subject, message } = await req.json();
@@ -20,18 +22,8 @@ export async function POST(req: Request) {
 
   // Send email
   try {
-    const transporter = nodemailer.createTransport({
-      host:   process.env.SMTP_HOST,
-      port:   Number(process.env.SMTP_PORT) || 465,
-      secure: true,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from:    `"HavenInLipa Website" <${process.env.SMTP_USER}>`,
+    await resend.emails.send({
+      from:    "HavenInLipa <noreply@haveninlipa.com>",
       to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,
