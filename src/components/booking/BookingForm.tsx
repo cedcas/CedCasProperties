@@ -208,6 +208,43 @@ export default function BookingForm({
     }
   }, [paymentMethod]);
 
+  // Fetch a payment intent when user switches to Stripe on the payment step
+  // (handles the case where Stripe is selected after reaching the payment screen)
+  useEffect(() => {
+    if (paymentMethod !== "stripe" || step !== "payment" || stripeClientSecret) return;
+    let cancelled = false;
+    setSubmitting(true);
+    setError("");
+    fetch("/api/stripe/payment-intent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        amount: total,
+        metadata: {
+          propertyId: String(propertyId),
+          guestName: form.guestName,
+          checkIn: form.checkIn,
+          checkOut: form.checkOut,
+        },
+      }),
+    })
+      .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+      .then(({ ok, data }) => {
+        if (cancelled) return;
+        if (!ok) throw new Error(data.error ?? "Payment setup failed");
+        setStripeClientSecret(data.clientSecret);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Payment setup failed");
+      })
+      .finally(() => {
+        if (!cancelled) setSubmitting(false);
+      });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod, step]);
+
   const applyDiscountCode = async () => {
     if (!discountCodeInput.trim()) return;
     if (computedNightlyTotal <= 0) {
