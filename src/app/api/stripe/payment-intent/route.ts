@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import Stripe from "stripe";
 
 export async function POST(req: Request) {
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
   try {
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      return NextResponse.json({ error: "Stripe is not configured on this server." }, { status: 503 });
+    }
+
+    const stripe = new Stripe(secretKey);
     const { amount, currency = "php", metadata = {} } = await req.json();
 
     if (!amount || amount <= 0) {

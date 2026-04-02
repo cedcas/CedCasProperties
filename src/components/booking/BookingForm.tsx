@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
 
 interface DailyRateEntry {
   date: string;
@@ -212,6 +213,10 @@ export default function BookingForm({
   // (handles the case where Stripe is selected after reaching the payment screen)
   useEffect(() => {
     if (paymentMethod !== "stripe" || step !== "payment" || stripeClientSecret) return;
+    if (!stripePublishableKey) {
+      setError("Card payments are not available right now. Please use GCash or BPI.");
+      return;
+    }
     let cancelled = false;
     setSubmitting(true);
     setError("");
