@@ -23,7 +23,11 @@ export async function POST(req: Request) {
       automatic_payment_methods: { enabled: true },
     });
 
-    return NextResponse.json({ clientSecret: paymentIntent.client_secret });
+    return NextResponse.json({
+      clientSecret: paymentIntent.client_secret,
+      // Return publishable key so client can init Stripe at runtime (bypasses build-time env baking)
+      publishableKey: process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "",
+    });
   } catch (err) {
     console.error("Stripe PaymentIntent error:", err);
     return NextResponse.json({ error: "Failed to create payment intent" }, { status: 500 });

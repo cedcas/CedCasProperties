@@ -4,8 +4,20 @@ import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 
-const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const stripePromise = stripePublishableKey ? loadStripe(stripePublishableKey) : null;
+// Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
+// We also accept a runtime key returned from the payment-intent API as a fallback.
+const buildTimeStripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+let cachedStripePromise: ReturnType<typeof loadStripe> | null =
+  buildTimeStripeKey ? loadStripe(buildTimeStripeKey) : null;
+
+function getOrCreateStripePromise(runtimeKey?: string): ReturnType<typeof loadStripe> | null {
+  if (cachedStripePromise) return cachedStripePromise;
+  const key = runtimeKey ?? buildTimeStripeKey;
+  if (key) {
+    cachedStripePromise = loadStripe(key);
+  }
+  return cachedStripePromise;
+}
 
 interface DailyRateEntry {
   date: string;
@@ -122,6 +134,10 @@ export default function BookingForm({
   // Stripe state
   const [stripeClientSecret, setStripeClientSecret] = useState<string | null>(null);
   const [stripePaymentIntentId, setStripePaymentIntentId] = useState<string | null>(null);
+  // Runtime-resolved Stripe promise (bypasses build-time env var baking issues)
+  const [stripeInstance, setStripeInstance] = useState<ReturnType<typeof loadStripe> | null>(
+    () => cachedStripePromise
+  );
 
   const checkAvailability = useCallback(async (checkIn: string, checkOut: string) => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) return;
@@ -209,14 +225,11 @@ export default function BookingForm({
     }
   }, [paymentMethod]);
 
-  // Fetch a payment intent when user switches to Stripe on the payment step
-  // (handles the case where Stripe is selected after reaching the payment screen)
+  // Fetch a payment intent when user switches to Stripe on the payment step.
+  // Also initializes Stripe using the publishable key returned from the server —
+  // this bypasses the build-time env var baking issue on Vercel.
   useEffect(() => {
     if (paymentMethod !== "stripe" || step !== "payment" || stripeClientSecret) return;
-    if (!stripePublishableKey) {
-      setError("Card payments are not available right now. Please use GCash or BPI.");
-      return;
-    }
     let cancelled = false;
     setSubmitting(true);
     setError("");
@@ -236,7 +249,15 @@ export default function BookingForm({
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }) => {
         if (cancelled) return;
-        if (!ok) throw new Error(data.error ?? "Payment setup failed");
+        if (!ok) {
+          if (data.error === "Stripe is not configured on this server.") {
+            throw new Error("Card payments are not available right now. Please use GCash or BPI.");
+          }
+          throw new Error(data.error ?? "Payment setup failed");
+        }
+        // Initialize Stripe from the runtime key returned by the server (handles build-time env baking issues)
+        const promise = getOrCreateStripePromise(data.publishableKey);
+        setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       })
       .catch((err: unknown) => {
@@ -305,6 +326,8 @@ export default function BookingForm({
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Payment setup failed");
+        const promise = getOrCreateStripePromise(data.publishableKey);
+        setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Payment setup failed");
@@ -485,7 +508,7 @@ export default function BookingForm({
             <p className="text-[12px] font-semibold text-charcoal/40 uppercase tracking-wider mb-4">
               Pay Securely by Card
             </p>
-            <Elements stripe={stripePromise} options={{ clientSecret: stripeClientSecret, appearance: { theme: "stripe" } }}>
+            <Elements stripe={stripeInstance} options={{ clientSecret: stripeClientSecret, appearance: { theme: "stripe" } }}>
               <StripePaymentForm
                 clientSecret={stripeClientSecret}
                 total={total}
