@@ -35,7 +35,7 @@ export default function Home() {
             className="absolute inset-0"
             style={{
               background:
-                "radial-gradient(ellipse 80% 100% at 50% 110%,rgba(196,168,98,.10) 0%,transparent 65%),linear-gradient(158deg,#17260f 0%,#2d4820 48%,#2C2C2C 100%)",
+                "radial-gradient(ellipse 80% 100% at 50% 110%,rgba(139,205,184,.10) 0%,transparent 65%),linear-gradient(158deg,#1e3326 0%,#335238 48%,#2C2C2C 100%)",
             }}
           />
           <div
@@ -48,11 +48,11 @@ export default function Home() {
           />
           <div className="relative z-[1] max-w-6xl mx-auto px-6 reveal">
             <div className="flex items-center justify-center gap-2.5 mb-6">
-              <span className="block w-6 h-px bg-[#C4A862]" />
-              <span className="text-[#C4A862] text-[11px] font-semibold tracking-[.22em] uppercase">
+              <span className="block w-6 h-px bg-[#8BCDB8]" />
+              <span className="text-[#8BCDB8] text-[11px] font-semibold tracking-[.22em] uppercase">
                 Start Your Journey
               </span>
-              <span className="block w-6 h-px bg-[#C4A862]" />
+              <span className="block w-6 h-px bg-[#8BCDB8]" />
             </div>
             <h2
               className="font-serif font-bold text-white leading-[1.18] mb-5"
@@ -69,8 +69,8 @@ export default function Home() {
                 href="/#properties"
                 className="inline-flex items-center gap-2 px-9 py-4 rounded-full text-[14px] font-semibold text-white"
                 style={{
-                  background: "linear-gradient(135deg,#C4A862,#A8893F)",
-                  boxShadow: "0 4px 20px rgba(196,168,98,.40)",
+                  background: "linear-gradient(135deg,#FF5371,#E03D5A)",
+                  boxShadow: "0 4px 20px rgba(255,83,113,.40)",
                 }}
               >
                 <i className="fa-solid fa-calendar-check" /> Book Your Stay Today
@@ -97,7 +97,7 @@ export default function Home() {
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label={label}
-                  className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#C4A862] hover:border-[#C4A862] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#FF5371] hover:border-[#FF5371] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
                   style={{ background: "rgba(255,255,255,.08)" }}
                 >
                   <i className={`fa-brands ${icon}`} />

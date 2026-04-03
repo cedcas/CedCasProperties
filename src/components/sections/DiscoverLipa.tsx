@@ -7,7 +7,7 @@ export default function DiscoverLipa() {
           {/* Text */}
           <div className="reveal">
             <span className="flex items-center gap-2 text-[#3B5323] text-[11px] font-semibold tracking-[.18em] uppercase mb-4">
-              <span className="block w-7 h-0.5 bg-[#C4A862] rounded" />
+              <span className="block w-7 h-0.5 bg-[#FF5371] rounded" />
               The Destination
             </span>
             <h2
@@ -22,7 +22,7 @@ export default function DiscoverLipa() {
             >
               Lipa City
             </h2>
-            <div className="w-12 h-0.5 bg-[#C4A862] mb-6" />
+            <div className="w-12 h-0.5 bg-[#FF5371] mb-6" />
 
             <p className="text-[#4A4A4A] text-[16.5px] leading-[1.75] mb-8">
               Nestled in the heart of Batangas, Lipa City is one of Luzon&apos;s most vibrant and
@@ -218,7 +218,7 @@ export default function DiscoverLipa() {
                   </div>
                   <div className="text-right text-[11px] text-white/70 leading-[1.7]">
                     Via SLEX + STAR Tollway<br/>
-                    <span className="text-[#C4A862] font-semibold">~84 km · 1h 35m</span>
+                    <span className="text-[#FF5371] font-semibold">~84 km · 1h 35m</span>
                   </div>
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Resend } from "resend";
+import { STRIPE_FEE_RATE } from "@/lib/pricing";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -20,6 +21,30 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (status === "confirmed") {
     const fmtDate = (d: Date) => d.toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
     const nights = Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000);
+
+    // Build itemized price breakdown from stored booking fields
+    const nightlyTotal = Number(booking.nightlyTotal ?? booking.totalPrice);
+    const discountAmount = Number(booking.discountAmount ?? 0);
+    const stripeFee = Number(booking.stripeFee ?? 0);
+    const totalPrice = Number(booking.totalPrice);
+
+    const nightlyRow = `<tr><td style="padding:4px 0;color:#888;font-size:13px">${nights} night${nights !== 1 ? "s" : ""} × ₱${(nightlyTotal / nights).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td><td style="text-align:right;font-size:13px">₱${nightlyTotal.toLocaleString()}</td></tr>`;
+    const discountRow = discountAmount > 0
+      ? `<tr><td style="padding:4px 0;color:#2a7a2a;font-size:13px">Promo code (${booking.discountCode})</td><td style="text-align:right;font-size:13px;color:#2a7a2a">−₱${discountAmount.toLocaleString()}</td></tr>`
+      : "";
+    const stripeFeeRow = stripeFee > 0
+      ? `<tr><td style="padding:4px 0;color:#888;font-size:13px">Stripe transaction fee (${(STRIPE_FEE_RATE * 100).toFixed(0)}%)</td><td style="text-align:right;font-size:13px">₱${stripeFee.toLocaleString()}</td></tr>`
+      : "";
+    const priceBreakdownHtml = `
+      <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:8px">
+        ${nightlyRow}
+        ${discountRow}
+        ${stripeFeeRow}
+        <tr style="border-top:1px solid #e5e5e5">
+          <td style="padding:8px 0 4px;font-weight:bold">Total</td>
+          <td style="text-align:right;font-weight:bold;color:#335238">₱${totalPrice.toLocaleString()}</td>
+        </tr>
+      </table>`;
 
     try {
       const resend = new Resend(process.env.RESEND_API_KEY);
@@ -48,8 +73,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                   <tr><td style="padding:5px 0;color:#666">Check-out</td><td><strong>${fmtDate(booking.checkOut)}</strong></td></tr>
                   <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
                   <tr><td style="padding:5px 0;color:#666">Guests</td><td>${booking.guests}</td></tr>
-                  <tr><td style="padding:5px 0;color:#666">Total Paid</td><td style="font-weight:bold;color:#335238">₱${Number(booking.totalPrice).toLocaleString()}</td></tr>
                 </table>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0e8f0">
+                  <strong style="font-size:13px;color:#335238">Price Breakdown</strong>
+                  ${priceBreakdownHtml}
+                </div>
               </div>
 
               <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
@@ -95,8 +123,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
                 <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(booking.checkOut)}</td></tr>
                 <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
                 <tr><td style="padding:7px 0;color:#666">Guests</td><td>${booking.guests}</td></tr>
-                <tr><td style="padding:7px 0;color:#666">Total Paid</td><td style="font-weight:bold;font-size:16px;color:#335238">₱${Number(booking.totalPrice).toLocaleString()}</td></tr>
               </table>
+              <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">
+                <strong style="font-size:13px">Price Breakdown</strong>
+                ${priceBreakdownHtml}
+              </div>
             </div>
           </div>
         `,

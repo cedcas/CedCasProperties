@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
 const links = [
+  { label: "Home",       href: "/" },
   { label: "Properties", href: "/#properties" },
   { label: "About",      href: "/#why" },
   { label: "Location",   href: "/#location" },
@@ -29,19 +29,7 @@ export default function Navbar() {
         scrolled ? "scrolled" : ""
       }`}
     >
-      <div className="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-between">
-        {/* Logo */}
-        <Link href="/" id="nav-logo" aria-label="HavenInLipa" className="flex-shrink-0">
-          <Image
-            src="/brand-assets/Transparent Logo.png"
-            alt="HavenInLipa"
-            width={120}
-            height={120}
-            className="h-[52px] w-auto"
-            priority
-          />
-        </Link>
-
+      <div className="max-w-6xl mx-auto px-6 h-[72px] flex items-center justify-end">
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-7">
           {links.map((l) => (
@@ -68,7 +56,7 @@ export default function Navbar() {
             <span
               key={i}
               className="block w-5 h-0.5 rounded transition-all duration-200"
-              style={{ background: scrolled ? "#335238" : "white" }}
+              style={{ background: "#2C2C2C" }}
             />
           ))}
         </button>

@@ -1,6 +1,6 @@
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
-import AdminSidebar from "@/components/admin/AdminSidebar";
+import { headers } from "next/headers";
+import AdminLayoutClient from "@/components/admin/AdminLayoutClient";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Admin — HavenInLipa" };
@@ -10,15 +10,21 @@ export default async function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const session = await auth();
+  const [session, headersList] = await Promise.all([auth(), headers()]);
+  const pathname = headersList.get("x-pathname") ?? "";
+  const isLoginPage = pathname === "/admin/login";
 
-  // Login page is public — all other /admin routes require auth
-  return (
-    <div className="min-h-screen bg-[#F4F6F8] flex">
-      {session && <AdminSidebar user={session.user} />}
-      <main className={`flex-1 ${session ? "ml-0 lg:ml-64" : ""} min-h-screen`}>
+  if (isLoginPage) {
+    return (
+      <div className="min-h-screen bg-[#F4F6F8]">
         {children}
-      </main>
-    </div>
+      </div>
+    );
+  }
+
+  return (
+    <AdminLayoutClient user={session?.user}>
+      {children}
+    </AdminLayoutClient>
   );
 }

@@ -30,6 +30,7 @@ model Property {
   updatedAt     DateTime  @updatedAt
   bookings      Booking[]
   testimonials  Testimonial[]
+  rates         PropertyRate[]
 }
 
 model Booking {
@@ -43,11 +44,41 @@ model Booking {
   checkOut   DateTime
   guests     Int      @default(1)
   totalPrice Decimal  @db.Decimal(10, 2)
+  nightlyTotal  Decimal? @db.Decimal(10, 2)  // base nightly rate total (before fees/discounts)
+  stripeFee     Decimal? @db.Decimal(10, 2)  // Stripe 6% transaction fee
+  discountCode  String?  // applied promo code
+  discountAmount Decimal? @db.Decimal(10, 2) // discount amount (PHP)
   status        String   @default("pending") // pending | confirmed | cancelled
-  paymentMethod String?  // "gcash" | "bpi"
+  paymentMethod String?  // "gcash" | "bpi" | "stripe"
+  stripePaymentIntentId String? // Stripe PaymentIntent ID
   notes         String?  @db.Text
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+}
+
+model DiscountCode {
+  id         Int      @id @default(autoincrement())
+  code       String   @unique
+  type       String   // "fixed" | "percentage"
+  value      Decimal  @db.Decimal(10, 2)  // PHP amount or percentage (0-100)
+  isActive   Boolean  @default(true)
+  usageCount Int      @default(0)
+  maxUses    Int?     // null = unlimited
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model PropertyRate {
+  id           Int      @id @default(autoincrement())
+  property     Property @relation(fields: [propertyId], references: [id])
+  propertyId   Int
+  rateType     String   // "weekday" | "weekend" | "override"
+  dayOfWeek    Int?     // 0=Sun, 1=Mon...6=Sat; null for overrides
+  specificDate DateTime? // for rateType="override"
+  rate         Decimal  @db.Decimal(10, 2)
+  note         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model Testimonial {
