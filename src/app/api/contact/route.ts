@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Resend } from "resend";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+import { sendEmail } from "@/lib/email";
 
 export async function POST(req: Request) {
   const { name, email, phone, subject, message } = await req.json();
@@ -22,8 +20,7 @@ export async function POST(req: Request) {
 
   // Send email
   try {
-    await resend.emails.send({
-      from:    "HavenInLipa <noreply@haveninlipa.com>",
+    await sendEmail({
       to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,

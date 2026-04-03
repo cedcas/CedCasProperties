@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Resend } from "resend";
+import { sendEmail } from "@/lib/email";
 import { STRIPE_FEE_RATE } from "@/lib/pricing";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -47,9 +47,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       </table>`;
 
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from:    "HavenInLipa <noreply@haveninlipa.com>",
+      await sendEmail({
         to:      booking.guestEmail,
         subject: `✅ Booking Confirmed – ${booking.property.name}`,
         html: `
@@ -102,9 +100,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // Email to admin — confirmation summary
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from:    "HavenInLipa <noreply@haveninlipa.com>",
+      await sendEmail({
         to:      "customerservice@haveninlipa.com",
         subject: `✅ Booking Confirmed – ${booking.property.name}`,
         html: `
