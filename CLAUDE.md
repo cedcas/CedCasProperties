@@ -20,7 +20,7 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 | Database | MySQL (Hostinger, `srv1284.hstgr.io`) |
 | Auth | NextAuth v5 beta (JWT sessions) |
 | File Storage | Vercel Blob (property images) |
-| Email | Resend API (`noreply@cedcasproperties.com`) |
+| Email | Hostinger SMTP (`customerservice@haveninlipa.com`) |
 | Hosting | Vercel (app) + Hostinger (DB + domain) |
 | Payments | Static QR codes — GCash + BPI InstaPay (manual verification) |
 
@@ -40,7 +40,10 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 | `NEXTAUTH_SECRET` | JWT signing secret (min 32 chars) |
 | `NEXTAUTH_URL` | App base URL (e.g. `https://dev.cedcasproperties.com`) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token |
-| `RESEND_API_KEY` | Resend API key for transactional email |
+| `SMTP_HOST` | Hostinger SMTP host (`smtp.hostinger.com`) |
+| `SMTP_PORT` | Hostinger SMTP port (`465`) |
+| `SMTP_USER` | Hostinger email address (`customerservice@haveninlipa.com`) |
+| `SMTP_PASS` | Hostinger email password |
 
 ---
 
@@ -189,7 +192,9 @@ public/
 - **Export:** `/api/calendar/[slug]` generates a `.ics` feed for each property (Airbnb imports this)
 - **Import:** Admin can save an Airbnb `.ics` URL per property (`airbnbIcsUrl` field); availability checker fetches and parses it to block those dates
 
-### Email Notifications (Resend)
+### Email Notifications (Hostinger SMTP via `src/lib/email.ts`)
+Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
+
 | Trigger | Recipient | Content |
 |---|---|---|
 | Guest submits booking | Admin | Full guest details + payment method |
@@ -204,7 +209,7 @@ public/
 - **No brand name in public-facing copy** — use generic phrasing like "our properties" instead of "CedCas Properties" in body text (the logo handles branding)
 - **QR codes are per-property** — `gcash-1br.jpg`, `bpi-1br.png`, etc. in `public/qr/`; updating requires a new git commit + deploy
 - **Testimonials are per-property** — moved from site-wide to property-level; each property has its own testimonials tab in admin
-- **Resend over SMTP** — switched from nodemailer/SMTP to Resend API to fix Vercel build-time initialization errors
+- **Hostinger SMTP over Resend** — migrated from Resend to Nodemailer/Hostinger SMTP (`customerservice@haveninlipa.com`) because Resend was restricted to `cedcasproperties.com` and could not send from `haveninlipa.com` without domain verification. Transporter is created at runtime (not module-level) to avoid Vercel build-time initialization errors. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in Vercel env vars.
 - **`.npmrc`** — present to handle peer dependency issues
 
 ---
