@@ -195,7 +195,7 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       {/* CTA */}
       <button
         onClick={handleBook}
-        disabled={availability === "unavailable" || availability === "checking" || (propertyRules && !rulesAgreed)}
+        disabled={availability === "unavailable" || availability === "checking" || !!(propertyRules && !rulesAgreed)}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
         style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#C4A862,#A8893F)" }}
       >
