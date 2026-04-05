@@ -42,7 +42,6 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
   // Check availability whenever both dates are valid
   useEffect(() => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability("idle");
       return;
     }
@@ -196,9 +195,9 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       {/* CTA */}
       <button
         onClick={handleBook}
-        disabled={availability === "unavailable" || availability === "checking" || (!!propertyRules && !rulesAgreed)}
+        disabled={availability === "unavailable" || availability === "checking" || (propertyRules && !rulesAgreed)}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
-        style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
+        style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#C4A862,#A8893F)" }}
       >
         <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} />
         {availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}

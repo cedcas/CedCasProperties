@@ -22,13 +22,16 @@ export default function ImageManager({ propertyId, initialImages, initialFeature
         const fd = new FormData();
         fd.append("file", file);
         const res = await fetch(`/api/admin/properties/${propertyId}/images`, { method: "POST", body: fd });
-        if (!res.ok) throw new Error("Upload failed");
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body?.error || `Upload failed (${res.status})`);
+        }
         const data = await res.json();
         setImages(data.images);
         if (!featured) setFeatured(data.url);
       }
-    } catch {
-      setError("Upload failed. Make sure BLOB_READ_WRITE_TOKEN is set in your environment.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setUploading(false);
     }
