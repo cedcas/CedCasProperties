@@ -7,13 +7,16 @@ import { loadStripe } from "@stripe/stripe-js";
 // Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
 // We also accept a runtime key returned from the payment-intent API as a fallback.
 const buildTimeStripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+const isValidStripePublishableKey = (key: string) => /^pk_(test|live)_\w{10,}/.test(key);
 let cachedStripePromise: ReturnType<typeof loadStripe> | null =
-  buildTimeStripeKey ? loadStripe(buildTimeStripeKey) : null;
+  buildTimeStripeKey && isValidStripePublishableKey(buildTimeStripeKey)
+    ? loadStripe(buildTimeStripeKey)
+    : null;
 
 function getOrCreateStripePromise(runtimeKey?: string): ReturnType<typeof loadStripe> | null {
   if (cachedStripePromise) return cachedStripePromise;
   const key = runtimeKey ?? buildTimeStripeKey;
-  if (key) {
+  if (key && isValidStripePublishableKey(key)) {
     cachedStripePromise = loadStripe(key);
   }
   return cachedStripePromise;
@@ -257,6 +260,9 @@ export default function BookingForm({
         }
         // Initialize Stripe from the runtime key returned by the server (handles build-time env baking issues)
         const promise = getOrCreateStripePromise(data.publishableKey);
+        if (!promise) {
+          throw new Error("Card payments are not available right now. Please use GCash or BPI.");
+        }
         setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       })
@@ -327,6 +333,7 @@ export default function BookingForm({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Payment setup failed");
         const promise = getOrCreateStripePromise(data.publishableKey);
+        if (!promise) throw new Error("Card payments are not available right now. Please use GCash or BPI.");
         setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       } catch (err: unknown) {
