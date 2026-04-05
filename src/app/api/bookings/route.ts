@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Resend } from "resend";
+import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 
 export async function POST(req: Request) {
@@ -191,10 +191,10 @@ export async function POST(req: Request) {
 
   // ── Email to admin ────────────────────────────────────────────────────────
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const mailer = createMailer();
     const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await resend.emails.send({
-      from:    "HavenInLipa <noreply@haveninlipa.com>",
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      "customerservice@haveninlipa.com",
       replyTo: guestEmail,
       subject: `🏠 New Booking Request – ${booking.property.name}`,
@@ -236,10 +236,10 @@ export async function POST(req: Request) {
 
   // ── Email to booker — acknowledgment ──────────────────────────────────────
   try {
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const mailer = createMailer();
     const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await resend.emails.send({
-      from:    "HavenInLipa <noreply@haveninlipa.com>",
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      guestEmail,
       subject: `📋 Booking Request Received – ${booking.property.name}`,
       html: `

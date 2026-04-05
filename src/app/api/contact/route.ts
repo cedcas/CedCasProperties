@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { Resend } from "resend";
+import { createMailer, FROM_ADDRESS } from "@/lib/email";
 
 export async function POST(req: Request) {
-  const resend = new Resend(process.env.RESEND_API_KEY);
   const { name, email, phone, subject, message } = await req.json();
 
   if (!name || !email || !phone || !subject) {
@@ -21,8 +20,9 @@ export async function POST(req: Request) {
 
   // Send email
   try {
-    await resend.emails.send({
-      from:    "HavenInLipa <noreply@haveninlipa.com>",
+    const mailer = createMailer();
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,

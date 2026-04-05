@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { Resend } from "resend";
+import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { STRIPE_FEE_RATE } from "@/lib/pricing";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -47,11 +47,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       </table>`;
 
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from:    "HavenInLipa <noreply@haveninlipa.com>",
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
         to:      booking.guestEmail,
-        subject: `✅ Booking Confirmed – ${booking.property.name}`,
+        subject: `Booking Confirmed – ${booking.property.name}`,
         html: `
           <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
             <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center">
@@ -102,11 +102,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     // Email to admin — confirmation summary
     try {
-      const resend = new Resend(process.env.RESEND_API_KEY);
-      await resend.emails.send({
-        from:    "HavenInLipa <noreply@haveninlipa.com>",
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
         to:      "customerservice@haveninlipa.com",
-        subject: `✅ Booking Confirmed – ${booking.property.name}`,
+        subject: `Booking Confirmed – ${booking.property.name}`,
         html: `
           <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
             <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
