@@ -1,6 +1,12 @@
 "use client";
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+
+interface DailyRateEntry {
+  date: string;
+  rate: number;
+  note?: string | null;
+}
 
 interface Props {
   slug: string;
@@ -25,6 +31,11 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
   const [rulesAgreed, setRulesAgreed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
+  // Daily rates state
+  const [dailyRates, setDailyRates] = useState<DailyRateEntry[]>([]);
+  const [nightlyTotal, setNightlyTotal] = useState<number | null>(null);
+  const [ratesLoading, setRatesLoading] = useState(false);
+
   // Force-clear date inputs on every mount so browser autofill can't inject stale values
   const checkInRef  = useRef<HTMLInputElement>(null);
   const checkOutRef = useRef<HTMLInputElement>(null);
@@ -33,17 +44,43 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
     if (checkOutRef.current) checkOutRef.current.value = "";
   }, []);
 
-  const { nights, total } = useMemo(() => {
-    if (!checkIn || !checkOut) return { nights: 0, total: 0 };
-    const n = Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000));
-    return { nights: n, total: n * pricePerNight };
-  }, [checkIn, checkOut, pricePerNight]);
+  const nights = useMemo(() => {
+    if (!checkIn || !checkOut) return 0;
+    return Math.max(1, Math.ceil((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000));
+  }, [checkIn, checkOut]);
 
-  // Check availability whenever both dates are valid
+  const computedNightlyTotal = nightlyTotal ?? nights * pricePerNight;
+
+  // Fetch actual daily rates (weekday/weekend/override) from the pricing API
+  const fetchDailyRates = useCallback(async (ci: string, co: string) => {
+    if (!ci || !co || new Date(co) <= new Date(ci)) {
+      setDailyRates([]);
+      setNightlyTotal(null);
+      return;
+    }
+    setRatesLoading(true);
+    try {
+      const res = await fetch(`/api/rates/${slug}?checkIn=${ci}&checkOut=${co}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyRates(data.dailyRates);
+        setNightlyTotal(data.nightlyTotal);
+      }
+    } catch {
+      setDailyRates([]);
+      setNightlyTotal(null);
+    } finally {
+      setRatesLoading(false);
+    }
+  }, [slug]);
+
+  // Check availability and fetch actual rates whenever both dates are valid
   useEffect(() => {
     if (!checkIn || !checkOut || new Date(checkOut) <= new Date(checkIn)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setAvailability("idle");
+      setDailyRates([]);
+      setNightlyTotal(null);
       return;
     }
     abortRef.current?.abort();
@@ -54,7 +91,8 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       .then((r) => r.json())
       .then((data) => setAvailability(data.available ? "available" : "unavailable"))
       .catch(() => setAvailability("idle"));
-  }, [checkIn, checkOut, slug]);
+    fetchDailyRates(checkIn, checkOut);
+  }, [checkIn, checkOut, slug, fetchDailyRates]);
 
   const handleBook = () => {
     // Require both dates before proceeding
@@ -146,11 +184,18 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
         {/* Nights summary / availability feedback */}
         {!dateError && nights > 0 && availability !== "unavailable" && (
           <div className="flex items-center justify-between mt-3 px-1 text-[13px]">
-            <span className="text-charcoal/50">{nights} night{nights !== 1 ? "s" : ""} × ₱{pricePerNight.toLocaleString()}</span>
-            {availability === "checking"
-              ? <span className="text-charcoal/40 text-[12px]"><i className="fa-solid fa-circle-notch fa-spin mr-1" />Checking…</span>
-              : <span className="font-bold text-charcoal">₱{total.toLocaleString()}</span>
-            }
+            {ratesLoading || availability === "checking" ? (
+              <span className="text-charcoal/40 text-[12px]"><i className="fa-solid fa-circle-notch fa-spin mr-1" />Checking…</span>
+            ) : (
+              <>
+                <span className="text-charcoal/50">
+                  {dailyRates.length > 1 && dailyRates.some((r) => r.rate !== dailyRates[0].rate)
+                    ? `${nights} night${nights !== 1 ? "s" : ""} (varied rates)`
+                    : `${nights} night${nights !== 1 ? "s" : ""} × ₱${(dailyRates[0]?.rate ?? pricePerNight).toLocaleString()}`}
+                </span>
+                <span className="font-bold text-charcoal">₱{Math.round(computedNightlyTotal).toLocaleString()}</span>
+              </>
+            )}
           </div>
         )}
         {availability === "unavailable" && (
@@ -201,7 +246,7 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
         style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
       >
         <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} />
-        {availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${total.toLocaleString()}` : "Book this Property"}
+        {availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${Math.round(computedNightlyTotal).toLocaleString()}` : "Book this Property"}
       </button>
 
       {availability === "available" && (
