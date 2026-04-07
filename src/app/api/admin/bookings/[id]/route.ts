@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { STRIPE_FEE_RATE } from "@/lib/pricing";
+import { logAction, getIpFromRequest } from "@/lib/log";
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -15,6 +16,17 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     where: { id: Number(id) },
     data: { status },
     include: { property: true },
+  });
+
+  await logAction({
+    actor: session.user.name ?? "Admin",
+    actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+    actorId: parseInt(session.user.id),
+    action: `Updated booking #${id} status to "${status}"`,
+    module: "bookings",
+    target: `booking-${id}`,
+    ipAddress: getIpFromRequest(req),
+    metadata: { bookingId: id, newStatus: status, propertyName: booking.property.name },
   });
 
   // Send confirmation email to guest when status moves to "confirmed"
@@ -140,11 +152,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   return NextResponse.json(booking);
 }
 
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   await prisma.booking.delete({ where: { id: Number(id) } });
+
+  await logAction({
+    actor: session.user.name ?? "Admin",
+    actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+    actorId: parseInt(session.user.id),
+    action: `Deleted booking #${id}`,
+    module: "bookings",
+    target: `booking-${id}`,
+    ipAddress: getIpFromRequest(req),
+  });
+
   return NextResponse.json({ success: true });
 }

@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
+import { logAction, getIpFromRequest } from "@/lib/log";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const {
     propertyId,
     guestName,
@@ -286,6 +287,16 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("Booker acknowledgment email failed:", err);
   }
+
+  await logAction({
+    actor: guestName,
+    actorRole: "guest",
+    action: `Submitted booking request for "${booking.property.name}"`,
+    module: "booking_flow",
+    target: `booking-${booking.id}`,
+    ipAddress: getIpFromRequest(req),
+    metadata: { bookingId: booking.id, propertyId, checkIn, checkOut, paymentMethod },
+  });
 
   return NextResponse.json({ success: true, bookingId: booking.id });
 }

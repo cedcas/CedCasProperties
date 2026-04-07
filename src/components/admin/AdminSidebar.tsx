@@ -13,13 +13,20 @@ const NAV = [
   { href: "/admin/discount-codes",  icon: "fa-tag",              label: "Promo Codes" },
 ];
 
+const BOTTOM_NAV = [
+  { href: "/admin/users",  icon: "fa-users",           label: "Users" },
+  { href: "/admin/logs",   icon: "fa-clipboard-list",  label: "Logs" },
+];
+
 interface AdminSidebarProps {
   user?: { name?: string | null; email?: string | null };
   collapsed?: boolean;
   onToggle?: () => void;
+  deploymentId?: string;
+  deploymentDate?: string;
 }
 
-export default function AdminSidebar({ user, collapsed = false, onToggle }: AdminSidebarProps) {
+export default function AdminSidebar({ user, collapsed = false, onToggle, deploymentId, deploymentDate }: AdminSidebarProps) {
   const path = usePathname();
 
   return (
@@ -62,7 +69,7 @@ export default function AdminSidebar({ user, collapsed = false, onToggle }: Admi
         )}
       </div>
 
-      {/* Nav */}
+      {/* Main Nav */}
       <nav className="flex-1 px-2 py-4 flex flex-col gap-1 overflow-y-auto">
         {NAV.map(({ href, icon, label }) => {
           const active = path.startsWith(href);
@@ -84,9 +91,34 @@ export default function AdminSidebar({ user, collapsed = false, onToggle }: Admi
             </Link>
           );
         })}
+
+        {/* Divider */}
+        <div className="my-2 border-t border-white/[.06]" />
+
+        {/* Bottom nav items (Users + Logs) */}
+        {BOTTOM_NAV.map(({ href, icon, label }) => {
+          const active = path.startsWith(href);
+          return (
+            <Link
+              key={href}
+              href={href}
+              title={collapsed ? label : undefined}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-[13.5px] font-medium transition-all duration-200 ${
+                collapsed ? "justify-center" : ""
+              } ${
+                active
+                  ? "bg-[#FF5371]/15 text-[#FF5371]"
+                  : "text-white/55 hover:text-white hover:bg-white/[.06]"
+              }`}
+            >
+              <i className={`fa-solid ${icon} w-4 text-center text-[14px] flex-shrink-0`} />
+              {!collapsed && label}
+            </Link>
+          );
+        })}
       </nav>
 
-      {/* User + sign out */}
+      {/* User + deployment + sign out */}
       <div className="px-2 py-4 border-t border-white/[.07]">
         {!collapsed && (
           <div className="flex items-center gap-3 mb-3 px-2">
@@ -106,6 +138,21 @@ export default function AdminSidebar({ user, collapsed = false, onToggle }: Admi
             </div>
           </div>
         )}
+
+        {/* Deployment info */}
+        {!collapsed && (deploymentId || deploymentDate) && (
+          <div className="mx-2 mb-3 px-3 py-2 rounded-[8px] bg-white/[.04] border border-white/[.06]">
+            {deploymentDate && (
+              <div className="text-white/30 text-[10px] leading-tight">
+                <span className="text-white/20">Deployed</span> {deploymentDate}
+              </div>
+            )}
+            {deploymentId && (
+              <div className="text-white/20 text-[10px] font-mono mt-0.5">{deploymentId}</div>
+            )}
+          </div>
+        )}
+
         <button
           onClick={() => signOut({ callbackUrl: "/admin/login" })}
           title={collapsed ? "Sign Out" : undefined}

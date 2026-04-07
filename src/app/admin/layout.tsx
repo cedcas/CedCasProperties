@@ -22,8 +22,13 @@ export default async function AdminLayout({
     );
   }
 
+  const deploymentId = process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local";
+  const deploymentDate = process.env.VERCEL_GIT_COMMIT_DATE
+    ? new Date(process.env.VERCEL_GIT_COMMIT_DATE).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
+    : new Date().toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+
   return (
-    <AdminLayoutClient user={session?.user}>
+    <AdminLayoutClient user={session?.user} deploymentId={deploymentId} deploymentDate={deploymentDate}>
       {children}
     </AdminLayoutClient>
   );

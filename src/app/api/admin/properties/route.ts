@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { logAction, getIpFromRequest } from "@/lib/log";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -25,5 +26,16 @@ export async function POST(req: Request) {
       airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
     },
   });
+
+  await logAction({
+    actor: session.user.name ?? "Admin",
+    actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+    actorId: parseInt(session.user.id),
+    action: `Created property "${data.name}"`,
+    module: "properties",
+    target: data.slug,
+    ipAddress: getIpFromRequest(req),
+  });
+
   return NextResponse.json(property, { status: 201 });
 }
