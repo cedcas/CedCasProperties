@@ -47,14 +47,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
-        token.role = (user as { role?: string }).role;
+        token.role = (user as { role?: string }).role ?? "admin";
       }
+      // Backward-compat: existing sessions issued before role field was added
+      if (!token.role) token.role = "admin";
       return token;
     },
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id as string;
-        session.user.role = token.role as string;
+        session.user.role = (token.role as string) ?? "admin";
       }
       return session;
     },
