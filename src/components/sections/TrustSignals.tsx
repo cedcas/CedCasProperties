@@ -27,9 +27,10 @@ export default function TrustSignals() {
         {/* Stats row */}
         <div className="flex flex-wrap justify-center gap-6 mb-4 reveal">
           {[
-            { icon: "fa-star",    value: "4.9",  label: "Average Rating",       color: "#FF5371" },
-            { icon: "fa-users",   value: "250+", label: "Happy Guests Hosted",  color: "#3B5323" },
+            { icon: "fa-star",    value: "5.0",  label: "Average Rating",       color: "#FF5371" },
+            { icon: "fa-users",   value: "280+", label: "Happy Guests Hosted",  color: "#3B5323" },
             { icon: "fa-comment", value: "180+", label: "Five-Star Reviews",    color: "#C4A862" },
+            { icon: "fa-award",   value: "3 yrs", label: "Superhost Status",   color: "#C4A862" },
           ].map(({ icon, value, label, color }) => (
             <div
               key={label}

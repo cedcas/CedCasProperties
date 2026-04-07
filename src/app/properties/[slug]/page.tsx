@@ -253,6 +253,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             <div>
               <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">House Rules</h2>
               <div className="bg-white rounded-[12px] p-6 border border-black/[.06]">
+                <p className="text-charcoal/65 text-[13.5px] leading-[1.7] mb-5 italic border-l-2 pl-4" style={{ borderColor: "#C4A862" }}>
+                  Details of these house rules can be found in the Welcome Book binder located in the house, or you can ask the host for it.
+                </p>
                 {property.propertyRules ? (
                   <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line mb-4">
                     {property.propertyRules}

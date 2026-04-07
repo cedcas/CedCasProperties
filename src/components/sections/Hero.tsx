@@ -105,9 +105,10 @@ export default function Hero() {
         >
           {[
             { icon: "fa-house",        value: "5+",       label: "Properties"      },
-            { icon: "fa-users",        value: "250+",     label: "Happy Guests"    },
-            { icon: "fa-star",         value: "4.9",      label: "Avg Rating"      },
+            { icon: "fa-users",        value: "280+",     label: "Happy Guests"    },
+            { icon: "fa-star",         value: "5.0",      label: "Avg Rating"      },
             { icon: "fa-comment",      value: "180+",     label: "Five-Star Reviews"},
+            { icon: "fa-award",        value: "3 yrs",    label: "Superhost"       },
           ].map(({ icon, value, label }) => (
             <div key={label} className="flex items-center gap-2.5">
               <i
