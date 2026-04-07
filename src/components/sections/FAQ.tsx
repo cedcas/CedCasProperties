@@ -1,7 +1,3 @@
-"use client";
-
-import { useState } from "react";
-
 const faqs = [
   {
     q: "What makes your properties different from a hotel or Airbnb?",
@@ -34,13 +30,11 @@ const faqs = [
 ];
 
 export default function FAQ() {
-  const [open, setOpen] = useState<number | null>(null);
-
   return (
     <section className="py-24 bg-cream">
-      <div className="max-w-3xl mx-auto px-6">
+      <div className="max-w-5xl mx-auto px-6">
 
-        <div className="flex flex-col items-center text-center reveal mb-12">
+        <div className="flex flex-col items-center text-center reveal mb-16">
           <span className="flex items-center gap-2 text-[11px] font-semibold tracking-[.18em] uppercase mb-3" style={{ color: "#3B5323" }}>
             <span className="block w-7 h-0.5 rounded bg-forest" />
             FAQ
@@ -57,29 +51,28 @@ export default function FAQ() {
           </p>
         </div>
 
-        <div className="space-y-3 reveal">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 reveal">
           {faqs.map((item, i) => (
             <div
               key={i}
-              className="bg-white rounded-[14px] border border-black/[.07] overflow-hidden"
-              style={{ boxShadow: "0 2px 12px rgba(0,0,0,.04)" }}
+              className={`bg-white rounded-[16px] p-7 border-l-[3px] flex flex-col gap-3 transition-transform duration-300 hover:-translate-y-0.5${
+                i === faqs.length - 1 ? " md:col-span-2" : ""
+              }`}
+              style={{
+                borderLeftColor: "#C4A862",
+                boxShadow: "0 2px 16px rgba(0,0,0,.05)",
+              }}
             >
-              <button
-                className="w-full text-left flex items-center justify-between gap-4 px-6 py-5"
-                onClick={() => setOpen(open === i ? null : i)}
-                aria-expanded={open === i}
+              <span
+                className="font-serif font-bold leading-none"
+                style={{ color: "#C4A862", fontSize: "clamp(1.5rem, 2.5vw, 2rem)" }}
               >
-                <span className="font-semibold text-charcoal text-[14.5px] leading-snug">{item.q}</span>
-                <i
-                  className={`fa-solid fa-chevron-down text-[12px] flex-shrink-0 transition-transform duration-300 ${open === i ? "rotate-180" : ""}`}
-                  style={{ color: "#3B5323" }}
-                />
-              </button>
-              {open === i && (
-                <div className="px-6 pb-5">
-                  <p className="text-charcoal/65 text-[14px] leading-[1.75]">{item.a}</p>
-                </div>
-              )}
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <h3 className="font-semibold text-[15px] leading-snug" style={{ color: "#3B5323" }}>
+                {item.q}
+              </h3>
+              <p className="text-charcoal/60 text-[14px] leading-[1.8]">{item.a}</p>
             </div>
           ))}
         </div>
