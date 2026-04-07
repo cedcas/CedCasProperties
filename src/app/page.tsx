@@ -15,62 +15,72 @@ const faqSchema = {
   mainEntity: [
     {
       "@type": "Question",
-      name: "What types of properties are available?",
+      name: "What makes your properties different from a hotel or Airbnb?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "We offer fully furnished short-term rentals including studio units, 1-bedroom, and 2-bedroom entire units in Lipa City, Batangas, Philippines.",
+        text: "Our properties are fully furnished homes — not hotel rooms. You get a full kitchen, living area, and the kind of space to relax that a hotel just can't offer. And unlike Airbnb, booking directly with us means no service fees and a more personal experience with your host.",
       },
     },
     {
       "@type": "Question",
-      name: "How do I book a property?",
+      name: "Where exactly are your properties located in Lipa City, Batangas?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Browse our listings, select your check-in and check-out dates on the property page, then complete your booking with GCash or BPI InstaPay. No Airbnb account required.",
+        text: "All our properties are in Lipa City, Batangas — a thriving city in the heart of the CALABARZON region, just 2–3 hours from Metro Manila. Whether you're here for the cool highland climate, the cafes, or visiting family, we're conveniently located to get you wherever you're going.",
       },
     },
     {
       "@type": "Question",
-      name: "What payment methods do you accept?",
+      name: "How do I book a short-term rental in Lipa City, Batangas?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "We accept GCash and BPI InstaPay via QR code payment. Payment is verified manually by our team before your booking is confirmed.",
+        text: "It's simple: browse our listings, pick your dates, and complete a quick booking form. We accept payment via GCash or BPI InstaPay — no credit card required. You'll get a confirmation once your payment is verified.",
       },
     },
     {
       "@type": "Question",
-      name: "Is there a minimum stay requirement?",
+      name: "Can I book for just one night?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Our minimum stay is typically 1 night. Specific requirements may vary per property and season.",
+        text: "Yes! We welcome short stays. Whether you need a one-night stopover or a week-long retreat, you can select any available dates on the property page and see the total price upfront.",
       },
     },
     {
       "@type": "Question",
-      name: "Where are the properties located?",
+      name: "Is it safe to book directly instead of through Airbnb?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "All our properties are located in Lipa City, Batangas, Philippines — a convenient destination in the CALABARZON region, just a few hours from Metro Manila.",
+        text: "Absolutely. We've hosted over 250 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
       },
     },
     {
       "@type": "Question",
-      name: "Is it cheaper to book directly instead of Airbnb?",
+      name: "What amenities are included in your short-term rentals?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. Booking directly through our website avoids Airbnb service fees, which typically range from 14–16% of the reservation. You get the same property at a lower price.",
+        text: "Amenities vary by property but typically include air conditioning, Wi-Fi, a full kitchen, hot shower, and all the basics you need for a comfortable stay. Check each property's listing for the full amenity list.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What is your cancellation policy for bookings?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "We follow a strict cancellation policy: partial refunds are available for cancellations made 7 or more days before check-in. We also offer one free rebooking if requested at least 14 days before your original check-in date.",
       },
     },
   ],
 };
-import Navbar       from "@/components/layout/Navbar";
-import Footer       from "@/components/layout/Footer";
-import Hero         from "@/components/sections/Hero";
-import Properties   from "@/components/sections/Properties";
-import WhyUs        from "@/components/sections/WhyUs";
-import ContactForm  from "@/components/sections/ContactForm";
-import DiscoverLipa from "@/components/sections/DiscoverLipa";
-import ScrollReveal from "@/components/ui/ScrollReveal";
+import Navbar        from "@/components/layout/Navbar";
+import Footer        from "@/components/layout/Footer";
+import Hero          from "@/components/sections/Hero";
+import Properties    from "@/components/sections/Properties";
+import WhyUs         from "@/components/sections/WhyUs";
+import TrustSignals  from "@/components/sections/TrustSignals";
+import FAQ           from "@/components/sections/FAQ";
+import ContactForm   from "@/components/sections/ContactForm";
+import DiscoverLipa  from "@/components/sections/DiscoverLipa";
+import ScrollReveal  from "@/components/ui/ScrollReveal";
 
 export default function Home() {
   return (
@@ -90,8 +100,10 @@ export default function Home() {
       <Navbar />
       <main>
         <Hero />
+        <TrustSignals />
         <Properties />
         <WhyUs />
+        <FAQ />
         <DiscoverLipa />
         <ContactForm />
 

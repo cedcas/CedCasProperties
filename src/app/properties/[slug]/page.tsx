@@ -249,17 +249,119 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               </div>
             )}
 
-            {/* Property Rules */}
-            {property.propertyRules && (
-              <div>
-                <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">House Rules</h2>
-                <div className="bg-white rounded-[12px] p-6 border border-black/[.06]">
-                  <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line">
+            {/* House Rules */}
+            <div>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">House Rules</h2>
+              <div className="bg-white rounded-[12px] p-6 border border-black/[.06]">
+                {property.propertyRules ? (
+                  <div className="text-charcoal/75 text-[14px] leading-[1.7] whitespace-pre-line mb-4">
                     {property.propertyRules}
                   </div>
+                ) : null}
+                <ol className="space-y-2.5">
+                  {[
+                    "No pets allowed on the property.",
+                    "No parties or events without prior host approval.",
+                    "No smoking or vaping anywhere on the premises.",
+                    "Quiet hours are observed from 10:00 PM to 8:00 AM — please be mindful of neighbors.",
+                    "Check-in begins at 2:00 PM. Check-out is by 12:00 PM (noon).",
+                    `This property accommodates up to ${property.maxGuests} guests. Please do not exceed the maximum.`,
+                    "Please leave the home as you found it — wash and put away dishes, and take out the trash before you leave.",
+                    "Guests are responsible for any damages or missing items during their stay.",
+                    "Prohibited at all times: candles, incense, open flames, and cooking strong-smelling foods.",
+                    "Air conditioning: Please turn it off when not in use and before leaving the house. Failure to do so may result in additional charges.",
+                    "Locking up: When leaving, pull the door shut and hold the ✓ (check) button on the smart lock until it clicks. Please make sure the door is fully locked before you go.",
+                  ].map((rule, i) => (
+                    <li key={i} className="flex items-start gap-3">
+                      <span
+                        className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold text-white mt-0.5"
+                        style={{ background: "#3B5323" }}
+                      >
+                        {i + 1}
+                      </span>
+                      <span className="text-charcoal/75 text-[14px] leading-[1.65]">{rule}</span>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+
+            {/* Check-In & Check-Out */}
+            <div>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">Check-In &amp; Check-Out</h2>
+              <div className="bg-white rounded-[12px] p-6 border border-black/[.06]">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
+                  {[
+                    { icon: "fa-arrow-right-to-bracket", label: "Check-in",  value: "2:00 PM or later",        color: "#3B5323" },
+                    { icon: "fa-arrow-right-from-bracket", label: "Check-out", value: "12:00 PM (noon) or earlier", color: "#C4A862" },
+                  ].map(({ icon, label, value, color }) => (
+                    <div key={label} className="flex items-center gap-4 bg-cream rounded-[10px] px-5 py-4">
+                      <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `${color}18` }}>
+                        <i className={`fa-solid ${icon} text-[14px]`} style={{ color }} />
+                      </div>
+                      <div>
+                        <div className="text-[11px] text-charcoal/45 uppercase tracking-wide font-semibold">{label}</div>
+                        <div className="text-charcoal font-semibold text-[14.5px]">{value}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-charcoal/60 text-[13.5px] leading-[1.7]">
+                  Early check-in or late check-out may be available upon request — just reach out to your host in advance and we&apos;ll do our best to accommodate.
+                </p>
+              </div>
+            </div>
+
+            {/* Cancellation & Rebooking Policy */}
+            <div>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">Cancellation &amp; Rebooking Policy</h2>
+              <div className="bg-white rounded-[12px] p-6 border border-black/[.06] space-y-6">
+                <div>
+                  <h3 className="font-semibold text-charcoal text-[14.5px] mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-ban text-[13px]" style={{ color: "#FF5371" }} /> Cancellation Policy
+                  </h3>
+                  <p className="text-charcoal/60 text-[13.5px] leading-[1.7] mb-3">
+                    We follow a <strong className="text-charcoal/80">strict cancellation policy</strong>.
+                  </p>
+                  <ul className="space-y-2">
+                    {[
+                      { rule: "Cancellations made 7+ days before check-in", outcome: "Eligible for a partial refund", positive: true },
+                      { rule: "Cancellations made less than 7 days before check-in", outcome: "Non-refundable", positive: false },
+                      { rule: "No full refunds under any circumstances", outcome: "", positive: false },
+                    ].map(({ rule, outcome, positive }) => (
+                      <li key={rule} className="flex items-start gap-2.5 text-[13.5px]">
+                        <i className={`fa-solid ${positive ? "fa-circle-check" : "fa-circle-xmark"} mt-0.5 flex-shrink-0`}
+                          style={{ color: positive ? "#3B5323" : "#FF5371" }} />
+                        <span className="text-charcoal/70">
+                          {rule}{outcome ? <> — <span className="font-medium text-charcoal/85">{outcome}</span></> : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="border-t border-black/[.06] pt-5">
+                  <h3 className="font-semibold text-charcoal text-[14.5px] mb-3 flex items-center gap-2">
+                    <i className="fa-solid fa-calendar-days text-[13px]" style={{ color: "#3B5323" }} /> Rebooking Policy
+                  </h3>
+                  <ul className="space-y-2">
+                    {[
+                      { rule: "14+ days before check-in", outcome: "One free rebooking, no penalty", positive: true },
+                      { rule: "7–13 days before check-in", outcome: "Rebooking allowed with a 50% penalty per night", positive: null },
+                      { rule: "Less than 7 days before check-in", outcome: "Rebooking not available", positive: false },
+                    ].map(({ rule, outcome, positive }) => (
+                      <li key={rule} className="flex items-start gap-2.5 text-[13.5px]">
+                        <i className={`fa-solid ${positive === true ? "fa-circle-check" : positive === null ? "fa-circle-exclamation" : "fa-circle-xmark"} mt-0.5 flex-shrink-0`}
+                          style={{ color: positive === true ? "#3B5323" : positive === null ? "#C4A862" : "#FF5371" }} />
+                        <span className="text-charcoal/70">
+                          <span className="font-medium text-charcoal/85">{rule}</span> — {outcome}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="text-charcoal/50 text-[12.5px] mt-4">Rebooking is subject to availability. Please reach out to your host to start the process.</p>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Guest Reviews */}
             <Testimonials propertyId={property.id} />

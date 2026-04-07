@@ -55,20 +55,19 @@ export default function Hero() {
           className="font-serif font-bold leading-[1.12] mb-6 reveal reveal-d1"
           style={{ fontSize: "clamp(2.4rem, 6vw, 4.5rem)", color: "#2C2C2C" }}
         >
-          Stay in Style,<br />
-          <span style={{ color: "#FF5371" }}>Live in Comfort</span><br />
-          in Lipa, Batangas
+          Your Perfect Short-Term Rental<br />
+          <span style={{ color: "#FF5371" }}>in Lipa City, Batangas</span>
         </h1>
 
         <p
-          className="leading-[1.75] max-w-[560px] mb-10 reveal reveal-d2"
+          className="leading-[1.75] max-w-[580px] mb-10 reveal reveal-d2"
           style={{
             fontSize: "clamp(1rem, 2vw, 1.15rem)",
             color: "rgba(44,44,44,0.65)",
           }}
         >
-          Upscale short-term rentals thoughtfully designed for families, weekend
-          escapes, and business stays — right in the heart of Batangas.
+          Book directly and save 15–20% compared to Airbnb — no platform fees,
+          just a warm, comfortable stay with your host.
         </p>
 
         <div className="flex flex-wrap gap-4 justify-center mb-16 reveal reveal-d3">
@@ -80,7 +79,7 @@ export default function Hero() {
               boxShadow: "0 4px 20px rgba(255,83,113,.35)",
             }}
           >
-            <i className="fa-solid fa-house" /> Explore Properties
+            <i className="fa-solid fa-house" /> Explore Our Properties
           </a>
           <a
             href="#why"
@@ -105,10 +104,10 @@ export default function Hero() {
           }}
         >
           {[
-            { icon: "fa-house",        value: "5+",       label: "Properties"   },
-            { icon: "fa-users",        value: "200+",     label: "Happy Guests" },
-            { icon: "fa-star",         value: "4.9",      label: "Rating"       },
-            { icon: "fa-location-dot", value: "Lipa City",label: "Batangas"     },
+            { icon: "fa-house",        value: "5+",       label: "Properties"      },
+            { icon: "fa-users",        value: "250+",     label: "Happy Guests"    },
+            { icon: "fa-star",         value: "4.9",      label: "Avg Rating"      },
+            { icon: "fa-comment",      value: "180+",     label: "Five-Star Reviews"},
           ].map(({ icon, value, label }) => (
             <div key={label} className="flex items-center gap-2.5">
               <i
