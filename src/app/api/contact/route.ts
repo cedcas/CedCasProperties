@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendEmail } from "@/lib/email";
+import { createMailer, FROM_ADDRESS } from "@/lib/email";
 
 export async function POST(req: Request) {
   const { name, email, phone, subject, message } = await req.json();
@@ -20,7 +20,9 @@ export async function POST(req: Request) {
 
   // Send email
   try {
-    await sendEmail({
+    const mailer = createMailer();
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      "customerservice@haveninlipa.com",
       replyTo: email,
       subject: `[Contact Form] ${subject} — ${name}`,

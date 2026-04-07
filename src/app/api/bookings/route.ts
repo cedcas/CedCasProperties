@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sendEmail } from "@/lib/email";
+import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
+import { logAction, getIpFromRequest } from "@/lib/log";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   const {
     propertyId,
     guestName,
@@ -191,8 +192,10 @@ export async function POST(req: Request) {
 
   // ── Email to admin ────────────────────────────────────────────────────────
   try {
+    const mailer = createMailer();
     const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await sendEmail({
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      "customerservice@haveninlipa.com",
       replyTo: guestEmail,
       subject: `🏠 New Booking Request – ${booking.property.name}`,
@@ -234,8 +237,10 @@ export async function POST(req: Request) {
 
   // ── Email to booker — acknowledgment ──────────────────────────────────────
   try {
+    const mailer = createMailer();
     const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await sendEmail({
+    await mailer.sendMail({
+      from:    FROM_ADDRESS,
       to:      guestEmail,
       subject: `📋 Booking Request Received – ${booking.property.name}`,
       html: `
@@ -282,6 +287,16 @@ export async function POST(req: Request) {
   } catch (err) {
     console.error("Booker acknowledgment email failed:", err);
   }
+
+  await logAction({
+    actor: guestName,
+    actorRole: "guest",
+    action: `Submitted booking request for "${booking.property.name}"`,
+    module: "booking_flow",
+    target: `booking-${booking.id}`,
+    ipAddress: getIpFromRequest(req),
+    metadata: { bookingId: booking.id, propertyId, checkIn, checkOut, paymentMethod },
+  });
 
   return NextResponse.json({ success: true, bookingId: booking.id });
 }
