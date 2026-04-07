@@ -7,6 +7,7 @@ const links = [
   { label: "Properties", href: "/#properties" },
   { label: "About",      href: "/#why" },
   { label: "Location",   href: "/#location" },
+  { label: "Blog",       href: "https://blog.haveninlipa.com", external: true },
   { label: "Contact",    href: "/#contact" },
 ];
 
@@ -33,7 +34,7 @@ export default function Navbar() {
         {/* Desktop links */}
         <div className="hidden md:flex items-center gap-7">
           {links.map((l) => (
-            <a key={l.label} href={l.href} className="nav-link">
+            <a key={l.label} href={l.href} className="nav-link" {...(l.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
               {l.label}
             </a>
           ))}
@@ -71,6 +72,7 @@ export default function Navbar() {
               href={l.href}
               className="text-[14px] font-semibold text-charcoal py-1"
               onClick={() => setMenuOpen(false)}
+              {...(l.external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
             >
               {l.label}
             </a>
