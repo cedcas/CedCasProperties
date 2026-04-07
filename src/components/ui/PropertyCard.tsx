@@ -24,7 +24,7 @@ export default function PropertyCard({ property, index }: { property: Property; 
       <div className="relative h-[220px] overflow-hidden">
         {coverImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverImage} alt={property.name} className="w-full h-full object-cover" />
+          <img src={coverImage} alt={`${property.name} — ${property.type} rental in ${property.location}`} className="w-full h-full object-cover" />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center"

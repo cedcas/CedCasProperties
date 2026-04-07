@@ -1,6 +1,68 @@
 export const dynamic = "force-dynamic";
 
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
+  description:
+    "Discover clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas. Book directly and save on Airbnb fees. GCash & BPI accepted.",
+};
+
+const faqSchema = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: [
+    {
+      "@type": "Question",
+      name: "What types of properties are available?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "We offer fully furnished short-term rentals including studio units, 1-bedroom, and 2-bedroom entire units in Lipa City, Batangas, Philippines.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "How do I book a property?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Browse our listings, select your check-in and check-out dates on the property page, then complete your booking with GCash or BPI InstaPay. No Airbnb account required.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "What payment methods do you accept?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "We accept GCash and BPI InstaPay via QR code payment. Payment is verified manually by our team before your booking is confirmed.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is there a minimum stay requirement?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Our minimum stay is typically 1 night. Specific requirements may vary per property and season.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Where are the properties located?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "All our properties are located in Lipa City, Batangas, Philippines — a convenient destination in the CALABARZON region, just a few hours from Metro Manila.",
+      },
+    },
+    {
+      "@type": "Question",
+      name: "Is it cheaper to book directly instead of Airbnb?",
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: "Yes. Booking directly through our website avoids Airbnb service fees, which typically range from 14–16% of the reservation. You get the same property at a lower price.",
+      },
+    },
+  ],
+};
 import Navbar       from "@/components/layout/Navbar";
 import Footer       from "@/components/layout/Footer";
 import Hero         from "@/components/sections/Hero";
@@ -13,6 +75,10 @@ import ScrollReveal from "@/components/ui/ScrollReveal";
 export default function Home() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
+      />
       {/* Font Awesome */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link

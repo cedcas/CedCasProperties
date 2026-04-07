@@ -26,7 +26,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
           // Single image — full width
           <div className="w-full h-full cursor-pointer" onClick={() => setLightbox(0)}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={slots[0]} alt={name} className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-500" />
+            <img src={slots[0]} alt={`${name} — photo 1`} className="w-full h-full object-cover hover:scale-[1.02] transition-transform duration-500" />
           </div>
         ) : (
           // Multi-image grid: 1 large left + up to 4 right
@@ -34,7 +34,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
             {/* Main image — spans 2 rows */}
             <div className="row-span-2 relative cursor-pointer overflow-hidden group" onClick={() => setLightbox(0)}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={slots[0]} alt={name} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
+              <img src={slots[0]} alt={`${name} — photo 1`} className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500" />
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/08 transition-colors duration-200" />
             </div>
 
@@ -44,7 +44,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
               return (
                 <div key={url} className="relative cursor-pointer overflow-hidden group" onClick={() => setLightbox(i + 1)}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`${name} ${i + 2}`} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" />
+                  <img src={url} alt={`${name} — photo ${i + 2}`} className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" />
                   {isLast ? (
                     <div className="absolute inset-0 bg-black/55 flex flex-col items-center justify-center text-white gap-1">
                       <span className="text-[1.8rem] font-bold leading-none">+{images.length - 5}</span>
@@ -113,7 +113,7 @@ export default function PropertyGallery({ images, name }: { images: string[]; na
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={images[lightbox]}
-              alt={`${name} ${lightbox + 1}`}
+              alt={`${name} — photo ${lightbox + 1}`}
               className="max-h-full max-w-full object-contain select-none rounded-[8px]"
               onClick={(e) => e.stopPropagation()}
             />

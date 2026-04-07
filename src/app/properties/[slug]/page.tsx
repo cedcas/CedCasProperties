@@ -7,8 +7,64 @@ import PropertyGallery from "@/components/ui/PropertyGallery";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import BookingCard from "@/components/ui/BookingCard";
 import Testimonials from "@/components/sections/Testimonials";
+import { cache } from "react";
+import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
+
+const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
+
+const getProperty = cache(async (slug: string) =>
+  prisma.property.findUnique({ where: { slug, isActive: true } })
+);
+
+const getTestimonials = cache(async (propertyId: number) =>
+  prisma.testimonial.findMany({
+    where: { propertyId, isActive: true },
+    select: { name: true, rating: true, message: true },
+    take: 10,
+  })
+);
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const property = await getProperty(slug);
+  if (!property) return {};
+
+  const title = `${property.name} — ${property.type} Rental in ${property.location}`;
+  const description =
+    (property.description?.slice(0, 155) ?? "") ||
+    `${property.type} vacation rental in ${property.location}. Book directly and save on Airbnb fees.`;
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      type: "website",
+      url: `${BASE_URL}/properties/${slug}`,
+      images: property.featuredImage
+        ? [
+            {
+              url: property.featuredImage,
+              alt: `${property.name} — ${property.type} in ${property.location}`,
+            },
+          ]
+        : [],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: property.featuredImage ? [property.featuredImage] : [],
+    },
+  };
+}
 
 const AMENITY_ICONS: Record<string, string> = {
   WiFi: "wifi",
@@ -23,7 +79,7 @@ const AMENITY_ICONS: Record<string, string> = {
 
 export default async function PropertyDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const property = await prisma.property.findUnique({ where: { slug, isActive: true } });
+  const property = await getProperty(slug);
   if (!property) notFound();
 
   const rawImages: string[] = JSON.parse(property.images || "[]");
@@ -34,8 +90,64 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const amenities: string[] = JSON.parse(property.amenities || "[]");
   const coverImage = featuredUrl || images[0] || null;
 
+  const testimonials = await getTestimonials(property.id);
+
+  const avgRating =
+    testimonials.length > 0
+      ? (testimonials.reduce((s, t) => s + t.rating, 0) / testimonials.length).toFixed(1)
+      : null;
+
+  const vacationRentalSchema = {
+    "@context": "https://schema.org",
+    "@type": "VacationRental",
+    name: property.name,
+    description: property.description ?? undefined,
+    url: `${BASE_URL}/properties/${property.slug}`,
+    image: coverImage ?? undefined,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: property.location,
+      addressRegion: "Batangas",
+      addressCountry: "PH",
+    },
+    priceRange: `₱${Number(property.pricePerNight).toLocaleString()} per night`,
+    numberOfRooms: property.bedrooms,
+    occupancy: {
+      "@type": "QuantitativeValue",
+      maxValue: property.maxGuests,
+      unitText: "guests",
+    },
+    amenityFeature: amenities.map((a) => ({
+      "@type": "LocationFeatureSpecification",
+      name: a,
+      value: true,
+    })),
+    ...(testimonials.length > 0 && {
+      review: testimonials.map((t) => ({
+        "@type": "Review",
+        author: { "@type": "Person", name: t.name },
+        reviewRating: {
+          "@type": "Rating",
+          ratingValue: t.rating,
+          bestRating: 5,
+        },
+        reviewBody: t.message,
+      })),
+      aggregateRating: {
+        "@type": "AggregateRating",
+        ratingValue: avgRating,
+        reviewCount: testimonials.length,
+        bestRating: 5,
+      },
+    }),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(vacationRentalSchema) }}
+      />
       <ScrollReveal />
       <Navbar />
       <main className="bg-offwhite min-h-screen">
@@ -44,7 +156,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         <div className="relative h-[55vh] min-h-[340px] overflow-hidden">
           {coverImage ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={coverImage} alt={property.name} className="w-full h-full object-cover" />
+            <img src={coverImage} alt={`${property.name} — ${property.type} in ${property.location}`} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full" style={{ background: "linear-gradient(135deg,#1e3310,#3B5323,#2C2C2C)" }} />
           )}
