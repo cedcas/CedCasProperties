@@ -40,7 +40,7 @@ export async function getDailyRates(
     if (override) {
       entries.push({ date: dateStr, rate: Number(override.rate), note: override.note });
     } else {
-      const isWeekend = dow === 0 || dow === 6; // Sun or Sat
+      const isWeekend = dow === 5 || dow === 6; // Fri or Sat
       const rule = rates.find((r) =>
         isWeekend ? r.rateType === "weekend" : r.rateType === "weekday"
       );

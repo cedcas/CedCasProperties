@@ -108,7 +108,7 @@ export default function PropertyRatesClient({ propertyId, defaultRate, initialRa
       {/* Weekday/Weekend rates */}
       <div className="bg-white rounded-[16px] p-6 border border-black/[.08] shadow-sm">
         <h2 className="font-semibold text-charcoal mb-1">Weekday &amp; Weekend Rates</h2>
-        <p className="text-gray-400 text-[13px] mb-5">Mon–Fri = weekday, Sat–Sun = weekend. Leave blank to use the default rate (₱{defaultRate.toLocaleString()}/night).</p>
+        <p className="text-gray-400 text-[13px] mb-5">Sun–Thu = weekday, Fri–Sat = weekend. Leave blank to use the default rate (₱{defaultRate.toLocaleString()}/night).</p>
         <div className="grid grid-cols-2 gap-5">
           <div>
             <label className={labelCls}>Weekday Rate (₱)</label>

@@ -50,7 +50,7 @@ const faqSchema = {
       name: "Is it safe to book directly instead of through Airbnb?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Absolutely. We've hosted over 250 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
+        text: "Absolutely. We've hosted over 280 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
       },
     },
     {

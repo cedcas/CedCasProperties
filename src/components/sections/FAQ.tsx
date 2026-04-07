@@ -17,7 +17,7 @@ const faqs = [
   },
   {
     q: "Is it safe to book directly instead of through Airbnb?",
-    a: "Absolutely. We've hosted over 250 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
+    a: "Absolutely. We've hosted over 280 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
   },
   {
     q: "What amenities are included in your short-term rentals?",
