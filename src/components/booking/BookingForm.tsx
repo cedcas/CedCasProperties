@@ -3,20 +3,18 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import PaymentQR from "./PaymentQR";
 
 // Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
 // We also accept a runtime key returned from the payment-intent API as a fallback.
 const buildTimeStripeKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
-const isValidStripePublishableKey = (key: string) => /^pk_(test|live)_\w{10,}/.test(key);
 let cachedStripePromise: ReturnType<typeof loadStripe> | null =
-  buildTimeStripeKey && isValidStripePublishableKey(buildTimeStripeKey)
-    ? loadStripe(buildTimeStripeKey)
-    : null;
+  buildTimeStripeKey ? loadStripe(buildTimeStripeKey) : null;
 
 function getOrCreateStripePromise(runtimeKey?: string): ReturnType<typeof loadStripe> | null {
   if (cachedStripePromise) return cachedStripePromise;
   const key = runtimeKey ?? buildTimeStripeKey;
-  if (key && isValidStripePublishableKey(key)) {
+  if (key) {
     cachedStripePromise = loadStripe(key);
   }
   return cachedStripePromise;
@@ -260,9 +258,6 @@ export default function BookingForm({
         }
         // Initialize Stripe from the runtime key returned by the server (handles build-time env baking issues)
         const promise = getOrCreateStripePromise(data.publishableKey);
-        if (!promise) {
-          throw new Error("Card payments are not available right now. Please use GCash or BPI.");
-        }
         setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       })
@@ -333,7 +328,6 @@ export default function BookingForm({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Payment setup failed");
         const promise = getOrCreateStripePromise(data.publishableKey);
-        if (!promise) throw new Error("Card payments are not available right now. Please use GCash or BPI.");
         setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
       } catch (err: unknown) {
@@ -531,19 +525,13 @@ export default function BookingForm({
           </div>
         )}
 
-        {/* QR Code for GCash/BPI */}
-        {paymentMethod !== "stripe" && (
-          <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)] mb-5 text-center">
-            <p className="text-[12px] font-semibold text-charcoal/40 uppercase tracking-wider mb-4">
-              Scan to Pay via {paymentMethod === "gcash" ? "GCash" : "BPI"}
-            </p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={qrSrc} alt={`${paymentMethod.toUpperCase()} QR Code`} className="w-56 h-auto mx-auto rounded-[8px]" />
-            <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-[8px] text-[12px] text-amber-800">
-              <i className="fa-solid fa-circle-info mr-1.5" />
-              Please transfer exactly <strong>₱{Math.round(total).toLocaleString()}</strong> using the QR code above. Add your name in the payment remarks so we can confirm faster.
-            </div>
-          </div>
+        {/* QR Code for GCash/BPI — with integrity verification */}
+        {paymentMethod !== "stripe" && qrSrc && (
+          <PaymentQR
+            paymentMethod={paymentMethod as "gcash" | "bpi"}
+            qrSrc={qrSrc}
+            totalFormatted={`₱${Math.round(total).toLocaleString()}`}
+          />
         )}
 
         {error && (

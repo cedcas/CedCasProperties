@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
+import { runQrIntegrityCheck } from "@/lib/qr-integrity-check";
 import "./globals.css";
+
+// Server-side QR integrity check — runs once on first request
+runQrIntegrityCheck();
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
 
