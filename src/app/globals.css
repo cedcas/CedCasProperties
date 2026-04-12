@@ -77,3 +77,9 @@ body {
 
 /* ── Logo ── */
 #nav-logo img { transition: filter 0.35s; }
+
+/* ── Haven Chatbot ── */
+@keyframes haven-pulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(76,167,80,.25); }
+  50%      { box-shadow: 0 4px 24px rgba(76,167,80,.50); }
+}

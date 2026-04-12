@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
 import { runQrIntegrityCheck } from "@/lib/qr-integrity-check";
+import ChatWidgetServer from "@/components/chat/ChatWidgetServer";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -109,7 +111,12 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessSchema) }}
         />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        {children}
+        <Suspense fallback={null}>
+          <ChatWidgetServer />
+        </Suspense>
+      </body>
     </html>
   );
 }
