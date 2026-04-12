@@ -105,9 +105,41 @@ model ContactMessage {
 }
 
 model AdminUser {
-  id        Int      @id @default(autoincrement())
-  email     String   @unique
-  password  String   // bcrypt hashed
-  name      String
-  createdAt DateTime @default(now())
+  id          Int      @id @default(autoincrement())
+  email       String   @unique
+  password    String   // bcrypt hashed
+  name        String
+  role        String   @default("admin") // "admin" | "manager"
+  createdAt   DateTime @default(now())
+  permissions AdminPermission?
+  logs        AdminLog[]
+}
+
+model AdminPermission {
+  id             Int       @id @default(autoincrement())
+  adminUser      AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+  adminUserId    Int       @unique
+  properties     Boolean   @default(false)
+  bookings       Boolean   @default(false)
+  messages       Boolean   @default(false)
+  testimonials   Boolean   @default(false)
+  promoCodes     Boolean   @default(false)
+  logs           Boolean   @default(false)
+  userManagement Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model AdminLog {
+  id         Int      @id @default(autoincrement())
+  actor      String   // display name (admin name or "Guest")
+  actorRole  String   // "admin" | "manager" | "guest"
+  actorId    Int?     // AdminUser.id if admin/manager
+  adminUser  AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String   // e.g. "Updated booking status", "Created property"
+  module     String   // "properties" | "bookings" | "messages" | "testimonials" | "promo_codes" | "users" | "booking_flow"
+  target     String?  // e.g. property slug, booking ID
+  ipAddress  String?
+  metadata   String?  @db.Text // JSON extra context
+  createdAt  DateTime @default(now())
 }
