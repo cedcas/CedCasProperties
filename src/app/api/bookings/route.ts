@@ -130,6 +130,9 @@ export async function POST(req: NextRequest) {
   const computedTotal = serverNightlyTotal - discountAmount + stripeFee;
 
   // ── Save booking ──────────────────────────────────────────────────────────
+  // Stripe payments with a successful PaymentIntent are auto-confirmed
+  const isStripeConfirmed = paymentMethod === "stripe" && stripePaymentIntentId;
+
   const booking = await prisma.booking.create({
     data: {
       propertyId: Number(propertyId),
@@ -146,7 +149,7 @@ export async function POST(req: NextRequest) {
       discountAmount: discountAmount > 0 ? discountAmount : null,
       paymentMethod: paymentMethod || null,
       stripePaymentIntentId: stripePaymentIntentId || null,
-      status:    "pending",
+      status:    isStripeConfirmed ? "confirmed" : "pending",
       notes:     notes || null,
     },
     include: { property: true },
@@ -190,102 +193,198 @@ export async function POST(req: NextRequest) {
       </tr>
     </table>`;
 
-  // ── Email to admin ────────────────────────────────────────────────────────
-  try {
-    const mailer = createMailer();
-    const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await mailer.sendMail({
-      from:    FROM_ADDRESS,
-      to:      "customerservice@haveninlipa.com",
-      replyTo: guestEmail,
-      subject: `🏠 New Booking Request – ${booking.property.name}`,
-      html: `
-        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
-          <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
-            <h1 style="color:#fff;margin:0;font-size:20px">New Booking Request</h1>
-            <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">Awaiting payment verification</p>
-          </div>
-          <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
-            <table style="width:100%;font-size:14px;border-collapse:collapse">
-              <tr><td style="padding:7px 0;color:#666;width:140px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Guest</td><td>${guestName}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Email</td><td><a href="mailto:${guestEmail}">${guestEmail}</a></td></tr>
-              <tr><td style="padding:7px 0;color:#666">Phone</td><td>${guestPhone}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Check-in</td><td>${fmtDate(checkIn)}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(checkOut)}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
-              <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
-              ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
-            </table>
-            <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">
-              <strong style="font-size:13px">Price Breakdown</strong>
-              ${priceBreakdownHtml}
-            </div>
-            <div style="margin-top:20px;padding:14px;background:#FFF0F3;border-left:3px solid #FF5371;border-radius:4px;font-size:13px;color:#666">
-              ${paymentMethod === "stripe"
-                ? "Payment was collected via Stripe. Verify in your Stripe dashboard and update the booking status to <strong>Confirmed</strong>."
-                : `Please verify the payment in your ${pmLabel} app and update the booking status to <strong>Confirmed</strong> in the admin panel.`}
-            </div>
-          </div>
-        </div>
-      `,
-    });
-  } catch (err) {
-    console.error("Admin email failed:", err);
-  }
+  // ── Emails ─────────────────────────────────────────────────────────────────
+  const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
 
-  // ── Email to booker — acknowledgment ──────────────────────────────────────
-  try {
-    const mailer = createMailer();
-    const pmLabel = paymentMethod === "gcash" ? "GCash" : paymentMethod === "bpi" ? "BPI Bank" : "Stripe";
-    await mailer.sendMail({
-      from:    FROM_ADDRESS,
-      to:      guestEmail,
-      subject: `📋 Booking Request Received – ${booking.property.name}`,
-      html: `
-        <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
-          <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
-            <h1 style="color:#fff;margin:0;font-size:20px">We Received Your Booking Request!</h1>
-            <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">We'll verify your payment and confirm shortly</p>
+  if (isStripeConfirmed) {
+    // ── Stripe auto-confirmed: send confirmation emails (same as admin confirm flow) ──
+
+    // Confirmation email to guest
+    try {
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
+        to:      guestEmail,
+        subject: `Booking Confirmed – ${booking.property.name}`,
+        html: `
+          <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+            <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0;text-align:center">
+              <h1 style="color:#fff;margin:0;font-size:22px">Your Stay is Confirmed! 🎉</h1>
+              <p style="color:rgba(255,255,255,.75);margin:8px 0 0;font-size:14px">We look forward to welcoming you</p>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
+              <p style="font-size:15px;margin-bottom:20px">Hi <strong>${guestName}</strong>,</p>
+              <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:24px">
+                Great news! Your card payment went through and your booking at <strong>${booking.property.name}</strong> is officially confirmed.
+              </p>
+              <div style="background:#FFF8FA;border-radius:8px;padding:20px 24px;margin-bottom:24px">
+                <h2 style="margin:0 0 16px;font-size:15px;color:#335238">Booking Summary</h2>
+                <table style="width:100%;font-size:14px;border-collapse:collapse">
+                  <tr><td style="padding:5px 0;color:#666;width:130px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Location</td><td>${booking.property.location}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Check-in</td><td><strong>${fmtDate(checkIn)}</strong></td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Check-out</td><td><strong>${fmtDate(checkOut)}</strong></td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Guests</td><td>${guests}</td></tr>
+                </table>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0e8f0">
+                  <strong style="font-size:13px;color:#335238">Price Breakdown</strong>
+                  ${priceBreakdownHtml}
+                </div>
+              </div>
+              <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
+                If you have any questions before your stay, don't hesitate to reach out to us:
+              </p>
+              <div style="font-size:14px;color:#444">
+                📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
+                📞 +639066554415
+              </div>
+              <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;text-align:center">
+                HavenInLipa — Stay in Style, Live in Comfort.<br/>
+                Lipa City, Batangas, Philippines
+              </div>
+            </div>
           </div>
-          <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
-            <p style="font-size:15px;margin-bottom:20px">Hi <strong>${guestName}</strong>,</p>
-            <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:24px">
-              Thank you for your booking request at <strong>${booking.property.name}</strong>. We've received your payment submission and are currently verifying it. You'll receive a confirmation email once your booking is approved.
-            </p>
-            <div style="background:#FFF8FA;border-radius:8px;padding:20px 24px;margin-bottom:24px">
-              <h2 style="margin:0 0 16px;font-size:15px;color:#335238">Booking Summary</h2>
+        `,
+      });
+    } catch (err) {
+      console.error("Guest confirmation email failed:", err);
+    }
+
+    // Confirmation notification to admin
+    try {
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
+        to:      "customerservice@haveninlipa.com",
+        replyTo: guestEmail,
+        subject: `Booking Confirmed – ${booking.property.name}`,
+        html: `
+          <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+            <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;margin:0;font-size:20px">Booking Confirmed</h1>
+              <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">Card payment succeeded — guest has been notified</p>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
               <table style="width:100%;font-size:14px;border-collapse:collapse">
-                <tr><td style="padding:5px 0;color:#666;width:130px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Check-in</td><td><strong>${fmtDate(checkIn)}</strong></td></tr>
-                <tr><td style="padding:5px 0;color:#666">Check-out</td><td><strong>${fmtDate(checkOut)}</strong></td></tr>
-                <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Guests</td><td>${guests}</td></tr>
-                <tr><td style="padding:5px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
+                <tr><td style="padding:7px 0;color:#666;width:140px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guest</td><td>${guestName}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Email</td><td><a href="mailto:${guestEmail}">${guestEmail}</a></td></tr>
+                <tr><td style="padding:7px 0;color:#666">Phone</td><td>${guestPhone}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-in</td><td>${fmtDate(checkIn)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(checkOut)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">Stripe (Card)</td></tr>
+                ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
               </table>
-              <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0e8f0">
-                <strong style="font-size:13px;color:#335238">Price Breakdown</strong>
+              <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">
+                <strong style="font-size:13px">Price Breakdown</strong>
                 ${priceBreakdownHtml}
               </div>
             </div>
-            <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
-              If you have any questions, feel free to reach out to us:
-            </p>
-            <div style="font-size:14px;color:#444">
-              📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
-              📞 +639066554415
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Admin confirmation email failed:", err);
+    }
+  } else {
+    // ── GCash / BPI: send pending acknowledgment emails (existing flow) ──
+
+    // Email to admin
+    try {
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
+        to:      "customerservice@haveninlipa.com",
+        replyTo: guestEmail,
+        subject: `🏠 New Booking Request – ${booking.property.name}`,
+        html: `
+          <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+            <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;margin:0;font-size:20px">New Booking Request</h1>
+              <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">Awaiting payment verification</p>
             </div>
-            <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;text-align:center">
-              HavenInLipa — Stay in Style, Live in Comfort.<br/>
-              Lipa City, Batangas, Philippines
+            <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
+              <table style="width:100%;font-size:14px;border-collapse:collapse">
+                <tr><td style="padding:7px 0;color:#666;width:140px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guest</td><td>${guestName}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Email</td><td><a href="mailto:${guestEmail}">${guestEmail}</a></td></tr>
+                <tr><td style="padding:7px 0;color:#666">Phone</td><td>${guestPhone}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-in</td><td>${fmtDate(checkIn)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(checkOut)}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
+                ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
+              </table>
+              <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">
+                <strong style="font-size:13px">Price Breakdown</strong>
+                ${priceBreakdownHtml}
+              </div>
+              <div style="margin-top:20px;padding:14px;background:#FFF0F3;border-left:3px solid #FF5371;border-radius:4px;font-size:13px;color:#666">
+                Please verify the payment in your ${pmLabel} app and update the booking status to <strong>Confirmed</strong> in the admin panel.
+              </div>
             </div>
           </div>
-        </div>
-      `,
-    });
-  } catch (err) {
-    console.error("Booker acknowledgment email failed:", err);
+        `,
+      });
+    } catch (err) {
+      console.error("Admin email failed:", err);
+    }
+
+    // Email to booker — acknowledgment
+    try {
+      const mailer = createMailer();
+      await mailer.sendMail({
+        from:    FROM_ADDRESS,
+        to:      guestEmail,
+        subject: `📋 Booking Request Received – ${booking.property.name}`,
+        html: `
+          <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
+            <div style="background:#335238;padding:24px 32px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;margin:0;font-size:20px">We Received Your Booking Request!</h1>
+              <p style="color:rgba(255,255,255,.7);margin:6px 0 0;font-size:13px">We'll verify your payment and confirm shortly</p>
+            </div>
+            <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:28px 32px;border-radius:0 0 8px 8px">
+              <p style="font-size:15px;margin-bottom:20px">Hi <strong>${guestName}</strong>,</p>
+              <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:24px">
+                Thank you for your booking request at <strong>${booking.property.name}</strong>. We've received your payment submission and are currently verifying it. You'll receive a confirmation email once your booking is approved.
+              </p>
+              <div style="background:#FFF8FA;border-radius:8px;padding:20px 24px;margin-bottom:24px">
+                <h2 style="margin:0 0 16px;font-size:15px;color:#335238">Booking Summary</h2>
+                <table style="width:100%;font-size:14px;border-collapse:collapse">
+                  <tr><td style="padding:5px 0;color:#666;width:130px">Property</td><td style="font-weight:bold">${booking.property.name}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Check-in</td><td><strong>${fmtDate(checkIn)}</strong></td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Check-out</td><td><strong>${fmtDate(checkOut)}</strong></td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Guests</td><td>${guests}</td></tr>
+                  <tr><td style="padding:5px 0;color:#666">Payment via</td><td style="font-weight:bold">${pmLabel}</td></tr>
+                </table>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #f0e8f0">
+                  <strong style="font-size:13px;color:#335238">Price Breakdown</strong>
+                  ${priceBreakdownHtml}
+                </div>
+              </div>
+              <p style="font-size:14px;color:#444;line-height:1.7;margin-bottom:20px">
+                If you have any questions, feel free to reach out to us:
+              </p>
+              <div style="font-size:14px;color:#444">
+                📧 <a href="mailto:customerservice@haveninlipa.com" style="color:#335238">customerservice@haveninlipa.com</a><br/>
+                📞 +639066554415
+              </div>
+              <div style="margin-top:28px;padding-top:20px;border-top:1px solid #e5e5e5;font-size:12px;color:#999;text-align:center">
+                HavenInLipa — Stay in Style, Live in Comfort.<br/>
+                Lipa City, Batangas, Philippines
+              </div>
+            </div>
+          </div>
+        `,
+      });
+    } catch (err) {
+      console.error("Booker acknowledgment email failed:", err);
+    }
   }
 
   await logAction({

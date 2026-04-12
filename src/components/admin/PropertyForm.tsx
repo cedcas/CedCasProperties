@@ -143,13 +143,13 @@ export default function PropertyForm({ property }: { property?: Property }) {
           <span className="text-[10px] font-bold uppercase tracking-wider bg-[#FF5A5F]/10 text-[#FF5A5F] px-2 py-0.5 rounded-full">Airbnb</span>
         </div>
         <p className="text-[12px] text-charcoal/45 mb-5">
-          Keep CedCas and Airbnb calendars in sync so double-bookings never happen.
+          Keep HavenInLipa and Airbnb calendars in sync so double-bookings never happen.
         </p>
 
-        {/* Export URL (CedCas → Airbnb) */}
+        {/* Export URL (HavenInLipa → Airbnb) */}
         {isEdit && exportUrl && (
-          <div className="mb-5 p-4 rounded-[12px] bg-[#F0F7EA] border border-[#3B5323]/15">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-[#3B5323]/70 mb-2">
+          <div className="mb-5 p-4 rounded-[12px] bg-[#F0FBF7] border border-[#335238]/15">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[#335238]/70 mb-2">
               <i className="fa-solid fa-arrow-up-right-from-square mr-1.5" />
               Step 1 — Paste this URL into Airbnb (Export)
             </p>
@@ -160,13 +160,13 @@ export default function PropertyForm({ property }: { property?: Property }) {
               <input
                 readOnly
                 value={exportUrl}
-                className="flex-1 px-3 py-2 rounded-[8px] border border-[#3B5323]/20 bg-white text-[12px] text-charcoal/70 font-mono select-all focus:outline-none"
+                className="flex-1 px-3 py-2 rounded-[8px] border border-[#335238]/20 bg-white text-[12px] text-charcoal/70 font-mono select-all focus:outline-none"
               />
               <button
                 type="button"
                 onClick={() => { navigator.clipboard.writeText(exportUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
                 className="flex-shrink-0 px-3 py-2 rounded-[8px] text-[12px] font-semibold border transition-all duration-200"
-                style={copied ? { background: "#3B5323", color: "#fff", borderColor: "#3B5323" } : { background: "#fff", color: "#3B5323", borderColor: "#3B5323" }}
+                style={copied ? { background: "#335238", color: "#fff", borderColor: "#335238" } : { background: "#fff", color: "#335238", borderColor: "#335238" }}
               >
                 {copied ? <><i className="fa-solid fa-check mr-1" />Copied</> : <><i className="fa-regular fa-copy mr-1" />Copy</>}
               </button>
@@ -174,14 +174,14 @@ export default function PropertyForm({ property }: { property?: Property }) {
           </div>
         )}
 
-        {/* Airbnb Import URL (Airbnb → CedCas) */}
+        {/* Airbnb Import URL (Airbnb → HavenInLipa) */}
         <div>
           <label className={labelCls}>
             <i className="fa-solid fa-arrow-down-to-line mr-1.5" />
             {isEdit ? "Step 2 — " : ""}Airbnb Calendar URL (Import)
           </label>
           <p className="text-[11.5px] text-charcoal/45 mb-2 leading-[1.5]">
-            In Airbnb, go to Listing → Availability → Import Calendar and copy the .ics link they give you. Paste it here so CedCas knows when Airbnb is booked.
+            In Airbnb, go to Listing → Availability → Import Calendar and copy the .ics link they give you. Paste it here so HavenInLipa knows when Airbnb is booked.
           </p>
           <input
             name="airbnbIcsUrl"
@@ -198,7 +198,7 @@ export default function PropertyForm({ property }: { property?: Property }) {
         <div className="flex gap-8">
           {[{ name: "isActive", label: "Active (visible on site)" }, { name: "isFeatured", label: "Featured on homepage" }].map(({ name, label }) => (
             <label key={name} className="flex items-center gap-2.5 cursor-pointer">
-              <input type="checkbox" name={name} checked={form[name as keyof typeof form] as boolean} onChange={handle} className="w-4 h-4 accent-[#3B5323]" />
+              <input type="checkbox" name={name} checked={form[name as keyof typeof form] as boolean} onChange={handle} className="w-4 h-4 accent-[#335238]" />
               <span className="text-[14px] text-charcoal/70">{label}</span>
             </label>
           ))}
@@ -208,7 +208,7 @@ export default function PropertyForm({ property }: { property?: Property }) {
       <div className="flex gap-3">
         <button type="submit" disabled={saving}
           className="px-7 py-2.5 rounded-full text-[13.5px] font-semibold text-white disabled:opacity-60 hover:-translate-y-0.5 transition-all duration-200"
-          style={{ background: "linear-gradient(135deg,#C4A862,#A8893F)" }}>
+          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
           {saving ? <span><i className="fa-solid fa-spinner fa-spin mr-2" />Saving…</span> : isEdit ? "Save Changes" : "Create Property"}
         </button>
         <button type="button" onClick={() => router.back()}

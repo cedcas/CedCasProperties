@@ -89,7 +89,7 @@ function StripePaymentForm({
 
   return (
     <form onSubmit={handleSubmit}>
-      <PaymentElement />
+      <PaymentElement options={{ defaultValues: { billingDetails: { address: { country: "PH" } } } }} />
       <button
         type="submit"
         disabled={!stripe || !elements || submitting}
@@ -395,7 +395,7 @@ export default function BookingForm({
         </p>
         <p className="text-charcoal/45 text-[14px] mb-8">
           {paymentMethod === "stripe"
-            ? <>Your card payment went through — a confirmation will be sent to <strong>{form.guestEmail}</strong> shortly.</>
+            ? <>Your card payment went through and your booking is confirmed! A confirmation email has been sent to <strong>{form.guestEmail}</strong>.</>
             : <>A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your{" "}
               {paymentMethod === "gcash" ? "GCash" : "BPI"} payment — usually within a few hours.</>
           }
@@ -562,9 +562,11 @@ export default function BookingForm({
               : <><i className="fa-solid fa-check-circle" /> I&apos;ve Paid — Confirm My Booking</>}
           </button>
         )}
-        <p className="text-center text-[11px] text-charcoal/35 mt-3">
-          We&apos;ll confirm your booking once we&apos;ve verified your payment — usually within a few hours.
-        </p>
+        {paymentMethod !== "stripe" && (
+          <p className="text-center text-[11px] text-charcoal/35 mt-3">
+            We&apos;ll confirm your booking once we&apos;ve verified your payment — usually within a few hours.
+          </p>
+        )}
       </div>
     );
   }

@@ -4,27 +4,8 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BookingForm from "@/components/booking/BookingForm";
-import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
-
-export async function generateMetadata({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}): Promise<Metadata> {
-  const { slug } = await params;
-  const property = await prisma.property.findUnique({
-    where: { slug, isActive: true },
-    select: { name: true, location: true, type: true },
-  });
-  if (!property) return {};
-
-  return {
-    title: `Book ${property.name}`,
-    description: `Reserve your stay at ${property.name} — a ${property.type} rental in ${property.location}. Book directly and save on Airbnb service fees.`,
-  };
-}
 
 export default async function BookPage({
   params,
