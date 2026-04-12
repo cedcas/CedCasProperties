@@ -1,5 +1,3 @@
-import Image from "next/image";
-
 export default function Hero() {
   return (
     <section className="relative min-h-screen flex flex-col justify-center overflow-hidden">
@@ -27,19 +25,6 @@ export default function Hero() {
       />
 
       <div className="relative z-[1] max-w-6xl mx-auto px-6 pt-32 pb-28 flex flex-col items-center text-center">
-        {/* Logo — 3× bigger than navbar (navbar: 52px → hero: 156px) */}
-        <div className="mb-6 reveal">
-          <Image
-            src="/brand-assets/Transparent Logo.png"
-            alt="HavenInLipa"
-            width={320}
-            height={320}
-            className="h-[312px] w-auto mx-auto"
-            style={{ filter: "drop-shadow(0 4px 18px rgba(255,83,113,.18))" }}
-            priority
-          />
-        </div>
-
         <div className="flex items-center gap-2.5 mb-7 reveal">
           <span className="block w-8 h-px" style={{ background: "#FF5371" }} />
           <span
