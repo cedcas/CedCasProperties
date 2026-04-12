@@ -78,9 +78,8 @@ export default function Footer() {
         <div className="py-5 flex flex-wrap items-center justify-between gap-3">
           <p className="text-[12.5px] text-white/25">&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
           <div className="flex gap-5">
-            {["Privacy Policy", "Terms of Service", "Booking Policy"].map((t) => (
-              <a key={t} href="#" className="text-[12.5px] text-white/25 hover:text-white/50 transition-colors duration-200">{t}</a>
-            ))}
+            <Link href="/privacy" className="text-[12.5px] text-white/25 hover:text-white/50 transition-colors duration-200">Privacy Policy</Link>
+            <Link href="/terms" className="text-[12.5px] text-white/25 hover:text-white/50 transition-colors duration-200">Terms of Service</Link>
           </div>
         </div>
       </div>

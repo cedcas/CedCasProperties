@@ -118,6 +118,7 @@ export default function BookingForm({
   const [error, setError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
   const [rulesAgreed, setRulesAgreed] = useState(false);
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   // Discount code state
   const [discountCodeInput, setDiscountCodeInput] = useState("");
@@ -306,6 +307,7 @@ export default function BookingForm({
     if (new Date(form.checkOut) <= new Date(form.checkIn)) { setError("Check-out must be after check-in."); return; }
     if (availabilityError) { setError(availabilityError); return; }
     if (propertyRules && !rulesAgreed) { setError("Please agree to the property rules to continue."); return; }
+    if (!termsAgreed) { setError("Please agree to the Terms of Service and Privacy Policy to continue."); return; }
 
     // If Stripe selected, create a payment intent
     if (paymentMethod === "stripe") {
@@ -735,6 +737,20 @@ export default function BookingForm({
             </label>
           </div>
         )}
+
+        {/* Terms of Service agreement */}
+        <div className="bg-white rounded-[16px] p-6 border border-black/[.06] shadow-[0_2px_12px_rgba(44,44,44,.07)]">
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" checked={termsAgreed} onChange={(e) => setTermsAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2" />
+            <span className="text-[13px] text-charcoal/70 leading-[1.5]">
+              I agree to the{" "}
+              <Link href="/terms" target="_blank" className="text-forest underline hover:text-forest/80">Terms of Service</Link>
+              {" "}and{" "}
+              <Link href="/privacy" target="_blank" className="text-forest underline hover:text-forest/80">Privacy Policy</Link>
+            </span>
+          </label>
+        </div>
 
         <button type="submit" disabled={submitting}
           className="w-full py-4 rounded-full text-[15px] font-semibold text-white hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
