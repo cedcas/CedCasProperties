@@ -14,8 +14,9 @@ const NAV = [
 ];
 
 const BOTTOM_NAV = [
-  { href: "/admin/users",  icon: "fa-users",           label: "Users" },
-  { href: "/admin/logs",   icon: "fa-clipboard-list",  label: "Logs" },
+  { href: "/admin/users",            icon: "fa-users",           label: "Users" },
+  { href: "/admin/logs",             icon: "fa-clipboard-list",  label: "Logs" },
+  { href: "/admin/change-password",  icon: "fa-key",             label: "Password" },
 ];
 
 interface AdminSidebarProps {
