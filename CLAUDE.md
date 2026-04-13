@@ -4,7 +4,7 @@
 
 CedCas Properties is a full-stack property rental website for a short-term rental business based in Lipa City, Batangas, Philippines. It is a direct-booking alternative to Airbnb — guests can browse listings, view photo galleries, pick dates, and book with QR-based payment (GCash or BPI). An admin panel lets the owner manage listings, images, and bookings.
 
-**Live URL:** `dev.cedcasproperties.com`
+**Live URL:** `haveninlipa.com`
 **Repo:** `github.com/cedcas/CedCasProperties`
 **Branch strategy:** `dev` for development, `main` for production (Vercel auto-deploys on push to `main`)
 
@@ -38,7 +38,7 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 |---|---|
 | `DATABASE_URL` | MySQL connection string (Hostinger) |
 | `NEXTAUTH_SECRET` | JWT signing secret (min 32 chars) |
-| `NEXTAUTH_URL` | App base URL (e.g. `https://dev.cedcasproperties.com`) |
+| `NEXTAUTH_URL` | App base URL (e.g. `https://haveninlipa.com`) |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token |
 | `SMTP_HOST` | Hostinger SMTP host (`smtp.hostinger.com`) |
 | `SMTP_PORT` | Hostinger SMTP port (`465`) |
@@ -209,7 +209,7 @@ Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
 - **No brand name in public-facing copy** — use generic phrasing like "our properties" instead of "CedCas Properties" in body text (the logo handles branding)
 - **QR codes are per-property** — `gcash-1br.jpg`, `bpi-1br.png`, etc. in `public/qr/`; updating requires a new git commit + deploy
 - **Testimonials are per-property** — moved from site-wide to property-level; each property has its own testimonials tab in admin
-- **Hostinger SMTP over Resend** — migrated from Resend to Nodemailer/Hostinger SMTP (`customerservice@haveninlipa.com`) because Resend was restricted to `cedcasproperties.com` and could not send from `haveninlipa.com` without domain verification. Transporter is created at runtime (not module-level) to avoid Vercel build-time initialization errors. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in Vercel env vars.
+- **Hostinger SMTP over Resend** — migrated from Resend to Nodemailer/Hostinger SMTP (`customerservice@haveninlipa.com`) because Resend was restricted to the old `cedcasproperties.com` domain and could not send from `haveninlipa.com` without domain verification. Transporter is created at runtime (not module-level) to avoid Vercel build-time initialization errors. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in Vercel env vars.
 - **`.npmrc`** — present to handle peer dependency issues
 
 ---
