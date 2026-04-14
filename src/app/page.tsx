@@ -163,7 +163,7 @@ export default function Home() {
             <div className="flex justify-center gap-4">
               {(
                 [
-                  ["fa-facebook-f", "Facebook",  "https://www.facebook.com/profile.php?id=61572535599006"],
+                  ["fa-facebook-f", "Facebook",  "https://www.facebook.com/haveninlipa"],
                   ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
                   ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
                   ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],

@@ -10,6 +10,7 @@ export interface ChatNode {
   link?: {                      // Optional CTA button
     label: string;
     href: string;
+    external?: boolean;         // If true, open in a new tab (for m.me, social, etc.)
   };
 }
 
@@ -32,7 +33,23 @@ export const chatTree: Record<string, ChatNode> = {
       { label: "Pricing",           nodeId: "pricing" },
       { label: "About Lipa City",   nodeId: "lipa" },
       { label: "Contact Us",        nodeId: "contact" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
     ],
+  },
+
+  // ── Talk to a Human (Messenger handoff) ──────────────
+  "talk-to-human": {
+    id: "talk-to-human",
+    message:
+      "Need to talk to a real person? Our team is on Messenger and happy to help. Tap below to start a chat — we usually reply within a few hours.",
+    options: [
+      { label: "← Back to topics", nodeId: "root" },
+    ],
+    link: {
+      label: "Message us on Facebook",
+      href: "https://m.me/haveninlipa",
+      external: true,
+    },
   },
 
   // ── Properties (options injected dynamically) ────────
@@ -100,6 +117,7 @@ export const chatTree: Record<string, ChatNode> = {
       "Discounts can be a fixed ₱ amount off or a percentage off your stay.",
     options: [
       { label: "How do I book?",    nodeId: "booking-how" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
       { label: "← Back to topics",  nodeId: "root" },
     ],
   },
@@ -113,6 +131,7 @@ export const chatTree: Record<string, ChatNode> = {
       "For full details, see our Terms of Service.",
     options: [
       { label: "Payment methods",   nodeId: "booking-payment" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
       { label: "← Back to topics",  nodeId: "root" },
     ],
     link: { label: "View Terms of Service", href: "/terms" },
@@ -165,6 +184,7 @@ export const chatTree: Record<string, ChatNode> = {
       "Check each listing for the maximum number of guests allowed. You can select your group size when booking.",
     options: [
       { label: "Our Properties",    nodeId: "properties" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
       { label: "← Back to topics",  nodeId: "root" },
     ],
   },
@@ -174,7 +194,7 @@ export const chatTree: Record<string, ChatNode> = {
       "Parking availability varies by property. Most of our listings include free parking or are in areas with convenient nearby parking.\n\n" +
       "Check the property listing or reach out to us if you need specific parking details!",
     options: [
-      { label: "Contact Us",        nodeId: "contact" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
       { label: "← Back to topics",  nodeId: "root" },
     ],
   },
@@ -185,6 +205,7 @@ export const chatTree: Record<string, ChatNode> = {
       "You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay. Booking directly also means no service fees — so you save compared to Airbnb!",
     options: [
       { label: "How do I book?",    nodeId: "booking-how" },
+      { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
       { label: "← Back to topics",  nodeId: "root" },
     ],
   },
@@ -295,6 +316,7 @@ export const chatTree: Record<string, ChatNode> = {
     id: "contact",
     message: "We'd love to hear from you! How would you like to reach us?",
     options: [
+      { label: "💬 Facebook Messenger", nodeId: "talk-to-human" },
       { label: "Send a message",  nodeId: "contact-form" },
       { label: "Email us",        nodeId: "contact-email" },
       { label: "Social media",    nodeId: "contact-social" },
@@ -324,7 +346,7 @@ export const chatTree: Record<string, ChatNode> = {
     id: "contact-social",
     message:
       "Follow us and send a message on any of our social channels:\n\n" +
-      "• **Facebook** — facebook.com/profile.php?id=61572535599006\n" +
+      "• **Facebook** — facebook.com/haveninlipa\n" +
       "• **Instagram** — @haven_inlipa\n" +
       "• **TikTok** — @haven_inlipa",
     options: [

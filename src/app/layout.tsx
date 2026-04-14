@@ -26,7 +26,7 @@ const localBusinessSchema = {
     addressCountry: "PH",
   },
   sameAs: [
-    "https://www.facebook.com/profile.php?id=61572535599006",
+    "https://www.facebook.com/haveninlipa",
     "https://www.instagram.com/haven_inlipa/",
     "https://www.tiktok.com/@haven_inlipa",
     "https://airbnb.com/h/fullhousebellavita",

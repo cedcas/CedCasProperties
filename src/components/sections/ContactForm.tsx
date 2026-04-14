@@ -82,7 +82,7 @@ export default function ContactForm() {
                 <div className="font-semibold text-charcoal text-[14px] mb-3">Find Us Online</div>
                 <div className="flex gap-3">
                   {[
-                    ["fa-facebook-f", "https://www.facebook.com/profile.php?id=61572535599006"],
+                    ["fa-facebook-f", "https://www.facebook.com/haveninlipa"],
                     ["fa-instagram",  "https://www.instagram.com/haven_inlipa/"],
                     ["fa-tiktok",     "https://www.tiktok.com/@haven_inlipa"],
                     ["fa-airbnb",     "https://airbnb.com/h/fullhousebellavita"],

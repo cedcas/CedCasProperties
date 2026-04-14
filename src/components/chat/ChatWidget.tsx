@@ -175,14 +175,26 @@ export default function ChatWidget({ tree }: ChatWidgetProps) {
             {/* CTA link for current node */}
             {currentNode?.link && (
               <div className="pl-9 mb-3">
-                <Link
-                  href={currentNode.link.href}
-                  onClick={() => setOpen(false)}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
-                >
-                  {currentNode.link.label}
-                  <i className="fa-solid fa-arrow-right text-[10px]" />
-                </Link>
+                {currentNode.link.external ? (
+                  <a
+                    href={currentNode.link.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
+                  >
+                    {currentNode.link.label}
+                    <i className="fa-solid fa-arrow-right text-[10px]" />
+                  </a>
+                ) : (
+                  <Link
+                    href={currentNode.link.href}
+                    onClick={() => setOpen(false)}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
+                  >
+                    {currentNode.link.label}
+                    <i className="fa-solid fa-arrow-right text-[10px]" />
+                  </Link>
+                )}
               </div>
             )}
           </div>
