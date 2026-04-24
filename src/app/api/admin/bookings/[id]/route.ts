@@ -4,6 +4,11 @@ import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
+import {
+  materializeScheduledMessagesForBooking,
+  flushDueScheduledMessages,
+  cancelScheduledMessagesForBooking,
+} from "@/lib/scheduler";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -12,11 +17,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const { status } = await req.json();
 
+  const prev = await prisma.booking.findUnique({ where: { id: Number(id) }, select: { status: true } });
+
   const booking = await prisma.booking.update({
     where: { id: Number(id) },
     data: { status },
     include: { property: true },
   });
+
+  const becameConfirmed = prev?.status !== "confirmed" && status === "confirmed";
+  const leftConfirmed = prev?.status === "confirmed" && status !== "confirmed";
 
   await logAction({
     actor: session.user.name ?? "Admin",
@@ -146,6 +156,26 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       });
     } catch (err) {
       console.error("Admin confirmation email failed:", err);
+    }
+  }
+
+  // Guest Messaging: materialize auto QuickReplies when booking becomes confirmed,
+  // then inline-flush any with sendAt already in the past (handles last-minute bookings).
+  if (becameConfirmed) {
+    try {
+      await materializeScheduledMessagesForBooking(booking.id);
+      await flushDueScheduledMessages({ bookingId: booking.id });
+    } catch (err) {
+      console.error("Scheduled message materialize/flush failed:", err);
+    }
+  }
+
+  // If booking is no longer confirmed, cancel any pending scheduled sends.
+  if (leftConfirmed) {
+    try {
+      await cancelScheduledMessagesForBooking(booking.id);
+    } catch (err) {
+      console.error("Scheduled message cancel failed:", err);
     }
   }
 

@@ -214,6 +214,25 @@ Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
 
 ---
 
+## Session Wrap-up Protocol
+
+**Trigger phrase:** when the user says **"We're done for today"** (or a close variant), run these two actions — no other input needed:
+
+1. **Update [About HIL/HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md)**
+   - This file is the durable technical record of the system. Keep it in sync with the code.
+   - Add/update sections that cover what changed this session: new models, new routes, new admin pages, new env vars, new crons, new libs, retired code, migration steps.
+   - Don't rewrite the whole file — surgically update the affected sections. Include file paths (`src/...`) so future devs can jump to code.
+   - If the file doesn't exist yet, create it with a full technical snapshot of the current codebase state.
+
+2. **Save a "session handoff" memory**
+   - Write a `project`-type memory named `session-handoff.md` (overwrite any previous one — only the latest matters).
+   - Body should answer: *what did we ship, what's half-done, what's queued next, any gotchas in the working tree* (uncommitted changes, migrations not yet run on prod, etc.).
+   - Also note the deploy state: whether the session's work has been committed/pushed, and what manual steps (e.g. seed scripts) still need to run on prod.
+
+Both actions are part of the same "end of session" commit — don't ask for confirmation, just do them when the trigger phrase appears.
+
+---
+
 ## Upcoming Features (Planned)
 
 See [CCP Upcoming Features.md](CCP Upcoming Features.md) for the full roadmap. High-priority items:

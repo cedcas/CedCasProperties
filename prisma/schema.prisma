@@ -31,6 +31,7 @@ model Property {
   bookings      Booking[]
   testimonials  Testimonial[]
   rates         PropertyRate[]
+  quickReplies  QuickReply[]
 }
 
 model Booking {
@@ -54,6 +55,61 @@ model Booking {
   notes         String?  @db.Text
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
+  scheduledMessages ScheduledMessage[]
+  guestMessages     GuestMessage[]
+}
+
+model QuickReply {
+  id                 Int       @id @default(autoincrement())
+  name               String    // admin label, e.g. "Welcome - 2BR"
+  property           Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId         Int?      // null = applies to all properties
+  subject            String    // email subject (template)
+  bodyTemplate       String    @db.Text  // handlebars-lite: {{guestFirstName}}, {{propertyName}}, etc.
+  trigger            String    @default("manual") // "auto" | "manual"
+  anchor             String?   // "checkIn" | "checkOut" | "confirmation"  (required when trigger="auto")
+  offsetHours        Int?      // signed hours relative to anchor. negative=before, positive=after. null for manual.
+  skipIfPastAnchor   Boolean   @default(false)  // if true, skip send when anchor event has already passed
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  scheduledMessages  ScheduledMessage[]
+  guestMessages      GuestMessage[]
+}
+
+model ScheduledMessage {
+  id            Int        @id @default(autoincrement())
+  booking       Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId     Int
+  quickReply    QuickReply @relation(fields: [quickReplyId], references: [id], onDelete: Cascade)
+  quickReplyId  Int
+  sendAt        DateTime   // precomputed absolute fire time
+  status        String     @default("pending") // pending | sent | skipped | failed
+  sentAt        DateTime?
+  error         String?    @db.Text
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  @@index([status, sendAt])
+  @@index([bookingId])
+}
+
+model GuestMessage {
+  id            Int         @id @default(autoincrement())
+  booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId     Int
+  quickReply    QuickReply? @relation(fields: [quickReplyId], references: [id], onDelete: SetNull)
+  quickReplyId  Int?        // null for free-text (non-template) sends
+  channel       String      @default("email") // email | sms (sms reserved for phase 2)
+  direction     String      @default("outbound") // outbound | inbound (inbound reserved for phase 2)
+  trigger       String      // "auto" | "manual"
+  subject       String
+  body          String      @db.Text
+  status        String      @default("sent") // sent | failed
+  error         String?     @db.Text
+  sentAt        DateTime    @default(now())
+
+  @@index([bookingId, sentAt])
 }
 
 model DiscountCode {
