@@ -113,6 +113,19 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
     }
   };
 
+  // Auto templates send immediately; manual templates load into the composer
+  // so the admin can edit (e.g. fill in a SmartLock code) before sending.
+  const handlePickReply = (r: QuickReply) => {
+    if (r.trigger === "auto") {
+      sendTemplate(r.id);
+    } else {
+      setFreeSubject(r.subject);
+      setFreeText(r.bodyTemplate);
+      setPicking(false);
+      setError(null);
+    }
+  };
+
   const sendFreeText = async () => {
     if (!freeSubject.trim() || !freeText.trim()) return;
     setSending(true);
@@ -214,11 +227,23 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
                   {replies.map((r) => (
                     <button
                       key={r.id}
-                      onClick={() => sendTemplate(r.id)}
+                      onClick={() => handlePickReply(r)}
                       disabled={sending}
                       className="text-left px-3 py-2.5 rounded-[10px] hover:bg-white border border-transparent hover:border-forest/20 disabled:opacity-50 transition-all"
                     >
-                      <div className="text-[13.5px] font-semibold text-charcoal truncate">{r.name}</div>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="text-[13.5px] font-semibold text-charcoal truncate">{r.name}</div>
+                        <span
+                          className={
+                            "text-[10px] uppercase tracking-wide px-1.5 py-px rounded flex-shrink-0 " +
+                            (r.trigger === "auto"
+                              ? "bg-forest/10 text-forest"
+                              : "bg-charcoal/10 text-charcoal/70")
+                          }
+                        >
+                          {r.trigger === "auto" ? "Send now" : "Edit & send"}
+                        </span>
+                      </div>
                       <div className="text-[12px] text-charcoal/50 truncate">{r.subject}</div>
                     </button>
                   ))}
