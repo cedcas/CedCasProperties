@@ -25,10 +25,11 @@ function wrapEmailHtml(subject: string, body: string): string {
 
 export type SendOptions = {
   bookingId: number;
-  quickReplyId: number | null;   // null = free-text manual send
+  quickReplyId: number | null;          // template sent as-is; null = free-text or edited-from-template
+  sourceQuickReplyId?: number | null;   // template the message started from; defaults to quickReplyId
   trigger: "auto" | "manual";
-  subject: string;               // raw template or literal
-  body: string;                  // raw template or literal
+  subject: string;                      // raw template or literal
+  body: string;                         // raw template or literal
 };
 
 export async function sendGuestMessage(opts: SendOptions) {
@@ -56,10 +57,14 @@ export async function sendGuestMessage(opts: SendOptions) {
     error = err instanceof Error ? err.message : String(err);
   }
 
+  const resolvedSourceId =
+    opts.sourceQuickReplyId !== undefined ? opts.sourceQuickReplyId : opts.quickReplyId;
+
   const msg = await prisma.guestMessage.create({
     data: {
       bookingId: booking.id,
       quickReplyId: opts.quickReplyId,
+      sourceQuickReplyId: resolvedSourceId,
       channel: "email",
       direction: "outbound",
       trigger: opts.trigger,

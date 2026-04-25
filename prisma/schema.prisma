@@ -73,8 +73,9 @@ model QuickReply {
   isActive           Boolean   @default(true)
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
-  scheduledMessages  ScheduledMessage[]
-  guestMessages      GuestMessage[]
+  scheduledMessages    ScheduledMessage[]
+  guestMessages        GuestMessage[] @relation("GuestMessageSent")
+  sourceGuestMessages  GuestMessage[] @relation("GuestMessageSource")
 }
 
 model ScheduledMessage {
@@ -95,21 +96,24 @@ model ScheduledMessage {
 }
 
 model GuestMessage {
-  id            Int         @id @default(autoincrement())
-  booking       Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  bookingId     Int
-  quickReply    QuickReply? @relation(fields: [quickReplyId], references: [id], onDelete: SetNull)
-  quickReplyId  Int?        // null for free-text (non-template) sends
-  channel       String      @default("email") // email | sms (sms reserved for phase 2)
-  direction     String      @default("outbound") // outbound | inbound (inbound reserved for phase 2)
-  trigger       String      // "auto" | "manual"
-  subject       String
-  body          String      @db.Text
-  status        String      @default("sent") // sent | failed
-  error         String?     @db.Text
-  sentAt        DateTime    @default(now())
+  id                 Int         @id @default(autoincrement())
+  booking            Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId          Int
+  quickReply         QuickReply? @relation("GuestMessageSent", fields: [quickReplyId], references: [id], onDelete: SetNull)
+  quickReplyId       Int?        // template sent as-is; null for free-text or edited-from-template sends
+  sourceQuickReply   QuickReply? @relation("GuestMessageSource", fields: [sourceQuickReplyId], references: [id], onDelete: SetNull)
+  sourceQuickReplyId Int?        // template this message originated from (covers edited sends); null only for pure free-text
+  channel            String      @default("email") // email | sms (sms reserved for phase 2)
+  direction          String      @default("outbound") // outbound | inbound (inbound reserved for phase 2)
+  trigger            String      // "auto" | "manual"
+  subject            String
+  body               String      @db.Text
+  status             String      @default("sent") // sent | failed
+  error              String?     @db.Text
+  sentAt             DateTime    @default(now())
 
   @@index([bookingId, sentAt])
+  @@index([sourceQuickReplyId])
 }
 
 model DiscountCode {

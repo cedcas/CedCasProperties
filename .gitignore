@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Local-only docs (contains admin credentials, internal specs, test plans)
 /About HIL/
+
+# Local-only utility scripts (require direct DB access; not safe to run in CI)
+/scripts/backfill-demo-threads.ts

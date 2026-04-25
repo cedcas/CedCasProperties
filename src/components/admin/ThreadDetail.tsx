@@ -59,6 +59,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
   const [picking, setPicking] = useState(false);
   const [freeText, setFreeText] = useState("");
   const [freeSubject, setFreeSubject] = useState("");
+  const [sourceQuickReplyId, setSourceQuickReplyId] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const feedEnd = useRef<HTMLDivElement>(null);
@@ -126,6 +127,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
     } else {
       setFreeSubject(r.subject);
       setFreeText(r.bodyTemplate);
+      setSourceQuickReplyId(r.id);
       setPicking(false);
       setError(null);
     }
@@ -139,11 +141,17 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
       const res = await fetch("/api/admin/guest-messages/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, subject: freeSubject, body: freeText }),
+        body: JSON.stringify({
+          bookingId,
+          subject: freeSubject,
+          body: freeText,
+          ...(sourceQuickReplyId !== null ? { sourceQuickReplyId } : {}),
+        }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Send failed");
       setFreeText("");
       setFreeSubject("");
+      setSourceQuickReplyId(null);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Send failed");

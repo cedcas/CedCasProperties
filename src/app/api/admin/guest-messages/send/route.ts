@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { bookingId, quickReplyId, subject, body } = await req.json();
+  const { bookingId, quickReplyId, sourceQuickReplyId, subject, body } = await req.json();
 
   if (!bookingId) {
     return NextResponse.json({ error: "bookingId is required" }, { status: 400 });
@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   let renderSubject: string;
   let renderBody: string;
   let resolvedQuickReplyId: number | null;
+  let resolvedSourceId: number | null;
 
   if (quickReplyId) {
     const reply = await prisma.quickReply.findUnique({ where: { id: Number(quickReplyId) } });
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     renderSubject = reply.subject;
     renderBody = reply.bodyTemplate;
     resolvedQuickReplyId = reply.id;
+    resolvedSourceId = reply.id;
   } else {
     if (typeof subject !== "string" || !subject.trim() || typeof body !== "string" || !body.trim()) {
       return NextResponse.json({ error: "subject and body are required" }, { status: 400 });
@@ -35,12 +37,14 @@ export async function POST(req: NextRequest) {
     renderSubject = subject;
     renderBody = body;
     resolvedQuickReplyId = null;
+    resolvedSourceId = sourceQuickReplyId ? Number(sourceQuickReplyId) : null;
   }
 
   try {
     const msg = await sendGuestMessage({
       bookingId: Number(bookingId),
       quickReplyId: resolvedQuickReplyId,
+      sourceQuickReplyId: resolvedSourceId,
       trigger: "manual",
       subject: renderSubject,
       body: renderBody,
