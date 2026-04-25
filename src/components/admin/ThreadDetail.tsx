@@ -78,9 +78,14 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
     setBooking(thread.booking);
     setMessages(thread.messages);
     setReplies(
-      allReplies.filter(
-        (r) => r.isActive && (r.propertyId === null || r.propertyId === thread.booking.property.id),
-      ),
+      allReplies
+        .filter(
+          (r) => r.isActive && (r.propertyId === null || r.propertyId === thread.booking.property.id),
+        )
+        .sort((a, b) => {
+          if (a.trigger !== b.trigger) return a.trigger === "manual" ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        }),
     );
     setLoading(false);
   };
