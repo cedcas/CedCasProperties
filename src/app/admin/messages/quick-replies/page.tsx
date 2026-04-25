@@ -20,6 +20,8 @@ export default async function QuickRepliesPage() {
     <QuickRepliesManager
       initialReplies={replies.map((r) => ({
         ...r,
+        trigger: r.trigger as "auto" | "manual",
+        anchor: r.anchor as "checkIn" | "checkOut" | "confirmation" | null,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),
       }))}
