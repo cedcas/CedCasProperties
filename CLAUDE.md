@@ -151,12 +151,8 @@ prisma/
   seed-testimonials.ts                # Seeds testimonials per property
 public/
   qr/
-    gcash.jpg                         # Default GCash QR
-    gcash-1br.jpg                     # 1BR-specific GCash QR
-    gcash-2br.jpg                     # 2BR-specific GCash QR
-    bpi.png                           # Default BPI QR
-    bpi-1br.png                       # 1BR-specific BPI QR
-    bpi-2br.png                       # 2BR-specific BPI QR
+    gcash.jpg                         # GCash payment QR (one QR for all properties)
+    bpi.png                           # BPI payment QR (one QR for all properties)
   brand-assets/
     Logo.png
     Transparent Logo.png
@@ -207,7 +203,8 @@ Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
 ## Important Decisions & Context
 
 - **No brand name in public-facing copy** — use generic phrasing like "our properties" instead of "CedCas Properties" in body text (the logo handles branding)
-- **QR codes are per-property** — `gcash-1br.jpg`, `bpi-1br.png`, etc. in `public/qr/`; updating requires a new git commit + deploy
+- **One generic QR per payment method** — a single `gcash.jpg` and a single `bpi.png` in `public/qr/` are used for every property (no per-property variants). Scales to any new property without QR work. SRI verification uses one hash per method (`NEXT_PUBLIC_QR_HASH_GCASH`, `NEXT_PUBLIC_QR_HASH_BPI`); rotating a QR requires regenerating the hash and redeploying.
+- **Mobile-first QR payment UX** — booker is assumed to be on a single mobile device. The QR card in `src/components/booking/PaymentQR.tsx` provides a "Save QR to Photos" button (capability-based fallback chain: Web Share API → `<a download>` → long-press hint), a tap-to-copy amount chip, and numbered step-by-step instructions tailored per payment method.
 - **Testimonials are per-property** — moved from site-wide to property-level; each property has its own testimonials tab in admin
 - **Hostinger SMTP over Resend** — migrated from Resend to Nodemailer/Hostinger SMTP (`customerservice@haveninlipa.com`) because Resend was restricted to the old `cedcasproperties.com` domain and could not send from `haveninlipa.com` without domain verification. Transporter is created at runtime (not module-level) to avoid Vercel build-time initialization errors. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` in Vercel env vars.
 - **`.npmrc`** — present to handle peer dependency issues
