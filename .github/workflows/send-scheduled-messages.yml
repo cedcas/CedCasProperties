@@ -7,7 +7,10 @@ on:
 
 concurrency:
   group: send-scheduled-messages
-  cancel-in-progress: false
+  # The cron is idempotent (DB query is "WHERE sendAt <= now() AND status = pending"),
+  # so cancelling a stuck-queued previous run is safe — and prevents stuck runs from
+  # blocking subsequent hours when GitHub's hosted runner pool can't allocate quickly.
+  cancel-in-progress: true
 
 jobs:
   trigger:
