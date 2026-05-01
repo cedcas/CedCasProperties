@@ -10,10 +10,14 @@ type QrStatus = "loading" | "verified" | "tampered" | "error";
 export function useQrIntegrity(
   imageSrc: string,
   expectedHash: string | undefined,
-): { status: QrStatus } {
+): { status: QrStatus; blob: Blob | null } {
   const [status, setStatus] = useState<QrStatus>("loading");
+  const [blob, setBlob] = useState<Blob | null>(null);
 
   useEffect(() => {
+    setStatus("loading");
+    setBlob(null);
+
     if (!expectedHash) {
       // No hash configured — can't verify
       setStatus("error");
@@ -30,7 +34,8 @@ export function useQrIntegrity(
           return;
         }
 
-        const buf = await res.arrayBuffer();
+        const fetchedBlob = await res.blob();
+        const buf = await fetchedBlob.arrayBuffer();
         const hashBuf = await crypto.subtle.digest("SHA-256", buf);
         const base64 = btoa(String.fromCharCode(...new Uint8Array(hashBuf)));
         const computed = `sha256-${base64}`;
@@ -38,6 +43,7 @@ export function useQrIntegrity(
         if (cancelled) return;
 
         if (computed === expectedHash) {
+          setBlob(fetchedBlob);
           setStatus("verified");
         } else {
           setStatus("tampered");
@@ -65,5 +71,5 @@ export function useQrIntegrity(
     };
   }, [imageSrc, expectedHash]);
 
-  return { status };
+  return { status, blob };
 }
