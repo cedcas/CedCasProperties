@@ -25,9 +25,17 @@ function isIOSSafari(): boolean {
 
 function isTouchDevice(): boolean {
   if (typeof window === "undefined") return false;
-  const coarse = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-  const touch = (navigator.maxTouchPoints ?? 0) > 0;
-  return coarse || touch;
+  const ua = navigator.userAgent;
+  // Definitive mobile/tablet UAs
+  if (/Android|iPhone|iPod/i.test(ua)) return true;
+  if (/iPad/.test(ua)) return true;
+  // iPadOS 13+ Safari uses Mac-like UA by default; disambiguate via touch points
+  if (/Macintosh/.test(ua) && (navigator.maxTouchPoints ?? 0) > 1) return true;
+  // Primary pointer is coarse — covers Android tablets with non-mobile UA strings.
+  // Intentionally NOT falling back to maxTouchPoints alone: Windows laptops with
+  // touchscreens report maxTouchPoints > 0 even when the user is driving with
+  // mouse + keyboard, which would route them into the share sheet incorrectly.
+  return window.matchMedia?.("(pointer: coarse)").matches ?? false;
 }
 
 function filenameFor(method: "gcash" | "bpi", src: string): string {
