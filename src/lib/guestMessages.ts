@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
+import { sendSms } from "@/lib/sms";
+import { normalizePhone, isPHNumber } from "@/lib/phone";
 import { buildVars, render, type TemplateContext } from "@/lib/templates";
 
 function wrapEmailHtml(subject: string, body: string): string {
@@ -23,10 +25,13 @@ function wrapEmailHtml(subject: string, body: string): string {
   `;
 }
 
+export type Channel = "email" | "sms";
+
 export type SendOptions = {
   bookingId: number;
   quickReplyId: number | null;          // template sent as-is; null = free-text or edited-from-template
   sourceQuickReplyId?: number | null;   // template the message started from; defaults to quickReplyId
+  channel?: Channel;                    // defaults to "email"
   trigger: "auto" | "manual";
   subject: string;                      // raw template or literal
   body: string;                         // raw template or literal
@@ -44,14 +49,54 @@ export async function sendGuestMessage(opts: SendOptions) {
   const subject = render(opts.subject, vars);
   const body = render(opts.body, vars);
 
+  const requestedChannel: Channel = opts.channel ?? "email";
+
+  // Resolve the actual channel + recipient. Downgrade SMS → email if number is missing,
+  // unparseable, or non-PH. Annotate the row so admin sees what happened.
+  let actualChannel: Channel = requestedChannel;
+  let toNumber: string | null = null;
+  let fromNumber: string | null = null;
+  let notes: string | null = null;
+  let providerMessageId: string | null = null;
+
+  if (requestedChannel === "sms") {
+    if (booking.optedOutAt) {
+      notes = `SMS skipped: guest opted out on ${booking.optedOutAt.toISOString()}; sent as email`;
+      actualChannel = "email";
+    } else {
+      const parsed = normalizePhone(booking.guestPhone);
+      if (!parsed) {
+        notes = `SMS skipped: guestPhone "${booking.guestPhone}" is not a valid number; sent as email`;
+        actualChannel = "email";
+      } else if (!isPHNumber(parsed.e164)) {
+        notes = `SMS skipped: non-PH number (${parsed.country}); sent as email`;
+        actualChannel = "email";
+        toNumber = parsed.e164;
+      } else {
+        toNumber = parsed.e164;
+      }
+    }
+  }
+
   let status: "sent" | "failed" = "sent";
   let error: string | null = null;
+
   try {
-    await sendEmail({
-      to: booking.guestEmail,
-      subject,
-      html: wrapEmailHtml(subject, body),
-    });
+    if (actualChannel === "sms" && toNumber) {
+      const result = await sendSms({ to: toNumber, body });
+      if (result.ok) {
+        providerMessageId = result.providerMessageId;
+        fromNumber = result.fromNumber;
+      } else {
+        throw new Error(result.error);
+      }
+    } else {
+      await sendEmail({
+        to: booking.guestEmail,
+        subject,
+        html: wrapEmailHtml(subject, body),
+      });
+    }
   } catch (err) {
     status = "failed";
     error = err instanceof Error ? err.message : String(err);
@@ -65,19 +110,23 @@ export async function sendGuestMessage(opts: SendOptions) {
       bookingId: booking.id,
       quickReplyId: opts.quickReplyId,
       sourceQuickReplyId: resolvedSourceId,
-      channel: "email",
+      channel: actualChannel,
       direction: "outbound",
       trigger: opts.trigger,
       subject,
       body,
       status,
       error,
+      notes,
+      fromNumber,
+      toNumber,
     },
   });
 
   if (status === "failed") {
-    const err = new Error(error ?? "email send failed");
-    (err as Error & { guestMessageId?: number }).guestMessageId = msg.id;
+    const err = new Error(error ?? `${actualChannel} send failed`);
+    (err as Error & { guestMessageId?: number; providerMessageId?: string | null }).guestMessageId = msg.id;
+    (err as Error & { providerMessageId?: string | null }).providerMessageId = providerMessageId;
     throw err;
   }
 

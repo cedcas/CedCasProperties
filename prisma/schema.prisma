@@ -9,25 +9,25 @@ datasource db {
 }
 
 model Property {
-  id          Int       @id @default(autoincrement())
-  slug        String    @unique
-  name        String
-  description String    @db.Text
-  type        String    // "2BR" | "3BR" | "Studio" etc.
-  pricePerNight Decimal @db.Decimal(10, 2)
-  location    String
-  bedrooms    Int       @default(1)
-  bathrooms   Int       @default(1)
-  maxGuests   Int       @default(2)
-  images        String    @db.Text  // JSON array of image URLs
-  featuredImage String?   @db.Text  // URL of the featured/cover image
-  amenities     String    @db.Text  // JSON array
-  propertyRules String?   @db.Text  // House rules and policies
-  isFeatured    Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  airbnbIcsUrl  String?   @db.Text  // Airbnb .ics import URL (Airbnb → CedCas sync)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id            Int            @id @default(autoincrement())
+  slug          String         @unique
+  name          String
+  description   String         @db.Text
+  type          String // "2BR" | "3BR" | "Studio" etc.
+  pricePerNight Decimal        @db.Decimal(10, 2)
+  location      String
+  bedrooms      Int            @default(1)
+  bathrooms     Int            @default(1)
+  maxGuests     Int            @default(2)
+  images        String         @db.Text // JSON array of image URLs
+  featuredImage String?        @db.Text // URL of the featured/cover image
+  amenities     String         @db.Text // JSON array
+  propertyRules String?        @db.Text // House rules and policies
+  isFeatured    Boolean        @default(false)
+  isActive      Boolean        @default(true)
+  airbnbIcsUrl  String?        @db.Text // Airbnb .ics import URL (Airbnb → CedCas sync)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
   bookings      Booking[]
   testimonials  Testimonial[]
   rates         PropertyRate[]
@@ -35,61 +35,64 @@ model Property {
 }
 
 model Booking {
-  id         Int      @id @default(autoincrement())
-  property   Property @relation(fields: [propertyId], references: [id])
-  propertyId Int
-  guestName  String
-  guestEmail String
-  guestPhone String
-  checkIn    DateTime
-  checkOut   DateTime
-  guests     Int      @default(1)
-  totalPrice Decimal  @db.Decimal(10, 2)
-  nightlyTotal  Decimal? @db.Decimal(10, 2)  // base nightly rate total (before fees/discounts)
-  stripeFee     Decimal? @db.Decimal(10, 2)  // Stripe 6% transaction fee
-  discountCode  String?  // applied promo code
-  discountAmount Decimal? @db.Decimal(10, 2) // discount amount (PHP)
-  status        String   @default("pending") // pending | confirmed | cancelled
-  paymentMethod String?  // "gcash" | "bpi" | "stripe"
+  id                    Int                @id @default(autoincrement())
+  property              Property           @relation(fields: [propertyId], references: [id])
+  propertyId            Int
+  guestName             String
+  guestEmail            String
+  guestPhone            String
+  checkIn               DateTime
+  checkOut              DateTime
+  guests                Int                @default(1)
+  totalPrice            Decimal            @db.Decimal(10, 2)
+  nightlyTotal          Decimal?           @db.Decimal(10, 2) // base nightly rate total (before fees/discounts)
+  stripeFee             Decimal?           @db.Decimal(10, 2) // Stripe 6% transaction fee
+  discountCode          String? // applied promo code
+  discountAmount        Decimal?           @db.Decimal(10, 2) // discount amount (PHP)
+  status                String             @default("pending") // pending | confirmed | cancelled
+  paymentMethod         String? // "gcash" | "bpi" | "stripe"
   stripePaymentIntentId String? // Stripe PaymentIntent ID
-  notes         String?  @db.Text
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-  scheduledMessages ScheduledMessage[]
-  guestMessages     GuestMessage[]
+  notes                 String?            @db.Text
+  optedOutAt            DateTime? // set when guest replies STOP; suppresses future SMS
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  scheduledMessages     ScheduledMessage[]
+  guestMessages         GuestMessage[]
 }
 
 model QuickReply {
-  id                 Int       @id @default(autoincrement())
-  name               String    // admin label, e.g. "Welcome - 2BR"
-  property           Property? @relation(fields: [propertyId], references: [id], onDelete: Cascade)
-  propertyId         Int?      // null = applies to all properties
-  subject            String    // email subject (template)
-  bodyTemplate       String    @db.Text  // handlebars-lite: {{guestFirstName}}, {{propertyName}}, etc.
-  trigger            String    @default("manual") // "auto" | "manual"
-  anchor             String?   // "checkIn" | "checkOut" | "confirmation"  (required when trigger="auto")
-  offsetHours        Int?      // signed hours relative to anchor. negative=before, positive=after. null for manual.
-  skipIfPastAnchor   Boolean   @default(false)  // if true, skip send when anchor event has already passed
-  isActive           Boolean   @default(true)
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-  scheduledMessages    ScheduledMessage[]
-  guestMessages        GuestMessage[] @relation("GuestMessageSent")
-  sourceGuestMessages  GuestMessage[] @relation("GuestMessageSource")
+  id                  Int                @id @default(autoincrement())
+  name                String // admin label, e.g. "Welcome - 2BR"
+  property            Property?          @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId          Int? // null = applies to all properties
+  subject             String // email subject (template)
+  bodyTemplate        String             @db.Text // handlebars-lite: {{guestFirstName}}, {{propertyName}}, etc.
+  trigger             String             @default("manual") // "auto" | "manual"
+  channel             String             @default("email") // "email" | "sms" — locked at send time
+  anchor              String? // "checkIn" | "checkOut" | "confirmation"  (required when trigger="auto")
+  offsetHours         Int? // signed hours relative to anchor. negative=before, positive=after. null for manual.
+  skipIfPastAnchor    Boolean            @default(false) // if true, skip send when anchor event has already passed
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  scheduledMessages   ScheduledMessage[]
+  guestMessages       GuestMessage[]     @relation("GuestMessageSent")
+  sourceGuestMessages GuestMessage[]     @relation("GuestMessageSource")
 }
 
 model ScheduledMessage {
-  id            Int        @id @default(autoincrement())
-  booking       Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  bookingId     Int
-  quickReply    QuickReply @relation(fields: [quickReplyId], references: [id], onDelete: Cascade)
-  quickReplyId  Int
-  sendAt        DateTime   // precomputed absolute fire time
-  status        String     @default("pending") // pending | sent | skipped | failed
-  sentAt        DateTime?
-  error         String?    @db.Text
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id           Int        @id @default(autoincrement())
+  booking      Booking    @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId    Int
+  quickReply   QuickReply @relation(fields: [quickReplyId], references: [id], onDelete: Cascade)
+  quickReplyId Int
+  channel      String     @default("email") // snapshot of QuickReply.channel at materialize time
+  sendAt       DateTime // precomputed absolute fire time
+  status       String     @default("pending") // pending | sent | skipped | failed
+  sentAt       DateTime?
+  error        String?    @db.Text
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   @@index([status, sendAt])
   @@index([bookingId])
@@ -100,45 +103,63 @@ model GuestMessage {
   booking            Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   bookingId          Int
   quickReply         QuickReply? @relation("GuestMessageSent", fields: [quickReplyId], references: [id], onDelete: SetNull)
-  quickReplyId       Int?        // template sent as-is; null for free-text or edited-from-template sends
+  quickReplyId       Int? // template sent as-is; null for free-text or edited-from-template sends
   sourceQuickReply   QuickReply? @relation("GuestMessageSource", fields: [sourceQuickReplyId], references: [id], onDelete: SetNull)
-  sourceQuickReplyId Int?        // template this message originated from (covers edited sends); null only for pure free-text
-  channel            String      @default("email") // email | sms (sms reserved for phase 2)
-  direction          String      @default("outbound") // outbound | inbound (inbound reserved for phase 2)
-  trigger            String      // "auto" | "manual"
+  sourceQuickReplyId Int? // template this message originated from (covers edited sends); null only for pure free-text
+  channel            String      @default("email") // email | sms
+  direction          String      @default("outbound") // outbound | inbound
+  trigger            String // "auto" | "manual"
   subject            String
   body               String      @db.Text
   status             String      @default("sent") // sent | failed
   error              String?     @db.Text
+  notes              String?     @db.Text // non-error annotations, e.g. "SMS skipped: non-PH number, sent as email"
+  fromNumber         String? // E.164 sender for SMS (long code); null for email
+  toNumber           String? // E.164 recipient for SMS (matched booking.guestPhone or raw inbound From); null for email
   sentAt             DateTime    @default(now())
 
   @@index([bookingId, sentAt])
   @@index([sourceQuickReplyId])
 }
 
+model UnmatchedInboundMessage {
+  id                Int       @id @default(autoincrement())
+  channel           String    @default("sms") // sms (future: whatsapp, etc.)
+  fromNumber        String // raw E.164 from provider
+  body              String    @db.Text
+  receivedAt        DateTime  @default(now())
+  resolvedAt        DateTime? // null = still in inbox; set when admin re-threads or dismisses
+  resolvedBookingId Int? // if admin re-threaded to a booking
+  providerMessageId String? // upstream provider's message ID (dedupe)
+  rawPayload        String?   @db.Text // JSON of provider webhook for debugging
+
+  @@index([resolvedAt, receivedAt])
+  @@index([fromNumber])
+}
+
 model DiscountCode {
   id         Int      @id @default(autoincrement())
   code       String   @unique
-  type       String   // "fixed" | "percentage"
-  value      Decimal  @db.Decimal(10, 2)  // PHP amount or percentage (0-100)
+  type       String // "fixed" | "percentage"
+  value      Decimal  @db.Decimal(10, 2) // PHP amount or percentage (0-100)
   isActive   Boolean  @default(true)
   usageCount Int      @default(0)
-  maxUses    Int?     // null = unlimited
+  maxUses    Int? // null = unlimited
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }
 
 model PropertyRate {
-  id           Int      @id @default(autoincrement())
-  property     Property @relation(fields: [propertyId], references: [id])
+  id           Int       @id @default(autoincrement())
+  property     Property  @relation(fields: [propertyId], references: [id])
   propertyId   Int
-  rateType     String   // "weekday" | "weekend" | "override"
-  dayOfWeek    Int?     // 0=Sun, 1=Mon...6=Sat; null for overrides
+  rateType     String // "weekday" | "weekend" | "override"
+  dayOfWeek    Int? // 0=Sun, 1=Mon...6=Sat; null for overrides
   specificDate DateTime? // for rateType="override"
-  rate         Decimal  @db.Decimal(10, 2)
+  rate         Decimal   @db.Decimal(10, 2)
   note         String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Testimonial {
@@ -165,12 +186,12 @@ model ContactMessage {
 }
 
 model AdminUser {
-  id          Int      @id @default(autoincrement())
-  email       String   @unique
-  password    String   // bcrypt hashed
+  id          Int              @id @default(autoincrement())
+  email       String           @unique
+  password    String // bcrypt hashed
   name        String
-  role        String   @default("admin") // "admin" | "manager"
-  createdAt   DateTime @default(now())
+  role        String           @default("admin") // "admin" | "manager"
+  createdAt   DateTime         @default(now())
   permissions AdminPermission?
   logs        AdminLog[]
 }
@@ -191,15 +212,15 @@ model AdminPermission {
 }
 
 model AdminLog {
-  id         Int      @id @default(autoincrement())
-  actor      String   // display name (admin name or "Guest")
-  actorRole  String   // "admin" | "manager" | "guest"
-  actorId    Int?     // AdminUser.id if admin/manager
-  adminUser  AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  action     String   // e.g. "Updated booking status", "Created property"
-  module     String   // "properties" | "bookings" | "messages" | "testimonials" | "promo_codes" | "users" | "booking_flow"
-  target     String?  // e.g. property slug, booking ID
-  ipAddress  String?
-  metadata   String?  @db.Text // JSON extra context
-  createdAt  DateTime @default(now())
+  id        Int        @id @default(autoincrement())
+  actor     String // display name (admin name or "Guest")
+  actorRole String // "admin" | "manager" | "guest"
+  actorId   Int? // AdminUser.id if admin/manager
+  adminUser AdminUser? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action    String // e.g. "Updated booking status", "Created property"
+  module    String // "properties" | "bookings" | "messages" | "testimonials" | "promo_codes" | "users" | "booking_flow"
+  target    String? // e.g. property slug, booking ID
+  ipAddress String?
+  metadata  String?    @db.Text // JSON extra context
+  createdAt DateTime   @default(now())
 }
