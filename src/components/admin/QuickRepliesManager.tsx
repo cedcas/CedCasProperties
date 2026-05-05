@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { TEMPLATE_VARS } from "@/lib/templates";
+import { smsLength } from "@/lib/sms-length";
 
 type PropertyLite = { id: number; name: string; type: string };
 
 type Anchor = "checkIn" | "checkOut" | "confirmation";
+type Channel = "email" | "sms";
 
 type QuickReply = {
   id: number;
@@ -16,6 +18,7 @@ type QuickReply = {
   subject: string;
   bodyTemplate: string;
   trigger: "auto" | "manual";
+  channel: Channel;
   anchor: Anchor | null;
   offsetHours: number | null;
   skipIfPastAnchor: boolean;
@@ -31,6 +34,7 @@ type FormState = {
   subject: string;
   bodyTemplate: string;
   trigger: "auto" | "manual";
+  channel: Channel;
   anchor: Anchor;
   offsetHours: number;
   skipIfPastAnchor: boolean;
@@ -49,6 +53,7 @@ const blankForm: FormState = {
   subject: "",
   bodyTemplate: "",
   trigger: "manual",
+  channel: "email",
   anchor: "checkIn",
   offsetHours: -5,
   skipIfPastAnchor: false,
@@ -92,6 +97,7 @@ export default function QuickRepliesManager({
       subject: r.subject,
       bodyTemplate: r.bodyTemplate,
       trigger: r.trigger,
+      channel: r.channel ?? "email",
       anchor: r.anchor ?? "checkIn",
       offsetHours: r.offsetHours ?? -5,
       skipIfPastAnchor: r.skipIfPastAnchor,
@@ -114,6 +120,7 @@ export default function QuickRepliesManager({
       subject: form.subject,
       bodyTemplate: form.bodyTemplate,
       trigger: form.trigger,
+      channel: form.channel,
       anchor: form.trigger === "auto" ? form.anchor : null,
       offsetHours: form.trigger === "auto" ? form.offsetHours : null,
       skipIfPastAnchor: form.skipIfPastAnchor,
@@ -193,6 +200,10 @@ export default function QuickRepliesManager({
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wide ${r.trigger === "auto" ? "bg-forest/10 text-forest" : "bg-[#C4A862]/15 text-[#8a7233]"}`}>
                       {r.trigger}
                     </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full uppercase tracking-wide flex items-center gap-1 ${r.channel === "sms" ? "bg-blue-50 text-blue-700" : "bg-charcoal/5 text-charcoal/60"}`}>
+                      <i className={`fa-solid ${r.channel === "sms" ? "fa-comment-sms" : "fa-envelope"} text-[9px]`} />
+                      {r.channel ?? "email"}
+                    </span>
                   </div>
                   <div className="text-[12.5px] text-charcoal/55 mb-1">
                     {r.property ? `${r.property.name}` : "All properties"}
@@ -251,6 +262,31 @@ export default function QuickRepliesManager({
                     <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-[12px] font-semibold text-charcoal/70 mb-1.5 uppercase tracking-wide">Channel</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, channel: "email" })}
+                    className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold flex items-center gap-2 ${form.channel === "email" ? "bg-forest text-white" : "bg-cream text-charcoal/65 hover:bg-charcoal/5"}`}
+                  >
+                    <i className="fa-solid fa-envelope text-[11px]" /> Email
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, channel: "sms" })}
+                    className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold flex items-center gap-2 ${form.channel === "sms" ? "bg-forest text-white" : "bg-cream text-charcoal/65 hover:bg-charcoal/5"}`}
+                  >
+                    <i className="fa-solid fa-comment-sms text-[11px]" /> SMS
+                  </button>
+                </div>
+                {form.channel === "sms" && (
+                  <p className="text-[11.5px] text-charcoal/50 mt-1.5">
+                    SMS templates use only the body — Subject is shown only in the admin thread, not sent. Foreign numbers auto-fall-back to email.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -355,9 +391,19 @@ export default function QuickRepliesManager({
                   value={form.bodyTemplate}
                   onChange={(e) => setForm({ ...form, bodyTemplate: e.target.value })}
                   placeholder="Hi {{guestFirstName}}, your stay at {{propertyName}} is coming up…"
-                  rows={8}
+                  rows={form.channel === "sms" ? 4 : 8}
                   className="w-full px-3 py-2.5 rounded-[8px] border border-black/[.1] text-[13.5px] leading-[1.6] font-mono focus:outline-none focus:border-forest/40 resize-y"
                 />
+                {form.channel === "sms" && (() => {
+                  const len = smsLength(form.bodyTemplate);
+                  const segWarn = len.segments > 1;
+                  return (
+                    <div className={`text-[11.5px] mt-1.5 ${segWarn ? "text-amber-700" : "text-charcoal/50"}`}>
+                      {len.chars} chars · {len.encoding} · {len.segments} segment{len.segments === 1 ? "" : "s"}
+                      {segWarn && <span> — multi-segment SMS bills per segment. Variables expand at send time, so actual length may differ.</span>}
+                    </div>
+                  );
+                })()}
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {TEMPLATE_VARS.map((v) => (
                     <button

@@ -1,18 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendGuestMessage } from "@/lib/guestMessages";
+import { sendGuestMessage, type Channel } from "@/lib/guestMessages";
 import { logAction, getIpFromRequest } from "@/lib/log";
 
-// POST body: { bookingId, quickReplyId? , subject?, body? }
-// - If quickReplyId is provided, render the template.
-// - Otherwise, subject+body are required (free-text send).
+// POST body: { bookingId, quickReplyId?, subject?, body?, channel? }
+// - If quickReplyId is provided, render the template; channel is taken from the template.
+// - Otherwise, subject+body are required (free-text send) and channel may be "email" | "sms" (defaults to "email").
 
 export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { bookingId, quickReplyId, sourceQuickReplyId, subject, body } = await req.json();
+  const { bookingId, quickReplyId, sourceQuickReplyId, subject, body, channel } = await req.json();
 
   if (!bookingId) {
     return NextResponse.json({ error: "bookingId is required" }, { status: 400 });
@@ -22,6 +22,7 @@ export async function POST(req: NextRequest) {
   let renderBody: string;
   let resolvedQuickReplyId: number | null;
   let resolvedSourceId: number | null;
+  let resolvedChannel: Channel = "email";
 
   if (quickReplyId) {
     const reply = await prisma.quickReply.findUnique({ where: { id: Number(quickReplyId) } });
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
     renderBody = reply.bodyTemplate;
     resolvedQuickReplyId = reply.id;
     resolvedSourceId = reply.id;
+    resolvedChannel = (reply.channel as Channel) || "email";
   } else {
     if (typeof subject !== "string" || !subject.trim() || typeof body !== "string" || !body.trim()) {
       return NextResponse.json({ error: "subject and body are required" }, { status: 400 });
@@ -38,6 +40,7 @@ export async function POST(req: NextRequest) {
     renderBody = body;
     resolvedQuickReplyId = null;
     resolvedSourceId = sourceQuickReplyId ? Number(sourceQuickReplyId) : null;
+    resolvedChannel = channel === "sms" ? "sms" : "email";
   }
 
   try {
@@ -45,6 +48,7 @@ export async function POST(req: NextRequest) {
       bookingId: Number(bookingId),
       quickReplyId: resolvedQuickReplyId,
       sourceQuickReplyId: resolvedSourceId,
+      channel: resolvedChannel,
       trigger: "manual",
       subject: renderSubject,
       body: renderBody,

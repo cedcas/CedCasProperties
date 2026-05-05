@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import DeleteButton from "@/components/admin/DeleteButton";
 import MarkReadButton from "@/components/admin/MarkReadButton";
@@ -8,12 +9,33 @@ export const dynamic = "force-dynamic";
 export default async function MessagesPage() {
   const messages = await prisma.contactMessage.findMany({ orderBy: { createdAt: "desc" } });
   const unread = messages.filter((m) => !m.isRead).length;
+  const unmatchedCount = await prisma.unmatchedInboundMessage.count({ where: { resolvedAt: null } });
 
   return (
     <div className="p-6 lg:p-10 max-w-4xl mx-auto">
       <div className="mb-8">
         <h1 className="font-serif font-semibold text-charcoal text-[1.8rem]">Messages</h1>
       </div>
+
+      {unmatchedCount > 0 && (
+        <Link
+          href="/admin/messages/unmatched"
+          className="block mb-6 bg-amber-50 border border-amber-200 rounded-[12px] px-5 py-3 hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <i className="fa-solid fa-circle-exclamation text-amber-600 text-[16px]" />
+              <div>
+                <div className="text-[13.5px] font-semibold text-amber-900">
+                  {unmatchedCount} unmatched SMS {unmatchedCount === 1 ? "reply" : "replies"} need attention
+                </div>
+                <div className="text-[12px] text-amber-700/85">From numbers that don&apos;t match any booking. Re-thread or dismiss.</div>
+              </div>
+            </div>
+            <i className="fa-solid fa-chevron-right text-amber-600 text-[12px]" />
+          </div>
+        </Link>
+      )}
 
       {/* Guest Messages — thread list with search, tied to bookings */}
       <GuestMessageThreads />

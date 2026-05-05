@@ -21,6 +21,7 @@ export default async function QuickRepliesPage() {
       initialReplies={replies.map((r) => ({
         ...r,
         trigger: r.trigger as "auto" | "manual",
+        channel: (r.channel === "sms" ? "sms" : "email") as "email" | "sms",
         anchor: r.anchor as "checkIn" | "checkOut" | "confirmation" | null,
         createdAt: r.createdAt.toISOString(),
         updatedAt: r.updatedAt.toISOString(),

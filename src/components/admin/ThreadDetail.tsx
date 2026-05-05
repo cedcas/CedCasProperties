@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+type Channel = "email" | "sms";
+
 type Booking = {
   id: number;
   guestName: string;
@@ -11,6 +13,7 @@ type Booking = {
   checkIn: string;
   checkOut: string;
   status: string;
+  optedOutAt: string | null;
   property: { id: number; name: string; type: string };
 };
 
@@ -19,7 +22,12 @@ type GuestMessage = {
   subject: string;
   body: string;
   trigger: "auto" | "manual";
+  channel: Channel;
+  direction: "outbound" | "inbound";
   status: string;
+  notes: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
   sentAt: string;
   quickReplyId: number | null;
 };
@@ -31,6 +39,7 @@ type QuickReply = {
   bodyTemplate: string;
   propertyId: number | null;
   trigger: "auto" | "manual";
+  channel: Channel;
   isActive: boolean;
 };
 
@@ -59,6 +68,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
   const [picking, setPicking] = useState(false);
   const [freeText, setFreeText] = useState("");
   const [freeSubject, setFreeSubject] = useState("");
+  const [freeChannel, setFreeChannel] = useState<Channel>("email");
   const [sourceQuickReplyId, setSourceQuickReplyId] = useState<number | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +137,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
     } else {
       setFreeSubject(r.subject);
       setFreeText(r.bodyTemplate);
+      setFreeChannel(r.channel ?? "email");
       setSourceQuickReplyId(r.id);
       setPicking(false);
       setError(null);
@@ -134,7 +145,8 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
   };
 
   const sendFreeText = async () => {
-    if (!freeSubject.trim() || !freeText.trim()) return;
+    if (!freeText.trim()) return;
+    if (freeChannel === "email" && !freeSubject.trim()) return;
     setSending(true);
     setError(null);
     try {
@@ -143,14 +155,16 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bookingId,
-          subject: freeSubject,
+          subject: freeSubject || (freeChannel === "sms" ? "SMS" : ""),
           body: freeText,
+          channel: freeChannel,
           ...(sourceQuickReplyId !== null ? { sourceQuickReplyId } : {}),
         }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Send failed");
       setFreeText("");
       setFreeSubject("");
+      setFreeChannel("email");
       setSourceQuickReplyId(null);
       await load();
     } catch (err) {
@@ -184,14 +198,25 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
         <h1 className="font-serif font-semibold text-charcoal text-[1.5rem] truncate">
           {firstName(booking.guestName)}, {booking.property.type}, {fmtShortDate(booking.checkIn)}–{fmtShortDate(booking.checkOut)}
         </h1>
-        <div className="text-[13px] text-charcoal/55 mt-1">
+        <div className="text-[13px] text-charcoal/55 mt-1 flex items-center gap-2 flex-wrap">
           <span>{booking.guestName}</span>
-          <span className="text-charcoal/25 mx-2">·</span>
+          <span className="text-charcoal/25">·</span>
           <a href={`mailto:${booking.guestEmail}`} className="hover:underline">{booking.guestEmail}</a>
-          <span className="text-charcoal/25 mx-2">·</span>
+          {booking.guestPhone && (
+            <>
+              <span className="text-charcoal/25">·</span>
+              <a href={`tel:${booking.guestPhone}`} className="hover:underline">{booking.guestPhone}</a>
+            </>
+          )}
+          <span className="text-charcoal/25">·</span>
           <span>{booking.property.name}</span>
-          <span className="text-charcoal/25 mx-2">·</span>
+          <span className="text-charcoal/25">·</span>
           <span className="capitalize">{booking.status}</span>
+          {booking.optedOutAt && (
+            <span className="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 uppercase tracking-wide font-semibold">
+              SMS opted out
+            </span>
+          )}
         </div>
       </div>
 
@@ -201,17 +226,59 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
           {messages.length === 0 ? (
             <div className="text-center text-charcoal/40 text-[13px] py-12">No messages sent yet.</div>
           ) : (
-            messages.map((m) => (
-              <div key={m.id} className="self-end max-w-[85%] bg-[#2C2C2C] text-white rounded-[16px] px-4 py-3 shadow-[0_2px_8px_rgba(44,44,44,.12)]">
-                <div className="text-[11px] text-white/55 mb-1 flex items-center gap-2">
-                  <span>{fmtTime(m.sentAt)}</span>
-                  {m.trigger === "auto" && <span className="text-[10px] px-1.5 py-px rounded bg-white/10 uppercase tracking-wide">Auto</span>}
-                  {m.status === "failed" && <span className="text-[10px] px-1.5 py-px rounded bg-red-500/30 text-red-200 uppercase tracking-wide">Failed</span>}
+            messages.map((m) => {
+              const inbound = m.direction === "inbound";
+              const channel = m.channel ?? "email";
+              return (
+                <div
+                  key={m.id}
+                  className={
+                    inbound
+                      ? "self-start max-w-[85%] bg-white border border-black/[.06] text-charcoal rounded-[16px] px-4 py-3 shadow-[0_2px_8px_rgba(0,0,0,.04)]"
+                      : "self-end max-w-[85%] bg-[#2C2C2C] text-white rounded-[16px] px-4 py-3 shadow-[0_2px_8px_rgba(44,44,44,.12)]"
+                  }
+                >
+                  <div className={`text-[11px] mb-1 flex items-center gap-2 ${inbound ? "text-charcoal/45" : "text-white/55"}`}>
+                    <span>{fmtTime(m.sentAt)}</span>
+                    <span
+                      className={
+                        "text-[10px] px-1.5 py-px rounded uppercase tracking-wide flex items-center gap-1 " +
+                        (inbound ? "bg-charcoal/5 text-charcoal/55" : "bg-white/10")
+                      }
+                    >
+                      <i className={`fa-solid ${channel === "sms" ? "fa-comment-sms" : "fa-envelope"} text-[9px]`} />
+                      {channel}
+                    </span>
+                    {!inbound && m.trigger === "auto" && (
+                      <span className="text-[10px] px-1.5 py-px rounded bg-white/10 uppercase tracking-wide">Auto</span>
+                    )}
+                    {inbound && (
+                      <span className="text-[10px] px-1.5 py-px rounded bg-blue-50 text-blue-700 uppercase tracking-wide">Reply</span>
+                    )}
+                    {m.status === "failed" && (
+                      <span
+                        className={
+                          "text-[10px] px-1.5 py-px rounded uppercase tracking-wide " +
+                          (inbound ? "bg-red-50 text-red-700" : "bg-red-500/30 text-red-200")
+                        }
+                      >
+                        Failed
+                      </span>
+                    )}
+                  </div>
+                  {channel === "email" && m.subject && (
+                    <div className="text-[13px] font-semibold mb-1">{m.subject}</div>
+                  )}
+                  <div className="text-[13.5px] leading-[1.6] whitespace-pre-wrap">{m.body}</div>
+                  {m.notes && (
+                    <div className={`text-[11px] mt-2 italic ${inbound ? "text-charcoal/40" : "text-white/45"}`}>
+                      <i className="fa-solid fa-circle-info text-[10px] mr-1" />
+                      {m.notes}
+                    </div>
+                  )}
                 </div>
-                <div className="text-[13px] font-semibold mb-1">{m.subject}</div>
-                <div className="text-[13.5px] leading-[1.6] whitespace-pre-wrap">{m.body}</div>
-              </div>
-            ))
+              );
+            })
           )}
           <div ref={feedEnd} />
         </div>
@@ -237,71 +304,119 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-                  {replies.map((r) => (
-                    <button
-                      key={r.id}
-                      onClick={() => handlePickReply(r)}
-                      disabled={sending}
-                      className="text-left px-3 py-2.5 rounded-[10px] hover:bg-white border border-transparent hover:border-forest/20 disabled:opacity-50 transition-all"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="text-[13.5px] font-semibold text-charcoal truncate">{r.name}</div>
-                        <span
-                          className={
-                            "text-[10px] uppercase tracking-wide px-1.5 py-px rounded flex-shrink-0 " +
-                            (r.trigger === "auto"
-                              ? "bg-forest/10 text-forest"
-                              : "bg-charcoal/10 text-charcoal/70")
-                          }
-                        >
-                          {r.trigger === "auto" ? "Send now" : "Edit & send"}
-                        </span>
-                      </div>
-                      <div className="text-[12px] text-charcoal/50 truncate">{r.subject}</div>
-                    </button>
-                  ))}
+                  {replies.map((r) => {
+                    const ch = r.channel ?? "email";
+                    return (
+                      <button
+                        key={r.id}
+                        onClick={() => handlePickReply(r)}
+                        disabled={sending}
+                        className="text-left px-3 py-2.5 rounded-[10px] hover:bg-white border border-transparent hover:border-forest/20 disabled:opacity-50 transition-all"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-[13.5px] font-semibold text-charcoal truncate">{r.name}</div>
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span
+                              className={
+                                "text-[10px] uppercase tracking-wide px-1.5 py-px rounded flex items-center gap-1 " +
+                                (ch === "sms" ? "bg-blue-50 text-blue-700" : "bg-charcoal/5 text-charcoal/60")
+                              }
+                            >
+                              <i className={`fa-solid ${ch === "sms" ? "fa-comment-sms" : "fa-envelope"} text-[9px]`} />
+                              {ch}
+                            </span>
+                            <span
+                              className={
+                                "text-[10px] uppercase tracking-wide px-1.5 py-px rounded " +
+                                (r.trigger === "auto"
+                                  ? "bg-forest/10 text-forest"
+                                  : "bg-charcoal/10 text-charcoal/70")
+                              }
+                            >
+                              {r.trigger === "auto" ? "Send now" : "Edit & send"}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-[12px] text-charcoal/50 truncate">{ch === "sms" ? r.bodyTemplate : r.subject}</div>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>
           ) : (
-            <div className="flex items-end gap-2">
-              <button
-                onClick={() => setPicking(true)}
-                disabled={sending}
-                title="Send from template"
-                className="w-10 h-10 rounded-full bg-cream hover:bg-forest hover:text-white text-charcoal flex items-center justify-center flex-shrink-0 disabled:opacity-50 transition-colors"
-              >
-                <i className="fa-solid fa-plus text-[14px]" />
-              </button>
-              <div className="flex-1 flex flex-col gap-2">
-                <input
-                  value={freeSubject}
-                  onChange={(e) => setFreeSubject(e.target.value)}
-                  placeholder="Subject"
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center gap-2 text-[12px]">
+                <button
+                  type="button"
+                  onClick={() => setFreeChannel("email")}
                   disabled={sending}
-                  className="w-full px-4 py-2.5 rounded-[10px] bg-cream/60 border border-transparent focus:border-forest/30 focus:bg-white text-[13.5px] text-charcoal placeholder:text-charcoal/35 focus:outline-none disabled:opacity-50"
-                />
-                <textarea
-                  value={freeText}
-                  onChange={(e) => setFreeText(e.target.value)}
-                  placeholder="Write a message…  (supports {{guestFirstName}} etc.)"
-                  rows={3}
-                  disabled={sending}
-                  className="w-full px-4 py-2.5 rounded-[10px] bg-cream/60 border border-transparent focus:border-forest/30 focus:bg-white text-[13.5px] text-charcoal placeholder:text-charcoal/35 focus:outline-none resize-none disabled:opacity-50"
-                />
-              </div>
-              <button
-                onClick={sendFreeText}
-                disabled={sending || !freeSubject.trim() || !freeText.trim()}
-                className="w-10 h-10 rounded-full bg-forest text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 hover:bg-forest/90 transition-colors"
-                aria-label="Send"
-              >
-                {sending ? (
-                  <i className="fa-solid fa-spinner fa-spin text-[13px]" />
-                ) : (
-                  <i className="fa-solid fa-arrow-up text-[13px]" />
+                  className={`px-3 py-1 rounded-full font-semibold flex items-center gap-1.5 transition-colors ${freeChannel === "email" ? "bg-forest text-white" : "bg-cream/80 text-charcoal/60 hover:bg-charcoal/5"}`}
+                >
+                  <i className="fa-solid fa-envelope text-[10px]" /> Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFreeChannel("sms")}
+                  disabled={sending || !!booking.optedOutAt}
+                  title={booking.optedOutAt ? "Guest opted out of SMS" : ""}
+                  className={`px-3 py-1 rounded-full font-semibold flex items-center gap-1.5 transition-colors ${freeChannel === "sms" ? "bg-forest text-white" : "bg-cream/80 text-charcoal/60 hover:bg-charcoal/5"} disabled:opacity-40 disabled:cursor-not-allowed`}
+                >
+                  <i className="fa-solid fa-comment-sms text-[10px]" /> SMS
+                </button>
+                {sourceQuickReplyId !== null && (
+                  <span className="text-[11px] text-charcoal/45 italic ml-1">
+                    Editing from template
+                    <button
+                      onClick={() => { setSourceQuickReplyId(null); setFreeText(""); setFreeSubject(""); }}
+                      className="ml-2 text-charcoal/40 hover:text-charcoal underline"
+                    >
+                      clear
+                    </button>
+                  </span>
                 )}
-              </button>
+              </div>
+              <div className="flex items-end gap-2">
+                <button
+                  onClick={() => setPicking(true)}
+                  disabled={sending}
+                  title="Send from template"
+                  className="w-10 h-10 rounded-full bg-cream hover:bg-forest hover:text-white text-charcoal flex items-center justify-center flex-shrink-0 disabled:opacity-50 transition-colors"
+                >
+                  <i className="fa-solid fa-plus text-[14px]" />
+                </button>
+                <div className="flex-1 flex flex-col gap-2">
+                  {freeChannel === "email" && (
+                    <input
+                      value={freeSubject}
+                      onChange={(e) => setFreeSubject(e.target.value)}
+                      placeholder="Subject"
+                      disabled={sending}
+                      className="w-full px-4 py-2.5 rounded-[10px] bg-cream/60 border border-transparent focus:border-forest/30 focus:bg-white text-[13.5px] text-charcoal placeholder:text-charcoal/35 focus:outline-none disabled:opacity-50"
+                    />
+                  )}
+                  <textarea
+                    value={freeText}
+                    onChange={(e) => setFreeText(e.target.value)}
+                    placeholder={freeChannel === "sms" ? "Write an SMS… (160 chars per segment)" : "Write a message…  (supports {{guestFirstName}} etc.)"}
+                    rows={freeChannel === "sms" ? 2 : 3}
+                    disabled={sending}
+                    className="w-full px-4 py-2.5 rounded-[10px] bg-cream/60 border border-transparent focus:border-forest/30 focus:bg-white text-[13.5px] text-charcoal placeholder:text-charcoal/35 focus:outline-none resize-none disabled:opacity-50"
+                  />
+                </div>
+                <button
+                  onClick={sendFreeText}
+                  disabled={sending || !freeText.trim() || (freeChannel === "email" && !freeSubject.trim())}
+                  className="w-10 h-10 rounded-full bg-forest text-white flex items-center justify-center flex-shrink-0 disabled:opacity-40 hover:bg-forest/90 transition-colors"
+                  aria-label="Send"
+                >
+                  {sending ? (
+                    <i className="fa-solid fa-spinner fa-spin text-[13px]" />
+                  ) : (
+                    <i className="fa-solid fa-arrow-up text-[13px]" />
+                  )}
+                </button>
+              </div>
             </div>
           )}
         </div>

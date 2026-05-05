@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
 
   const trigger = body.trigger === "auto" ? "auto" : "manual";
+  const channel = body.channel === "sms" ? "sms" : "email";
   const validAnchors = ["checkIn", "checkOut", "confirmation"] as const;
   const anchor = trigger === "auto"
     ? (validAnchors.includes(body.anchor) ? body.anchor : "checkIn")
@@ -38,6 +39,7 @@ export async function POST(req: NextRequest) {
       subject: String(body.subject ?? "").trim(),
       bodyTemplate: String(body.bodyTemplate ?? ""),
       trigger,
+      channel,
       anchor,
       offsetHours,
       skipIfPastAnchor: Boolean(body.skipIfPastAnchor),

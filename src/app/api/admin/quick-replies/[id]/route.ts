@@ -30,6 +30,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (typeof body.bodyTemplate === "string") data.bodyTemplate = body.bodyTemplate;
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;
   if (typeof body.skipIfPastAnchor === "boolean") data.skipIfPastAnchor = body.skipIfPastAnchor;
+  if (body.channel === "email" || body.channel === "sms") data.channel = body.channel;
 
   if (body.trigger === "manual") {
     data.trigger = "manual";
