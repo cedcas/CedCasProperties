@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
+import { normalizePhone } from "@/lib/phone";
 
 export async function POST(req: NextRequest) {
   const {
@@ -25,6 +26,12 @@ export async function POST(req: NextRequest) {
   if (!propertyId || !guestName || !guestEmail || !guestPhone || !checkIn || !checkOut) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+
+  const normalizedPhone = normalizePhone(guestPhone);
+  if (!normalizedPhone) {
+    return NextResponse.json({ error: "Phone number is invalid. Use a Philippine number like 09171234567 or international with + prefix." }, { status: 400 });
+  }
+  const guestPhoneE164 = normalizedPhone.e164;
 
   const checkInDate  = new Date(checkIn);
   const checkOutDate = new Date(checkOut);
@@ -138,7 +145,7 @@ export async function POST(req: NextRequest) {
       propertyId: Number(propertyId),
       guestName,
       guestEmail,
-      guestPhone,
+      guestPhone: guestPhoneE164,
       checkIn:   checkInDate,
       checkOut:  checkOutDate,
       guests:    Number(guests) || 1,
