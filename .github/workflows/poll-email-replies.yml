@@ -1,0 +1,28 @@
+name: Poll email replies (Hostinger IMAP)
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: poll-email-replies
+  # Cron is idempotent (UID watermark advances monotonically), so cancelling a
+  # stuck-queued previous run is safe and prevents back-pressure when GitHub's
+  # hosted runner pool can't allocate quickly.
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call Vercel cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+               --max-time 60 \
+               -H "Authorization: Bearer $CRON_SECRET" \
+               https://haveninlipa.com/api/cron/poll-email-replies

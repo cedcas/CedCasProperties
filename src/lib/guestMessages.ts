@@ -80,6 +80,7 @@ export async function sendGuestMessage(opts: SendOptions) {
 
   let status: "sent" | "failed" = "sent";
   let error: string | null = null;
+  let messageId: string | null = null;
 
   try {
     if (actualChannel === "sms" && toNumber) {
@@ -91,11 +92,12 @@ export async function sendGuestMessage(opts: SendOptions) {
         throw new Error(result.error);
       }
     } else {
-      await sendEmail({
+      const sent = await sendEmail({
         to: booking.guestEmail,
         subject,
         html: wrapEmailHtml(subject, body),
       });
+      messageId = sent.messageId;
     }
   } catch (err) {
     status = "failed";
@@ -120,6 +122,7 @@ export async function sendGuestMessage(opts: SendOptions) {
       notes,
       fromNumber,
       toNumber,
+      messageId,
     },
   });
 

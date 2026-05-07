@@ -4,6 +4,7 @@ import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
+import { promoteContactMessagesForEmail } from "@/lib/emailReply";
 
 export async function POST(req: NextRequest) {
   const {
@@ -168,6 +169,19 @@ export async function POST(req: NextRequest) {
       where: { code: discountCode },
       data: { usageCount: { increment: 1 } },
     });
+  }
+
+  // Promote any pre-booking Contact Us inquiries from this email into the new
+  // booking's GuestMessage thread. Idempotent and best-effort — failure does not
+  // block booking creation.
+  try {
+    await promoteContactMessagesForEmail({
+      bookingId: booking.id,
+      email: guestEmail,
+      bookingCreatedAt: booking.createdAt,
+    });
+  } catch (err) {
+    console.error("[bookings] promoteContactMessagesForEmail failed:", err);
   }
 
   const nights = dailyRates.length;

@@ -116,10 +116,20 @@ model GuestMessage {
   notes              String?     @db.Text // non-error annotations, e.g. "SMS skipped: non-PH number, sent as email"
   fromNumber         String? // E.164 sender for SMS (long code); null for email
   toNumber           String? // E.164 recipient for SMS (matched booking.guestPhone or raw inbound From); null for email
+  messageId          String?     @db.VarChar(998) // RFC 5322 Message-ID header value (sans angle brackets); used for In-Reply-To threading on inbound polling
   sentAt             DateTime    @default(now())
 
   @@index([bookingId, sentAt])
   @@index([sourceQuickReplyId])
+  @@index([messageId])
+}
+
+model EmailPollState {
+  id           Int       @id @default(autoincrement())
+  mailbox      String    @unique // e.g. "INBOX"
+  lastSeenUid  Int       @default(0) // highest IMAP UID processed so far; 0 = uninitialized
+  lastPolledAt DateTime?
+  updatedAt    DateTime  @updatedAt
 }
 
 model UnmatchedInboundMessage {
@@ -175,14 +185,21 @@ model Testimonial {
 }
 
 model ContactMessage {
-  id        Int      @id @default(autoincrement())
-  name      String
-  email     String
-  phone     String
-  subject   String
-  message   String   @db.Text
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
+  id                  Int       @id @default(autoincrement())
+  name                String
+  email               String
+  phone               String
+  subject             String
+  message             String    @db.Text
+  isRead              Boolean   @default(false)
+  source              String    @default("contact-form") // "contact-form" | "email" — which channel this came from
+  messageId           String?   @db.VarChar(998) // RFC 5322 Message-ID (sans angle brackets) when source="email"; null for form submissions
+  promotedToBookingId Int? // when set, this inquiry was migrated into a Booking's GuestMessage thread; hide from Contact Us inbox
+  promotedAt          DateTime?
+  createdAt           DateTime  @default(now())
+
+  @@index([email])
+  @@index([promotedToBookingId])
 }
 
 model AdminUser {
