@@ -6,6 +6,9 @@ import Footer from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description: "How we collect, use, and protect your personal information when you book a stay with us.",
+  alternates: {
+    canonical: "/privacy",
+  },
 };
 
 export default function PrivacyPage() {

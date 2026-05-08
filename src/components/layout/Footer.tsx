@@ -5,7 +5,7 @@ export default function Footer() {
   return (
     <footer className="bg-[#1c1c1c] pt-[72px]">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-14 pb-16 border-b border-white/[.08]">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-14 pb-16 border-b border-white/[.08]">
 
           {/* Brand */}
           <div>
@@ -32,16 +32,45 @@ export default function Footer() {
             </h4>
             <ul className="flex flex-col gap-3">
               {[
-                ["Our Properties", "#properties"],
-                ["About Us",       "#why"],
-                ["Amenities",      "#why"],
-                ["Location",       "#location"],
-                ["Guest Reviews",  "#testimonials"],
-                ["Contact Us",     "#contact"],
-                ["Book a Stay",    "#cta"],
+                ["Our Properties", "/#properties", false],
+                ["About Us",       "/about",       false],
+                ["Location",       "/#location",   false],
+                ["Guest Reviews",  "/#testimonials", false],
+                ["FAQ",            "/faq",         false],
+                ["Contact Us",     "/#contact",    false],
+                ["Book a Stay",    "/#cta",        false],
+              ].map(([label, href, external]) => (
+                <li key={label as string}>
+                  <Link href={href as string} className="text-[14px] text-white/45 hover:text-[#FF5371] transition-colors duration-200" {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                    {label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Plan your trip — blog links for SEO authority distribution */}
+          <div>
+            <h4 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
+              Plan Your Trip
+              <span className="absolute bottom-[-1px] left-0 w-7 h-0.5 bg-[#FF5371] rounded" />
+            </h4>
+            <ul className="flex flex-col gap-3">
+              {[
+                ["15 Things to Do in Lipa", "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/"],
+                ["Best Restaurants in Lipa", "https://blog.haveninlipa.com/best-restaurants-in-lipa-city-batangas-2026/"],
+                ["Mt. Maculot Hiking Guide", "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-cuenca-rockies/"],
+                ["Taal Volcano Day Trip", "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/"],
+                ["Why Book Direct vs. Airbnb", "https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/"],
+                ["Visit the Blog", "https://blog.haveninlipa.com"],
               ].map(([label, href]) => (
                 <li key={label}>
-                  <a href={href} className="text-[14px] text-white/45 hover:text-[#FF5371] transition-colors duration-200">
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[14px] text-white/45 hover:text-[#FF5371] transition-colors duration-200"
+                  >
                     {label}
                   </a>
                 </li>

@@ -9,6 +9,7 @@ const links = [
   { label: "About",      href: "/#why" },
   { label: "Location",   href: "/#location" },
   { label: "Blog",       href: "https://blog.haveninlipa.com", external: true },
+  { label: "FAQ",        href: "/faq" },
   { label: "Contact",    href: "/#contact" },
 ];
 

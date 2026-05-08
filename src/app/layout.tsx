@@ -62,6 +62,9 @@ export const metadata: Metadata = {
     "Stay in Style, Live in Comfort. Clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas, Philippines.",
   keywords:
     "short-term rental, Lipa City, Batangas, vacation rental, Haven in Lipa, Airbnb alternative",
+  alternates: {
+    canonical: "/",
+  },
   openGraph: {
     title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
     description:

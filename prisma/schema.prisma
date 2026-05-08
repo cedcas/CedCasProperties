@@ -26,6 +26,20 @@ model Property {
   isFeatured    Boolean        @default(false)
   isActive      Boolean        @default(true)
   airbnbIcsUrl  String?        @db.Text // Airbnb .ics import URL (Airbnb → CedCas sync)
+  // SEO + long-form content (May 8 2026 SEO audit deliverables)
+  seoTitle              String?  @db.Text // <title> override
+  seoDescription        String?  @db.Text // meta description
+  tagline               String?  @db.Text // hero one-liner ("Netflix • Wi-Fi • 9 Pax • Parking")
+  heroSummary           String?  @db.Text // first paragraph above the fold
+  bestForSegments       String?  @db.Text // JSON: [{ title, body, internalLinkSlug, internalLinkLabel, internalLinkUrl }]
+  amenityDetails        String?  @db.Text // JSON: [{ section, body, items[] }]
+  neighborhoodPlaces    String?  @db.Text // JSON: [{ radiusLabel, places[] }]
+  housePolicies         String?  @db.Text // JSON: { checkInTime, checkOutTime, maxGuests, smoking, parties, pets, notes[] }
+  pricingNotes          String?  @db.Text // JSON: { weeklyDiscount, monthlyDiscount, deposit, cancellation: {...} }
+  propertyFaqs          String?  @db.Text // JSON: [{ question, answer }]
+  imageAlts             String?  @db.Text // JSON: string[] parallel to `images`
+  aggregateReviewCount  Int?
+  aggregateReviewRating Float?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   bookings      Booking[]

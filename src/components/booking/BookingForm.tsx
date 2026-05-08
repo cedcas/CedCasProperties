@@ -618,7 +618,7 @@ export default function BookingForm({
             <div>
               <label className={labelCls}>Phone Number *</label>
               <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} placeholder="09171234567 or +63 917 123 4567" className={inputCls} />
-              <p className="text-[11px] text-charcoal/45 mt-1">We&apos;ll send transactional SMS reminders about your stay (PH numbers only).</p>
+              <p className="text-[11px] text-charcoal/45 mt-1">So we can reach you about your stay if needed.</p>
             </div>
           </div>
         </div>

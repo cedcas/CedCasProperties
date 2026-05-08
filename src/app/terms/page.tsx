@@ -6,6 +6,9 @@ import Footer from "@/components/layout/Footer";
 export const metadata: Metadata = {
   title: "Terms of Service",
   description: "Booking terms, cancellation policy, house rules, and payment terms for our short-term rental properties.",
+  alternates: {
+    canonical: "/terms",
+  },
 };
 
 export default function TermsPage() {

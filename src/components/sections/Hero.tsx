@@ -1,4 +1,14 @@
-export default function Hero() {
+type HeroProps = {
+  /** Live count of active properties — pulled from DB by the parent. */
+  propertyCount?: number;
+};
+
+export default function Hero({ propertyCount }: HeroProps) {
+  const propertyCountLabel =
+    typeof propertyCount === "number" && propertyCount > 0
+      ? String(propertyCount)
+      : "2";
+
   return (
     <section className="relative min-h-screen flex flex-col justify-center overflow-hidden">
       {/* Light vacation background */}
@@ -89,7 +99,7 @@ export default function Hero() {
           }}
         >
           {[
-            { icon: "fa-house",        value: "5+",       label: "Properties"      },
+            { icon: "fa-house",        value: propertyCountLabel, label: "Properties"      },
             { icon: "fa-users",        value: "280+",     label: "Happy Guests"    },
             { icon: "fa-star",         value: "5.0",      label: "Avg Rating"      },
             { icon: "fa-comment",      value: "180+",     label: "Five-Star Reviews"},

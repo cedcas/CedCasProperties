@@ -11,6 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
+    "seed:property-seo": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-property-seo.ts",
     "qr:hash": "node scripts/generate-qr-hash.js"
   },
   "prisma": {

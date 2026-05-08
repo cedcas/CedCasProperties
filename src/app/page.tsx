@@ -2,75 +2,17 @@ export const dynamic = "force-dynamic";
 
 import type { Metadata } from "next";
 import Link from "next/link";
+import { prisma } from "@/lib/prisma";
 
 export const metadata: Metadata = {
   title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
   description:
-    "Discover clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas. Book directly and save on Airbnb fees. GCash & BPI accepted.",
+    "Clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas. Book direct and save 15–20% vs. Airbnb. GCash, BPI & credit cards accepted.",
+  alternates: {
+    canonical: "/",
+  },
 };
 
-const faqSchema = {
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  mainEntity: [
-    {
-      "@type": "Question",
-      name: "What makes your properties different from a hotel or Airbnb?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Our properties are fully furnished homes — not hotel rooms. You get a full kitchen, living area, and the kind of space to relax that a hotel just can't offer. And unlike Airbnb, booking directly with us means no service fees and a more personal experience with your host.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Where exactly are your properties located in Lipa City, Batangas?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "All our properties are in Lipa City, Batangas — a thriving city in the heart of the CALABARZON region, just 2–3 hours from Metro Manila. Whether you're here for the cool highland climate, the cafes, or visiting family, we're conveniently located to get you wherever you're going.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "How do I book a short-term rental in Lipa City, Batangas?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "It's simple: browse our listings, pick your dates, and complete a quick booking form. We accept payment via GCash or BPI InstaPay — no credit card required. You'll get a confirmation once your payment is verified.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Can I book for just one night?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Yes! We welcome short stays. Whether you need a one-night stopover or a week-long retreat, you can select any available dates on the property page and see the total price upfront.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "Is it safe to book directly instead of through Airbnb?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Absolutely. We've hosted over 280 guests and take pride in transparent communication from the moment you inquire. You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "What amenities are included in your short-term rentals?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "Amenities vary by property but typically include air conditioning, Wi-Fi, a full kitchen, hot shower, and all the basics you need for a comfortable stay. Check each property's listing for the full amenity list.",
-      },
-    },
-    {
-      "@type": "Question",
-      name: "What is your cancellation policy for bookings?",
-      acceptedAnswer: {
-        "@type": "Answer",
-        text: "We follow a strict cancellation policy: partial refunds are available for cancellations made 7 or more days before check-in. We also offer one free rebooking if requested at least 14 days before your original check-in date.",
-      },
-    },
-  ],
-};
 import Navbar        from "@/components/layout/Navbar";
 import Footer        from "@/components/layout/Footer";
 import Hero          from "@/components/sections/Hero";
@@ -82,13 +24,11 @@ import ContactForm   from "@/components/sections/ContactForm";
 import DiscoverLipa  from "@/components/sections/DiscoverLipa";
 import ScrollReveal  from "@/components/ui/ScrollReveal";
 
-export default function Home() {
+export default async function Home() {
+  const propertyCount = await prisma.property.count({ where: { isActive: true } });
+
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqSchema) }}
-      />
       {/* Font Awesome */}
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link
@@ -99,7 +39,7 @@ export default function Home() {
       <ScrollReveal />
       <Navbar />
       <main>
-        <Hero />
+        <Hero propertyCount={propertyCount} />
         <TrustSignals />
         <Properties />
         <WhyUs />
