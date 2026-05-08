@@ -120,6 +120,16 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const property = await prisma.property.findUnique({ where: { slug, isActive: true } });
   if (!property) notFound();
 
+  // Pull a handful of active testimonials for the JSON-LD `review` entities.
+  // Cap at 8 — Google's VacationRental rich result only needs ≥1 to clear
+  // the optional `review` warning, and 8 is the soft ceiling for what
+  // surfaces in rich snippets without bloating the JSON-LD.
+  const reviewTestimonials = await prisma.testimonial.findMany({
+    where: { propertyId: property.id, isActive: true },
+    orderBy: { createdAt: "desc" },
+    take: 8,
+  });
+
   const rawImages: string[] = safeJsonParse(property.images, []);
   const featuredUrl = property.featuredImage ?? null;
   const images = featuredUrl
@@ -135,7 +145,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const propertyFaqs: PropertyFaq[] = safeJsonParse(property.propertyFaqs, []);
   const coverImage = featuredUrl || images[0] || null;
 
-  const jsonLd = buildPropertyJsonLd(property);
+  const jsonLd = buildPropertyJsonLd(property, reviewTestimonials);
 
   return (
     <>

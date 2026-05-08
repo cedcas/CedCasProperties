@@ -1,4 +1,4 @@
-import type { Property } from "@prisma/client";
+import type { Property, Testimonial } from "@prisma/client";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
 
@@ -31,9 +31,10 @@ type PropertyFaq = { question: string; answer: string };
  *
  * Required fields covered: identifier, name, description, image, address,
  * geo, containsPlace (Accommodation with bedrooms/bathrooms/occupancy/
- * amenityFeature). Optional but valuable: aggregateRating.
+ * amenityFeature). Recommended: aggregateRating + per-review Review
+ * entities, additionalType, FAQPage graph entry.
  */
-export function buildPropertyJsonLd(property: Property) {
+export function buildPropertyJsonLd(property: Property, testimonials: Testimonial[] = []) {
   const url = `${BASE_URL}/properties/${property.slug}`;
   const amenities: string[] = safeJsonParse(property.amenities, []);
   const propertyFaqs: PropertyFaq[] = safeJsonParse(property.propertyFaqs, []);
@@ -66,6 +67,7 @@ export function buildPropertyJsonLd(property: Property) {
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
+    additionalType: "https://schema.org/HouseAndApartment",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
@@ -82,6 +84,11 @@ export function buildPropertyJsonLd(property: Property) {
       longitude: LIPA_CITY_GEO.longitude,
     },
     containsPlace: accommodation,
+    brand: {
+      "@type": "Organization",
+      name: "Haven in Lipa",
+      url: BASE_URL,
+    },
   };
 
   if (imageUrls.length > 0) {
@@ -93,7 +100,29 @@ export function buildPropertyJsonLd(property: Property) {
       "@type": "AggregateRating",
       ratingValue: property.aggregateReviewRating.toFixed(1),
       reviewCount: property.aggregateReviewCount,
+      bestRating: 5,
+      worstRating: 1,
     };
+  }
+
+  // Per-review entities — pull from Testimonial records (Google clears the
+  // optional `review` warning when ≥1 Review object is present).
+  if (testimonials.length > 0) {
+    vacationRental.review = testimonials.slice(0, 8).map((t) => ({
+      "@type": "Review",
+      reviewRating: {
+        "@type": "Rating",
+        ratingValue: t.rating,
+        bestRating: 5,
+        worstRating: 1,
+      },
+      author: {
+        "@type": "Person",
+        name: t.name,
+      },
+      reviewBody: t.message,
+      datePublished: t.createdAt.toISOString().slice(0, 10),
+    }));
   }
 
   const graph: Record<string, unknown>[] = [vacationRental];
