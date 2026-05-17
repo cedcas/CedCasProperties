@@ -48,3 +48,6 @@ next-env.d.ts
 
 # Local-only utility scripts (require direct DB access; not safe to run in CI)
 /scripts/backfill-demo-threads.ts
+
+# Local-only scratch JSON-LD payloads (extracted for validator testing)
+/tmp/
