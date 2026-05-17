@@ -17,6 +17,10 @@ type Thread = {
   property: { id: number; name: string; type: string; featuredImage: string | null };
 };
 
+type ThreadsResponse = { threads: Thread[]; total: number; page: number; pageSize: number; hasMore: boolean };
+
+const PAGE_SIZE = 10;
+
 function firstName(full: string): string {
   return full.trim().split(/\s+/)[0] ?? full;
 }
@@ -45,16 +49,29 @@ function statusDot(status: string): string {
 
 export default function GuestMessageThreads() {
   const [threads, setThreads] = useState<Thread[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
-    const url = q ? `/api/admin/guest-messages/threads?q=${encodeURIComponent(q)}` : "/api/admin/guest-messages/threads";
-    fetch(url, { signal: controller.signal })
+    const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+    if (q) params.set("q", q);
+    fetch(`/api/admin/guest-messages/threads?${params.toString()}`, { signal: controller.signal })
       .then((r) => r.json())
-      .then((data) => setThreads(data))
+      .then((data: ThreadsResponse) => {
+        setThreads(data.threads);
+        setTotal(data.total);
+        setHasMore(data.hasMore);
+      })
       .catch(() => { /* abort */ });
     return () => controller.abort();
+  }, [q, page]);
+
+  // Reset to page 1 whenever search query changes
+  useEffect(() => {
+    setPage(1);
   }, [q]);
 
   return (
@@ -63,7 +80,7 @@ export default function GuestMessageThreads() {
         <div>
           <h2 className="font-serif font-semibold text-charcoal text-[1.4rem]">Guest Messages</h2>
           <p className="text-charcoal/45 text-[13px] mt-0.5">
-            {threads === null ? "Loading…" : `${threads.length} thread${threads.length === 1 ? "" : "s"}`}
+            {threads === null ? "Loading…" : `${total} thread${total === 1 ? "" : "s"}${threads.length < total ? ` · showing ${threads.length}` : ""}`}
           </p>
         </div>
         <Link
@@ -129,6 +146,16 @@ export default function GuestMessageThreads() {
               </div>
             </Link>
           ))
+        )}
+
+        {threads !== null && hasMore && (
+          <button
+            type="button"
+            onClick={() => setPage((p) => p + 1)}
+            className="self-center mt-2 text-[13px] font-semibold text-forest hover:underline px-5 py-2 rounded-[8px] hover:bg-forest/5"
+          >
+            Load older ({total - threads.length} more)
+          </button>
         )}
       </div>
     </section>

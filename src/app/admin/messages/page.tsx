@@ -6,10 +6,28 @@ import GuestMessageThreads from "@/components/admin/GuestMessageThreads";
 
 export const dynamic = "force-dynamic";
 
-export default async function MessagesPage() {
-  const messages = await prisma.contactMessage.findMany({ orderBy: { createdAt: "desc" } });
-  const unread = messages.filter((m) => !m.isRead).length;
-  const unmatchedCount = await prisma.unmatchedInboundMessage.count({ where: { resolvedAt: null } });
+const PAGE_SIZE = 10;
+
+export default async function MessagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ contactPage?: string }>;
+}) {
+  const params = await searchParams;
+  const contactPage = Math.max(1, Number(params.contactPage) || 1);
+  const take = PAGE_SIZE * contactPage;
+
+  const [messages, totalContact, unreadContact, unmatchedCount] = await Promise.all([
+    prisma.contactMessage.findMany({
+      where: { promotedToBookingId: null },
+      orderBy: { createdAt: "desc" },
+      take,
+    }),
+    prisma.contactMessage.count({ where: { promotedToBookingId: null } }),
+    prisma.contactMessage.count({ where: { promotedToBookingId: null, isRead: false } }),
+    prisma.unmatchedInboundMessage.count({ where: { resolvedAt: null } }),
+  ]);
+  const hasMoreContact = totalContact > messages.length;
 
   return (
     <div className="p-6 lg:p-10 max-w-4xl mx-auto">
@@ -40,11 +58,11 @@ export default async function MessagesPage() {
       {/* Guest Messages — thread list with search, tied to bookings */}
       <GuestMessageThreads />
 
-      {/* Contact Us Messages — messages from the public contact form */}
+      {/* Contact Us Messages — Contact Us form submissions + non-booker emails */}
       <section>
         <div className="mb-4">
           <h2 className="font-serif font-semibold text-charcoal text-[1.4rem]">Contact Us Messages</h2>
-          <p className="text-charcoal/45 text-[13px] mt-0.5">{unread} unread · {messages.length} total</p>
+          <p className="text-charcoal/45 text-[13px] mt-0.5">{unreadContact} unread · {totalContact} total{messages.length < totalContact ? ` · showing ${messages.length}` : ""}</p>
         </div>
 
         <div className="flex flex-col gap-4">
@@ -61,8 +79,9 @@ export default async function MessagesPage() {
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-charcoal text-[15px]">{m.name}</span>
                       {!m.isRead && <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">New</span>}
+                      {m.source === "email" && <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-wide">Email</span>}
                     </div>
-                    <div className="text-[13px] text-charcoal/50 mt-0.5">{m.email} · {m.phone}</div>
+                    <div className="text-[13px] text-charcoal/50 mt-0.5">{m.email}{m.phone ? ` · ${m.phone}` : ""}</div>
                   </div>
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className="text-[11px] text-charcoal/35">{new Date(m.createdAt).toLocaleDateString()}</span>
@@ -80,6 +99,15 @@ export default async function MessagesPage() {
                 </div>
               </div>
             ))
+          )}
+
+          {hasMoreContact && (
+            <Link
+              href={`/admin/messages?contactPage=${contactPage + 1}#contact`}
+              className="self-center mt-2 text-[13px] font-semibold text-forest hover:underline px-5 py-2 rounded-[8px] hover:bg-forest/5"
+            >
+              Load older ({totalContact - messages.length} more)
+            </Link>
           )}
         </div>
       </section>

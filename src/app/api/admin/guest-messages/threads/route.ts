@@ -2,17 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-// Returns one row per booking that has at least one GuestMessage,
-// with the latest message preview. Supports ?q= simple search over
-// guestName, guestEmail, property.name, subject, body.
+// Returns one row per booking that has at least one GuestMessage, with the latest
+// message preview. Supports ?q= search and ?page=&pageSize= pagination (default 10/page).
+// Search applies before pagination (so admin can search across all threads, not just
+// the current page).
+
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 100;
 
 export async function GET(req: NextRequest) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const q = req.nextUrl.searchParams.get("q")?.trim() ?? "";
+  const page = Math.max(1, Number(req.nextUrl.searchParams.get("page")) || 1);
+  const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.nextUrl.searchParams.get("pageSize")) || DEFAULT_PAGE_SIZE));
 
-  // Grab all outbound messages + their booking + property (scales fine at expected volume).
   const messages = await prisma.guestMessage.findMany({
     orderBy: { sentAt: "desc" },
     include: {
@@ -20,7 +25,6 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // Dedupe to first-seen (= latest) per bookingId
   const byBooking = new Map<number, typeof messages[number]>();
   for (const m of messages) {
     if (!byBooking.has(m.bookingId)) byBooking.set(m.bookingId, m);
@@ -50,5 +54,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  return NextResponse.json(threads);
+  const total = threads.length;
+  const paged = threads.slice(0, page * pageSize); // cumulative — supports "Load older" UX
+
+  return NextResponse.json({
+    threads: paged,
+    total,
+    page,
+    pageSize,
+    hasMore: paged.length < total,
+  });
 }
