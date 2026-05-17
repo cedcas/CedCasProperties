@@ -121,7 +121,7 @@ function parsePolicyToBool(raw?: string): boolean | null {
  * Required fields covered: identifier, name, description, image, address,
  * geo, containsPlace (Accommodation with bedrooms/bathrooms/occupancy/
  * amenityFeature). Recommended: aggregateRating + per-review Review
- * entities, additionalType, FAQPage graph entry.
+ * entities, FAQPage graph entry.
  */
 export function buildPropertyJsonLd(property: Property, testimonials: Testimonial[] = []) {
   const url = `${BASE_URL}/properties/${property.slug}`;
@@ -147,7 +147,6 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const accommodation: Record<string, unknown> = {
     "@type": "Accommodation",
-    additionalType: "House",
     name: property.name,
     description: property.heroSummary || property.description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
@@ -170,7 +169,6 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
-    additionalType: "House",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
