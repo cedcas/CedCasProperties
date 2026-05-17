@@ -147,7 +147,7 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const accommodation: Record<string, unknown> = {
     "@type": "Accommodation",
-    additionalType: "https://schema.org/House",
+    additionalType: "House",
     name: property.name,
     description: property.heroSummary || property.description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
@@ -170,7 +170,7 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
-    additionalType: "https://schema.org/House",
+    additionalType: "House",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
