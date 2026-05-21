@@ -1,7 +1,59 @@
 import Image from "next/image";
 import Link from "next/link";
 
-export default function Footer() {
+type WpPost = {
+  id: number;
+  link: string;
+  title: { rendered: string };
+  meta: { _yoast_wpseo_focuskw?: string };
+};
+
+type BlogLink = { label: string; href: string };
+
+const STATIC_BLOG_LINKS: BlogLink[] = [
+  { label: "15 Things to Do in Lipa",    href: "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/" },
+  { label: "Best Restaurants in Lipa",   href: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/" },
+  { label: "Mt. Maculot Hiking Guide",   href: "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/" },
+  { label: "Taal Volcano Day Trip",      href: "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/" },
+  { label: "Why Book Direct vs. Airbnb", href: "https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/" },
+];
+
+function decodeEntities(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&#8217;/g, "’")
+    .replace(/&#8216;/g, "‘")
+    .replace(/&#8211;/g, "–")
+    .replace(/&#8212;/g, "—")
+    .replace(/&#8220;/g, "“")
+    .replace(/&#8221;/g, "”")
+    .replace(/&quot;/g, "\"")
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&nbsp;/g, " ");
+}
+
+async function getBlogLinks(): Promise<BlogLink[]> {
+  try {
+    const res = await fetch(
+      "https://blog.haveninlipa.com/wp-json/wp/v2/posts?per_page=5&_fields=id,link,title,meta",
+      { next: { revalidate: 3600 } }
+    );
+    if (!res.ok) throw new Error(`WP ${res.status}`);
+    const posts: WpPost[] = await res.json();
+    if (!Array.isArray(posts) || posts.length === 0) throw new Error("empty");
+    return posts.map((p) => ({
+      label: (p.meta?._yoast_wpseo_focuskw?.trim() || decodeEntities(p.title.rendered)).trim(),
+      href: p.link,
+    }));
+  } catch {
+    return STATIC_BLOG_LINKS;
+  }
+}
+
+export default async function Footer() {
+  const blogLinks = await getBlogLinks();
   return (
     <footer className="bg-[#1c1c1c] pt-[72px]">
       <div className="max-w-6xl mx-auto px-6">
@@ -57,13 +109,9 @@ export default function Footer() {
             </h4>
             <ul className="flex flex-col gap-3">
               {[
-                ["15 Things to Do in Lipa", "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/"],
-                ["Best Restaurants in Lipa", "https://blog.haveninlipa.com/best-restaurants-in-lipa-city-batangas-2026/"],
-                ["Mt. Maculot Hiking Guide", "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-cuenca-rockies/"],
-                ["Taal Volcano Day Trip", "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/"],
-                ["Why Book Direct vs. Airbnb", "https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/"],
-                ["Visit the Blog", "https://blog.haveninlipa.com"],
-              ].map(([label, href]) => (
+                ...blogLinks,
+                { label: "Visit the Blog", href: "https://blog.haveninlipa.com" },
+              ].map(({ label, href }) => (
                 <li key={label}>
                   <a
                     href={href}
