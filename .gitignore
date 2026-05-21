@@ -51,3 +51,6 @@ next-env.d.ts
 
 # Local-only scratch JSON-LD payloads (extracted for validator testing)
 /tmp/
+
+# WordPress plugin source (deployed separately to blog.haveninlipa.com, not part of the Next.js app)
+/blog/
