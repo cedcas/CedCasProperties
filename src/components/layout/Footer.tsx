@@ -18,6 +18,21 @@ const STATIC_BLOG_LINKS: BlogLink[] = [
   { label: "Why Book Direct vs. Airbnb", href: "https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/" },
 ];
 
+const TITLE_CASE_SMALL_WORDS = new Set([
+  "a", "an", "and", "as", "at", "but", "by", "for", "from", "in",
+  "nor", "of", "on", "or", "so", "the", "to", "vs", "via", "with", "yet",
+]);
+
+function titleCase(s: string): string {
+  const words = s.trim().toLowerCase().split(/\s+/);
+  return words
+    .map((w, i) => {
+      if (i !== 0 && i !== words.length - 1 && TITLE_CASE_SMALL_WORDS.has(w)) return w;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    })
+    .join(" ");
+}
+
 function decodeEntities(s: string): string {
   return s
     .replace(/&amp;/g, "&")
@@ -43,10 +58,11 @@ async function getBlogLinks(): Promise<BlogLink[]> {
     if (!res.ok) throw new Error(`WP ${res.status}`);
     const posts: WpPost[] = await res.json();
     if (!Array.isArray(posts) || posts.length === 0) throw new Error("empty");
-    return posts.map((p) => ({
-      label: (p.meta?._yoast_wpseo_focuskw?.trim() || decodeEntities(p.title.rendered)).trim(),
-      href: p.link,
-    }));
+    return posts.map((p) => {
+      const focuskw = p.meta?._yoast_wpseo_focuskw?.trim();
+      const label = focuskw ? titleCase(focuskw) : decodeEntities(p.title.rendered).trim();
+      return { label, href: p.link };
+    });
   } catch {
     return STATIC_BLOG_LINKS;
   }
