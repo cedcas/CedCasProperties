@@ -50,10 +50,16 @@ const localBusinessSchema = {
   ],
 };
 
+// Montserrat is used by the Hero <h1> (the LCP element on every page).
+// `display: "optional"` tells the browser to use the metric-matched fallback
+// if the font isn't ready within ~100ms, and never swap thereafter — this
+// removes the font-swap re-paint that was inflating LCP and the Hero CLS.
+// Cached visits still get Montserrat instantly.
 const montserrat = Montserrat({
   subsets: ["latin"],
   variable: "--font-montserrat",
-  display: "swap",
+  display: "optional",
+  fallback: ["Georgia", "serif"],
 });
 
 const poppins = Poppins({
