@@ -1,4 +1,5 @@
 import type { Property } from "@prisma/client";
+import Image from "next/image";
 import Link from "next/link";
 
 const AMENITY_ICONS: Record<string, string> = {
@@ -23,8 +24,14 @@ export default function PropertyCard({ property, index }: { property: Property; 
       {/* Image */}
       <div className="relative h-[220px] overflow-hidden">
         {coverImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={coverImage} alt={`${property.name} — ${property.type} rental in ${property.location}`} className="w-full h-full object-cover" />
+          <Image
+            src={coverImage}
+            alt={`${property.name} — ${property.type} rental in ${property.location}`}
+            fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+            priority={index < 2}
+            className="object-cover"
+          />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center"
@@ -65,6 +72,7 @@ export default function PropertyCard({ property, index }: { property: Property; 
 
         <Link
           href={`/properties/${property.slug}`}
+          aria-label={`View details for ${property.name}`}
           className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-[13px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
         >
           View Details <i className="fa-solid fa-arrow-right text-[11px]" />

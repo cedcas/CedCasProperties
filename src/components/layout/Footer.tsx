@@ -86,7 +86,7 @@ export default async function Footer() {
                 className="h-[52px] w-auto"
               />
             </div>
-            <p className="text-[14px] text-white/45 leading-[1.75] max-w-[280px]">
+            <p className="text-[14px] text-white/70 leading-[1.75] max-w-[280px]">
               Thoughtfully managed short-term rentals in Lipa City, Batangas — designed for families, travelers, and professionals.
             </p>
             <span className="inline-block mt-3 text-[12px] italic text-[#FF5371]">&ldquo;Stay in Style, Live in Comfort.&rdquo;</span>
@@ -94,10 +94,10 @@ export default async function Footer() {
 
           {/* Links */}
           <div>
-            <h4 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
+            <h3 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
               Quick Links
               <span className="absolute bottom-[-1px] left-0 w-7 h-0.5 bg-[#FF5371] rounded" />
-            </h4>
+            </h3>
             <ul className="flex flex-col gap-3">
               {[
                 ["Our Properties", "/#properties", false],
@@ -109,7 +109,7 @@ export default async function Footer() {
                 ["Book a Stay",    "/#cta",        false],
               ].map(([label, href, external]) => (
                 <li key={label as string}>
-                  <Link href={href as string} className="text-[14px] text-white/45 hover:text-[#FF5371] transition-colors duration-200" {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
+                  <Link href={href as string} className="text-[14px] text-white/70 hover:text-[#FF5371] transition-colors duration-200" {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}>
                     {label}
                   </Link>
                 </li>
@@ -119,10 +119,10 @@ export default async function Footer() {
 
           {/* Plan your trip — blog links for SEO authority distribution */}
           <div>
-            <h4 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
+            <h3 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
               Plan Your Trip
               <span className="absolute bottom-[-1px] left-0 w-7 h-0.5 bg-[#FF5371] rounded" />
-            </h4>
+            </h3>
             <ul className="flex flex-col gap-3">
               {[
                 ...blogLinks,
@@ -133,7 +133,7 @@ export default async function Footer() {
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[14px] text-white/45 hover:text-[#FF5371] transition-colors duration-200"
+                    className="text-[14px] text-white/70 hover:text-[#FF5371] transition-colors duration-200"
                   >
                     {label}
                   </a>
@@ -144,11 +144,11 @@ export default async function Footer() {
 
           {/* Contact */}
           <div>
-            <h4 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
+            <h3 className="font-serif font-semibold text-white text-[1rem] mb-5 pb-3 border-b border-white/[.08] relative">
               Get in Touch
               <span className="absolute bottom-[-1px] left-0 w-7 h-0.5 bg-[#FF5371] rounded" />
-            </h4>
-            <div className="flex flex-col gap-4 text-[13.5px] text-white/45">
+            </h3>
+            <div className="flex flex-col gap-4 text-[13.5px] text-white/70">
               <div className="flex gap-3 items-start">
                 <i className="fa-solid fa-location-dot text-[#FF5371] text-[14px] mt-0.5 flex-shrink-0" />
                 <span>Lipa City, Batangas<br />Philippines</span>
@@ -169,10 +169,10 @@ export default async function Footer() {
         </div>
 
         <div className="py-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[12.5px] text-white/25">&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
+          <p className="text-[12.5px] text-white/55">&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
           <div className="flex gap-5">
-            <Link href="/privacy" className="text-[12.5px] text-white/25 hover:text-white/50 transition-colors duration-200">Privacy Policy</Link>
-            <Link href="/terms" className="text-[12.5px] text-white/25 hover:text-white/50 transition-colors duration-200">Terms of Service</Link>
+            <Link href="/privacy" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
+            <Link href="/terms" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Terms of Service</Link>
           </div>
         </div>
       </div>

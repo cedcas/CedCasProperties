@@ -11,16 +11,11 @@ export default function DiscoverLipa() {
               The Destination
             </span>
             <h2
-              className="font-serif font-semibold text-[#2C2C2C] leading-tight mb-1"
+              className="font-serif font-semibold text-[#2C2C2C] leading-tight mb-4"
               style={{ fontSize: "clamp(2rem,4vw,3rem)" }}
             >
-              Discover
-            </h2>
-            <h2
-              className="font-serif font-semibold text-[#2C2C2C] leading-tight italic mb-4"
-              style={{ fontSize: "clamp(2rem,4vw,3rem)" }}
-            >
-              Lipa City
+              <span className="block">Discover</span>
+              <span className="block italic">Lipa City</span>
             </h2>
             <div className="w-12 h-0.5 bg-[#FF5371] mb-6" />
 
@@ -58,7 +53,7 @@ export default function DiscoverLipa() {
                     <i className={`fa-solid ${icon}`} />
                   </div>
                   <div>
-                    <h4 className="font-semibold text-[14.5px] text-[#2C2C2C] mb-0.5">{title}</h4>
+                    <h3 className="font-semibold text-[14.5px] text-[#2C2C2C] mb-0.5">{title}</h3>
                     <p className="text-[#7A7A7A] text-[13.5px] leading-[1.6]">{desc}</p>
                   </div>
                 </div>

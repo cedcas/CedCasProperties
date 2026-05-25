@@ -43,11 +43,20 @@ body {
   border-radius: 9999px;
 }
 
-/* ── Scroll reveal ── */
+/* ── Scroll reveal ──
+   Default state is VISIBLE so above-the-fold content (including the Hero <h1>
+   LCP element) paints immediately. ScrollReveal marks already-in-viewport
+   elements `.visible` and then adds `js-loaded` to the html element, after
+   which any below-fold `.reveal` that hasn't been marked visible is hidden
+   and animates in when scrolled into view. */
 .reveal {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+html.js-loaded .reveal:not(.visible) {
   opacity: 0;
   transform: translateY(22px);
-  transition: opacity 0.6s ease, transform 0.6s ease;
 }
 .reveal.visible { opacity: 1; transform: none; }
 .reveal-d1 { transition-delay: 0.10s; }
@@ -78,8 +87,10 @@ body {
 /* ── Logo ── */
 #nav-logo img { transition: filter 0.35s; }
 
-/* ── Haven Chatbot ── */
+/* ── Haven Chatbot ──
+   Uses transform only so the animation runs on the GPU and Lighthouse
+   doesn't flag it as non-composited. */
 @keyframes haven-pulse {
-  0%, 100% { box-shadow: 0 4px 16px rgba(76,167,80,.25); }
-  50%      { box-shadow: 0 4px 24px rgba(76,167,80,.50); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
 }

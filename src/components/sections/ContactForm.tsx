@@ -82,12 +82,12 @@ export default function ContactForm() {
                 <div className="font-semibold text-charcoal text-[14px] mb-3">Find Us Online</div>
                 <div className="flex gap-3">
                   {[
-                    ["fa-facebook-f", "https://www.facebook.com/haveninlipa"],
-                    ["fa-instagram",  "https://www.instagram.com/haven_inlipa/"],
-                    ["fa-tiktok",     "https://www.tiktok.com/@haven_inlipa"],
-                    ["fa-airbnb",     "https://airbnb.com/h/fullhousebellavita"],
-                  ].map(([icon, href]) => (
-                    <a key={icon} href={href} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
+                    ["fa-facebook-f", "Facebook",  "https://www.facebook.com/haveninlipa"],
+                    ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
+                    ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
+                    ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],
+                  ].map(([icon, label, href]) => (
+                    <a key={icon} href={href} aria-label={label} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
                       <i className={`fa-brands ${icon}`} />
                     </a>
                   ))}
@@ -102,23 +102,23 @@ export default function ContactForm() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Full Name <span className="text-red-500">*</span></label>
-                  <input type="text" name="name" required value={form.name} onChange={handleChange} placeholder="Juan dela Cruz" className={inputCls} />
+                  <label htmlFor="contact-name" className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Full Name <span className="text-red-500">*</span></label>
+                  <input id="contact-name" type="text" name="name" required value={form.name} onChange={handleChange} placeholder="Juan dela Cruz" className={inputCls} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Email Address <span className="text-red-500">*</span></label>
-                  <input type="email" name="email" required value={form.email} onChange={handleChange} placeholder="you@example.com" className={inputCls} />
+                  <label htmlFor="contact-email" className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Email Address <span className="text-red-500">*</span></label>
+                  <input id="contact-email" type="email" name="email" required value={form.email} onChange={handleChange} placeholder="you@example.com" className={inputCls} />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Phone Number <span className="text-red-500">*</span></label>
-                  <input type="tel" name="phone" required value={form.phone} onChange={handleChange} placeholder="+63 9XX XXX XXXX" className={inputCls} />
+                  <label htmlFor="contact-phone" className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Phone Number <span className="text-red-500">*</span></label>
+                  <input id="contact-phone" type="tel" name="phone" required value={form.phone} onChange={handleChange} placeholder="+63 9XX XXX XXXX" className={inputCls} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Subject <span className="text-red-500">*</span></label>
-                  <select name="subject" required value={form.subject} onChange={handleChange} className={`${inputCls} appearance-none cursor-pointer`}>
+                  <label htmlFor="contact-subject" className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Subject <span className="text-red-500">*</span></label>
+                  <select id="contact-subject" name="subject" required value={form.subject} onChange={handleChange} className={`${inputCls} appearance-none cursor-pointer`}>
                     <option value="" disabled>Select a subject</option>
                     {SUBJECTS.map((s) => <option key={s} value={s}>{s}</option>)}
                   </select>
@@ -126,8 +126,8 @@ export default function ContactForm() {
               </div>
 
               <div className="flex flex-col gap-1.5 mb-7">
-                <label className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Message / Comments</label>
-                <textarea name="message" rows={5} value={form.message} onChange={handleChange} placeholder="Tell us about your stay plans, dates, group size, or any questions…" className={`${inputCls} resize-none`} />
+                <label htmlFor="contact-message" className="text-[12.5px] font-semibold text-charcoal/70 tracking-wide uppercase">Message / Comments</label>
+                <textarea id="contact-message" name="message" rows={5} value={form.message} onChange={handleChange} placeholder="Tell us about your stay plans, dates, group size, or any questions…" className={`${inputCls} resize-none`} />
               </div>
 
               {status === "success" && (

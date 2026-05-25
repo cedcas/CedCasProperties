@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import Script from "next/script";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
 import { runQrIntegrityCheck } from "@/lib/qr-integrity-check";
 import ChatWidgetServer from "@/components/chat/ChatWidgetServer";
+import ChatWidgetGate from "@/components/chat/ChatWidgetGate";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -111,19 +113,27 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${montserrat.variable} ${poppins.variable} ${openSans.variable}`}>
       <head>
-        {/* Google Analytics */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-2SV2PXYB7T" />
+        {/* Font Awesome — injected via inline script so the request is
+            non-blocking and doesn't delay first paint / LCP. Icons appear
+            with a tiny swap after CSS arrives. */}
+        <link
+          rel="preconnect"
+          href="https://cdnjs.cloudflare.com"
+          crossOrigin="anonymous"
+        />
         <script
           dangerouslySetInnerHTML={{
-            __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-2SV2PXYB7T');`,
+            __html:
+              "(function(){var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';l.crossOrigin='anonymous';l.referrerPolicy='no-referrer';document.head.appendChild(l);})();",
           }}
         />
-        <link
-          rel="stylesheet"
-          href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-        />
+        <noscript>
+          <link
+            rel="stylesheet"
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+            crossOrigin="anonymous"
+          />
+        </noscript>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(localBusinessSchema) }}
@@ -131,9 +141,19 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         {children}
-        <Suspense fallback={null}>
-          <ChatWidgetServer />
-        </Suspense>
+        <ChatWidgetGate>
+          <Suspense fallback={null}>
+            <ChatWidgetServer />
+          </Suspense>
+        </ChatWidgetGate>
+        {/* Google Analytics — deferred until after window load */}
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-2SV2PXYB7T"
+          strategy="lazyOnload"
+        />
+        <Script id="gtag-init" strategy="lazyOnload">
+          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-2SV2PXYB7T');`}
+        </Script>
       </body>
     </html>
   );
