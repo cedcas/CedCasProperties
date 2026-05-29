@@ -51,14 +51,15 @@ const localBusinessSchema = {
 };
 
 // Montserrat is used by the Hero <h1> (the LCP element on every page).
-// `display: "optional"` tells the browser to use the metric-matched fallback
-// if the font isn't ready within ~100ms, and never swap thereafter — this
-// removes the font-swap re-paint that was inflating LCP and the Hero CLS.
-// Cached visits still get Montserrat instantly.
+// `display: "swap"` paints the H1 with next/font's auto-adjusted fallback
+// after a short block period (~100 ms), then swaps in Montserrat when ready.
+// `optional` was tried previously but extended the block period to ~1 s on
+// slow connections, delaying LCP by the same amount. The metric-matched
+// fallback minimizes the visual swap.
 const montserrat = Montserrat({
   subsets: ["latin"],
   variable: "--font-montserrat",
-  display: "optional",
+  display: "swap",
   fallback: ["Georgia", "serif"],
 });
 
@@ -130,7 +131,7 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "(function(){var l=document.createElement('link');l.rel='stylesheet';l.href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';l.crossOrigin='anonymous';l.referrerPolicy='no-referrer';document.head.appendChild(l);})();",
+              "(function(){var l=document.createElement('link');l.rel='stylesheet';l.media='print';l.onload=function(){this.media='all';this.onload=null;};l.href='https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css';l.crossOrigin='anonymous';l.referrerPolicy='no-referrer';document.head.appendChild(l);})();",
           }}
         />
         <noscript>
