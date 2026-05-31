@@ -147,6 +147,10 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const accommodation: Record<string, unknown> = {
     "@type": "Accommodation",
+    // Optional recommended field — points to a more specific schema.org class
+    // so Google can disambiguate the unit type. Both units are fully-furnished
+    // whole homes in a gated subdivision.
+    additionalType: "https://schema.org/House",
     name: property.name,
     description: property.heroSummary || property.description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
@@ -169,6 +173,7 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
+    additionalType: "https://schema.org/House",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
