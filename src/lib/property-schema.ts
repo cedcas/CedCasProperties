@@ -199,7 +199,11 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     },
     tourBookingPage: `${url}/book`,
     priceRange: `₱${property.pricePerNight}`,
-    offers: {
+    // `makesOffer` (Organization property, inherited by LodgingBusiness/
+    // VacationRental) is the schema-valid way to attach an Offer. `offers` is
+    // NOT a valid property of VacationRental — the Schema Markup Validator
+    // rejects it even though Google's lenient Rich Results Test ignores it.
+    makesOffer: {
       "@type": "Offer",
       price: Number(property.pricePerNight),
       priceCurrency: "PHP",
