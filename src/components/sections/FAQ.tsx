@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { faqs, HOMEPAGE_FAQ_LIMIT } from "@/lib/faqs";
+import FaqAnswer from "@/components/ui/FaqAnswer";
 
 export default function FAQ() {
   const visible = faqs.slice(0, HOMEPAGE_FAQ_LIMIT);
@@ -46,7 +47,11 @@ export default function FAQ() {
               <h3 className="font-semibold text-[15px] leading-snug" style={{ color: "#3B5323" }}>
                 {item.q}
               </h3>
-              <p className="text-charcoal/60 text-[14px] leading-[1.8]">{item.a}</p>
+              <FaqAnswer
+                answer={item.a}
+                links={item.links}
+                className="text-charcoal/60 text-[14px] leading-[1.8]"
+              />
             </div>
           ))}
         </div>

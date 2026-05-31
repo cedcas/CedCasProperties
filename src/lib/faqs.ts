@@ -1,6 +1,16 @@
+// A contextual internal link layered onto a FAQ answer at render time. The
+// answer string (`a`) stays plain text so the FAQPage JSON-LD `text` value
+// remains link-free; `links` only affect the rendered HTML. Each entry links
+// the FIRST occurrence of `phrase` in the answer to `href`.
+export type FaqLink = {
+  phrase: string;
+  href: string;
+};
+
 export type Faq = {
   q: string;
   a: string;
+  links?: FaqLink[];
 };
 
 /**
@@ -18,10 +28,12 @@ export const faqs: Faq[] = [
   {
     q: "Where exactly are your properties located in Lipa City, Batangas?",
     a: "All our properties are inside quiet, gated villages in Lipa City, Batangas — a thriving city in the heart of CALABARZON, about 1 hour from Manila via SLEX/STAR Tollway. We're a short drive to SM Lipa, Casa Marikit, the Mt. Maculot trailhead, and the major hospitals.",
+    links: [{ phrase: "All our properties", href: "/#properties" }],
   },
   {
     q: "How do I book a short-term rental on Haven in Lipa?",
     a: "Browse our properties, pick your dates, and complete the booking form. You can pay via GCash, BPI InstaPay (no fees), or credit card via Stripe (6% processing fee). You'll get a confirmation email once payment is verified.",
+    links: [{ phrase: "Browse our properties", href: "/#properties" }],
   },
   {
     q: "What payment methods do you accept?",
@@ -38,6 +50,10 @@ export const faqs: Faq[] = [
   {
     q: "Is the WiFi fast enough for remote work?",
     a: "Yes. The 2BR runs on 400 Mbps fiber and the 1BR runs on a dedicated business-grade fiber line. Multiple Netflix streams, video calls, and kids' tablets work simultaneously without buffering.",
+    links: [
+      { phrase: "2BR", href: "/properties/spacious-2-bedroom" },
+      { phrase: "1BR", href: "/properties/cozy-1-bedroom" },
+    ],
   },
   {
     q: "Is parking safe?",
@@ -46,6 +62,7 @@ export const faqs: Faq[] = [
   {
     q: "Are your properties good for families with kids?",
     a: "Yes. The 2BR is built for families: two private bedrooms, full kitchen for snacks and milk on demand, baby-safe living area, SM Lipa five minutes away for diapers and supplies, and hospitals within 10 minutes. Note: the unit has a loft accessed by an internal staircase, so if you're traveling with crawlers or very young toddlers, message us about the layout and we'll advise.",
+    links: [{ phrase: "2BR", href: "/properties/spacious-2-bedroom" }],
   },
   {
     q: "Can I bring pets?",
@@ -66,5 +83,9 @@ export const faqs: Faq[] = [
   {
     q: "Can I bring a larger group? What's the maximum?",
     a: "The 2BR sleeps up to 9 across two bedrooms plus a sofa bed; the 1BR sleeps up to 4. Both caps are strictly enforced for safety and insurance. For groups larger than 9, message us — we may be able to coordinate both units.",
+    links: [
+      { phrase: "2BR", href: "/properties/spacious-2-bedroom" },
+      { phrase: "1BR", href: "/properties/cozy-1-bedroom" },
+    ],
   },
 ];

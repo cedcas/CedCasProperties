@@ -1,6 +1,6 @@
 import type { Property, Testimonial } from "@prisma/client";
 
-const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
+const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
 // Business contact number, used to satisfy Google's recommended `telephone`
 // field on VacationRental / LocalBusiness / Organization schemas. Stored in
@@ -194,6 +194,13 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     },
     tourBookingPage: `${url}/book`,
     priceRange: `₱${property.pricePerNight}`,
+    offers: {
+      "@type": "Offer",
+      price: Number(property.pricePerNight),
+      priceCurrency: "PHP",
+      availability: "https://schema.org/InStock",
+      url: `${url}/book`,
+    },
     knowsLanguage: ["en", "fil"],
     telephone: CONTACT_PHONE,
   };

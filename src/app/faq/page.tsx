@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import FaqAnswer from "@/components/ui/FaqAnswer";
 import { faqs } from "@/lib/faqs";
 
 export const metadata: Metadata = {
@@ -81,9 +82,11 @@ export default function FAQPage() {
                     >
                       {item.q}
                     </h2>
-                    <p className="text-charcoal/70 text-[14.5px] leading-[1.85]">
-                      {item.a}
-                    </p>
+                    <FaqAnswer
+                      answer={item.a}
+                      links={item.links}
+                      className="text-charcoal/70 text-[14.5px] leading-[1.85]"
+                    />
                   </div>
                 </div>
               </article>

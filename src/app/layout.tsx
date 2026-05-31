@@ -10,7 +10,7 @@ import "./globals.css";
 // Server-side QR integrity check — runs once on first request
 runQrIntegrityCheck();
 
-const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
+const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
 const localBusinessSchema = {
   "@context": "https://schema.org",

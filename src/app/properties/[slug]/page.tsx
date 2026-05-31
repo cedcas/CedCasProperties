@@ -360,6 +360,25 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               </div>
             )}
 
+            {/* Where you'll be — area-level map. Zoom 13 keeps it city/subdivision
+                level (no exact pin) to preserve the gated-village privacy; the
+                schema geo uses the same Lipa City fallback for the same reason. */}
+            <div>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">Where you&apos;ll be</h2>
+              <div className="rounded-[12px] overflow-hidden border border-black/[.06]">
+                <iframe
+                  title={`Map of ${property.location || "Lipa City"}, Batangas`}
+                  src={`https://www.google.com/maps?q=${encodeURIComponent(`${property.location || "Lipa City"}, Batangas, Philippines`)}&z=13&output=embed`}
+                  loading="lazy"
+                  referrerPolicy="no-referrer-when-downgrade"
+                  className="w-full aspect-[16/9] border-0 block"
+                />
+                <p className="text-charcoal/45 text-[12.5px] px-4 py-2.5 bg-white">
+                  Approximate area only — the exact address and gate details are shared after your booking is confirmed.
+                </p>
+              </div>
+            </div>
+
             {/* Guest Reviews — existing testimonials component */}
             <div>
               <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">What guests say</h2>
