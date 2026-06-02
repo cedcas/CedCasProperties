@@ -1,7 +1,25 @@
+import {
+  IconHouse,
+  IconCircleInfo,
+  IconUsers,
+  IconStar,
+  IconComment,
+  IconAward,
+  IconChevronDown,
+} from "@/components/ui/HeroIcons";
+
 type HeroProps = {
   /** Live count of active properties — pulled from DB by the parent. */
   propertyCount?: number;
 };
+
+const STAT_ICON_MAP = {
+  "fa-house": IconHouse,
+  "fa-users": IconUsers,
+  "fa-star": IconStar,
+  "fa-comment": IconComment,
+  "fa-award": IconAward,
+} as const;
 
 export default function Hero({ propertyCount }: HeroProps) {
   const propertyCountLabel =
@@ -74,7 +92,7 @@ export default function Hero({ propertyCount }: HeroProps) {
               boxShadow: "0 4px 20px rgba(255,83,113,.35)",
             }}
           >
-            <i className="fa-solid fa-house" /> Explore Our Properties
+            <IconHouse className="text-[14px]" /> Explore Our Properties
           </a>
           <a
             href="#why"
@@ -84,7 +102,7 @@ export default function Hero({ propertyCount }: HeroProps) {
               border: "2px solid rgba(44,44,44,0.22)",
             }}
           >
-            <i className="fa-solid fa-circle-info" /> Learn More
+            <IconCircleInfo className="text-[14px]" /> Learn More
           </a>
         </div>
 
@@ -98,26 +116,28 @@ export default function Hero({ propertyCount }: HeroProps) {
             boxShadow: "0 4px 30px rgba(0,0,0,0.07)",
           }}
         >
-          {[
-            { icon: "fa-house",        value: propertyCountLabel, label: "Properties"      },
-            { icon: "fa-users",        value: "280+",     label: "Happy Guests"    },
-            { icon: "fa-star",         value: "5.0",      label: "Avg Rating"      },
-            { icon: "fa-comment",      value: "180+",     label: "Five-Star Reviews"},
-            { icon: "fa-award",        value: "3 yrs",    label: "Superhost"       },
-          ].map(({ icon, value, label }) => (
-            <div key={label} className="flex items-center gap-2.5">
-              <i
-                className={`fa-solid ${icon} text-[15px]`}
-                style={{ color: "#FF5371" }}
-              />
-              <span className="font-bold text-[15px]" style={{ color: "#2C2C2C" }}>
-                {value}
-              </span>
-              <span className="text-[13px]" style={{ color: "rgba(44,44,44,0.50)" }}>
-                {label}
-              </span>
-            </div>
-          ))}
+          {(
+            [
+              { icon: "fa-house",   value: propertyCountLabel, label: "Properties"        },
+              { icon: "fa-users",   value: "280+",             label: "Happy Guests"      },
+              { icon: "fa-star",    value: "5.0",              label: "Avg Rating"        },
+              { icon: "fa-comment", value: "180+",             label: "Five-Star Reviews" },
+              { icon: "fa-award",   value: "3 yrs",            label: "Superhost"         },
+            ] as const
+          ).map(({ icon, value, label }) => {
+            const StatIcon = STAT_ICON_MAP[icon];
+            return (
+              <div key={label} className="flex items-center gap-2.5">
+                <StatIcon className="text-[15px]" style={{ color: "#FF5371" }} />
+                <span className="font-bold text-[15px]" style={{ color: "#2C2C2C" }}>
+                  {value}
+                </span>
+                <span className="text-[13px]" style={{ color: "rgba(44,44,44,0.50)" }}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -129,8 +149,8 @@ export default function Hero({ propertyCount }: HeroProps) {
         >
           Scroll
         </span>
-        <i
-          className="fa-solid fa-chevron-down text-[11px] animate-bounce"
+        <IconChevronDown
+          className="text-[11px] animate-bounce"
           style={{ color: "#2C2C2C" }}
         />
       </div>
