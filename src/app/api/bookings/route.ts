@@ -5,6 +5,7 @@ import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
+import { codeAppliesToProperty } from "@/lib/promo";
 
 export async function POST(req: NextRequest) {
   const {
@@ -113,7 +114,7 @@ export async function POST(req: NextRequest) {
       where: { code: codeUpper },
     });
 
-    if (discount && discount.isActive) {
+    if (discount && discount.isActive && codeAppliesToProperty(discount.propertyIds, Number(propertyId))) {
       if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
         const nightlyBase = clientNightlyTotal ?? parseFloat(totalPrice);
         if (discount.type === "percentage") {

@@ -285,7 +285,7 @@ export default function BookingForm({
       const res = await fetch("/api/discount-codes/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: discountCodeInput.trim(), nightlyTotal: computedNightlyTotal }),
+        body: JSON.stringify({ code: discountCodeInput.trim(), nightlyTotal: computedNightlyTotal, propertyId }),
       });
       const data = await res.json();
       if (!res.ok) {

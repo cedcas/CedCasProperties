@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { codeAppliesToProperty } from "@/lib/promo";
 
 export async function POST(req: Request) {
   try {
-    const { code, nightlyTotal } = await req.json();
+    const { code, nightlyTotal, propertyId } = await req.json();
 
     if (!code || typeof nightlyTotal !== "number") {
       return NextResponse.json({ error: "Missing code or nightlyTotal" }, { status: 400 });
@@ -14,6 +15,12 @@ export async function POST(req: Request) {
     });
 
     if (!discount) {
+      return NextResponse.json({ error: "Invalid promo code" }, { status: 404 });
+    }
+
+    // Scope check — a code restricted to specific properties reads as "invalid"
+    // elsewhere, so we don't reveal it exists for another listing.
+    if (!codeAppliesToProperty(discount.propertyIds, Number(propertyId))) {
       return NextResponse.json({ error: "Invalid promo code" }, { status: 404 });
     }
 

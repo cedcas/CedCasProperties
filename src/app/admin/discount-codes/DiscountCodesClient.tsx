@@ -1,23 +1,49 @@
 "use client";
 import { useState } from "react";
 import type { DiscountCode } from "@prisma/client";
+import { parsePropertyIds } from "@/lib/promo";
+
+interface PropertyOption {
+  id: number;
+  name: string;
+}
 
 interface Props {
   initialCodes: DiscountCode[];
+  properties: PropertyOption[];
 }
 
-export default function DiscountCodesClient({ initialCodes }: Props) {
+export default function DiscountCodesClient({ initialCodes, properties }: Props) {
   const [codes, setCodes] = useState<DiscountCode[]>(initialCodes);
   const [form, setForm] = useState({ code: "", type: "percentage", value: "", maxUses: "" });
+  const [scope, setScope] = useState<"all" | "specific">("all");
+  const [selectedPropertyIds, setSelectedPropertyIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const togglePropertyId = (id: number) =>
+    setSelectedPropertyIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const propertyNameById = (id: number) => properties.find((p) => p.id === id)?.name;
+
+  const scopeLabel = (code: DiscountCode) => {
+    const ids = parsePropertyIds(code.propertyIds);
+    if (ids.length === 0) return "All properties";
+    const names = ids.map((id) => propertyNameById(id) ?? `#${id}`);
+    return names.join(", ");
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
     setError("");
     setSuccess("");
+    if (scope === "specific" && selectedPropertyIds.length === 0) {
+      setError("Select at least one property, or choose 'All properties'.");
+      setCreating(false);
+      return;
+    }
     try {
       const res = await fetch("/api/admin/discount-codes", {
         method: "POST",
@@ -27,12 +53,15 @@ export default function DiscountCodesClient({ initialCodes }: Props) {
           type: form.type,
           value: parseFloat(form.value),
           maxUses: form.maxUses ? parseInt(form.maxUses) : null,
+          propertyIds: scope === "specific" ? selectedPropertyIds : null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create code");
       setCodes([data, ...codes]);
       setForm({ code: "", type: "percentage", value: "", maxUses: "" });
+      setScope("all");
+      setSelectedPropertyIds([]);
       setSuccess(`Promo code "${data.code}" created successfully.`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error creating code");
@@ -116,6 +145,42 @@ export default function DiscountCodesClient({ initialCodes }: Props) {
               className={inputCls}
             />
           </div>
+          <div className="col-span-2 sm:col-span-4">
+            <label className={labelCls}>Applies to</label>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setScope("all")}
+                className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold border transition-colors ${scope === "all" ? "bg-forest text-white border-forest" : "bg-white text-gray-600 border-black/10 hover:border-forest"}`}
+              >
+                All properties
+              </button>
+              <button
+                type="button"
+                onClick={() => setScope("specific")}
+                className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold border transition-colors ${scope === "specific" ? "bg-forest text-white border-forest" : "bg-white text-gray-600 border-black/10 hover:border-forest"}`}
+              >
+                Specific properties
+              </button>
+            </div>
+            {scope === "specific" && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {properties.length === 0 && (
+                  <p className="text-gray-400 text-[13px]">No active properties to choose from.</p>
+                )}
+                {properties.map((p) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => togglePropertyId(p.id)}
+                    className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors ${selectedPropertyIds.includes(p.id) ? "bg-forest text-white border-forest" : "bg-white text-gray-600 border-black/10 hover:border-forest"}`}
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <div className="col-span-2 sm:col-span-4 flex items-center gap-3">
             <button
               type="submit"
@@ -138,6 +203,7 @@ export default function DiscountCodesClient({ initialCodes }: Props) {
               <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Code</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Type</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Value</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Applies To</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Uses</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
               <th className="px-4 py-3" />
@@ -145,7 +211,7 @@ export default function DiscountCodesClient({ initialCodes }: Props) {
           </thead>
           <tbody>
             {codes.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-gray-400 text-[13px]">No promo codes yet.</td></tr>
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400 text-[13px]">No promo codes yet.</td></tr>
             )}
             {codes.map((code) => (
               <tr key={code.id} className="border-b border-black/[.04] last:border-none hover:bg-gray-50/50">
@@ -153,6 +219,13 @@ export default function DiscountCodesClient({ initialCodes }: Props) {
                 <td className="px-4 py-4 text-gray-600 capitalize">{code.type}</td>
                 <td className="px-4 py-4 font-semibold text-charcoal">
                   {code.type === "percentage" ? `${Number(code.value)}%` : `₱${Number(code.value).toLocaleString()}`}
+                </td>
+                <td className="px-4 py-4 text-gray-600 max-w-[220px]">
+                  {parsePropertyIds(code.propertyIds).length === 0 ? (
+                    <span className="text-gray-400">All properties</span>
+                  ) : (
+                    scopeLabel(code)
+                  )}
                 </td>
                 <td className="px-4 py-4 text-gray-500">
                   {code.usageCount}{code.maxUses !== null ? ` / ${code.maxUses}` : ""}

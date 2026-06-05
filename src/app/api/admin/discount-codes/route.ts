@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { code, type, value, maxUses } = await req.json();
+  const { code, type, value, maxUses, propertyIds } = await req.json();
 
   if (!code || !type || value === undefined) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -30,6 +30,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Percentage must be between 1 and 100" }, { status: 400 });
   }
 
+  // Normalize scope: null/empty array → all properties; otherwise validate the ids exist.
+  let propertyIdsJson: string | null = null;
+  if (Array.isArray(propertyIds) && propertyIds.length > 0) {
+    const ids = [...new Set(propertyIds.map(Number).filter((n) => Number.isInteger(n)))];
+    const existing = await prisma.property.findMany({ where: { id: { in: ids } }, select: { id: true } });
+    if (existing.length !== ids.length) {
+      return NextResponse.json({ error: "One or more selected properties no longer exist" }, { status: 400 });
+    }
+    propertyIdsJson = JSON.stringify(ids);
+  }
+
   try {
     const discount = await prisma.discountCode.create({
       data: {
@@ -37,6 +48,7 @@ export async function POST(req: Request) {
         type,
         value: Number(value),
         maxUses: maxUses ? Number(maxUses) : null,
+        propertyIds: propertyIdsJson,
       },
     });
     return NextResponse.json(discount);
