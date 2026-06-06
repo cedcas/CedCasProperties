@@ -443,6 +443,7 @@ export default function BookingForm({
   const handlePaid = () => submitBooking();
 
   const inputCls = "w-full px-4 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
+  const selectCls = "px-3 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
   const labelCls = "text-[11.5px] font-semibold text-charcoal/55 tracking-wide uppercase mb-1.5 block";
 
   const hasVariedRates = dailyRates.length > 1 && dailyRates.some((r) => r.rate !== dailyRates[0].rate);
@@ -685,7 +686,7 @@ export default function BookingForm({
                   aria-label="Country code"
                   value={phoneCountry}
                   onChange={handleCountryChange}
-                  className={`${inputCls} w-[7.5rem] flex-shrink-0 pr-2 ${phoneError ? "border-red-400" : ""}`}
+                  className={`${selectCls} w-[8rem] flex-shrink-0 ${phoneError ? "border-red-400" : ""}`}
                 >
                   {COUNTRY_OPTIONS.map((c) => (
                     <option key={c.code} value={c.code}>{c.flag} +{c.calling} {c.name}</option>
@@ -693,7 +694,7 @@ export default function BookingForm({
                 </select>
                 <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} onBlur={handlePhoneBlur}
                   aria-invalid={!!phoneError} placeholder="917 123 4567"
-                  className={`${inputCls} flex-1 ${phoneError ? "border-red-400 focus:border-red-400 focus:ring-red-100" : ""}`} />
+                  className={`${inputCls} flex-1 min-w-0 ${phoneError ? "border-red-400 focus:border-red-400 focus:ring-red-100" : ""}`} />
               </div>
               {phoneError
                 ? <p className="text-[11px] text-red-600 mt-1">{phoneError}</p>
