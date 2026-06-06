@@ -1,5 +1,12 @@
 "use client";
 import { useState, useMemo, useCallback, useEffect } from "react";
+import {
+  isValidPhoneNumber,
+  parsePhoneNumberFromString,
+  getCountries,
+  getCountryCallingCode,
+  type CountryCode,
+} from "libphonenumber-js";
 import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
@@ -47,11 +54,34 @@ const QR: Record<string, string> = {
 const AIRBNB_FEE_RATE = 0.142;
 const STRIPE_FEE_RATE = 0.06;
 
-// Validate a Philippine mobile number.
-// Accepts: 09XXXXXXXXX (11 digits), +639XXXXXXXXX, or 639XXXXXXXXX — spaces/dashes/parens are ignored.
-function isValidPHPhone(raw: string): boolean {
-  const cleaned = raw.replace(/[\s\-()]/g, "");
-  return /^09\d{9}$/.test(cleaned) || /^\+?639\d{9}$/.test(cleaned);
+// Build a sorted country list for the phone dropdown from libphonenumber-js
+// metadata, labeled with flag + display name + calling code. No hardcoded list.
+const regionNames =
+  typeof Intl !== "undefined" && "DisplayNames" in Intl
+    ? new Intl.DisplayNames(["en"], { type: "region" })
+    : null;
+
+function flagEmoji(cc: string): string {
+  return cc.replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+const COUNTRY_OPTIONS = getCountries()
+  .map((cc) => ({
+    code: cc as CountryCode,
+    name: regionNames?.of(cc) ?? cc,
+    calling: getCountryCallingCode(cc),
+    flag: flagEmoji(cc),
+  }))
+  .sort((a, b) => a.name.localeCompare(b.name));
+
+// Validate a phone number for a given country (accepts E.164 with + prefix regardless of country).
+function isValidPhone(raw: string, country: CountryCode): boolean {
+  if (!raw.trim()) return false;
+  try {
+    return isValidPhoneNumber(raw, country);
+  } catch {
+    return false;
+  }
 }
 
 // ── Stripe payment inner component ──────────────────────────────────────────
@@ -127,6 +157,7 @@ export default function BookingForm({
   const [rulesAgreed, setRulesAgreed] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [phoneError, setPhoneError] = useState("");
+  const [phoneCountry, setPhoneCountry] = useState<CountryCode>("PH");
 
   // Discount code state
   const [discountCodeInput, setDiscountCodeInput] = useState("");
@@ -191,7 +222,7 @@ export default function BookingForm({
     const { name, value } = e.target;
     if (name === "guestPhone") {
       // Clear the error once the number becomes valid (or the field is emptied).
-      if (!value || isValidPHPhone(value)) setPhoneError("");
+      if (!value || isValidPhone(value, phoneCountry)) setPhoneError("");
     }
     setForm((p) => {
       const next = { ...p, [name]: value };
@@ -314,15 +345,22 @@ export default function BookingForm({
   };
 
   const handlePhoneBlur = () => {
-    if (form.guestPhone && !isValidPHPhone(form.guestPhone)) {
-      setPhoneError("Please enter a valid Philippine mobile number (e.g. 09171234567).");
+    if (form.guestPhone && !isValidPhone(form.guestPhone, phoneCountry)) {
+      setPhoneError("Please enter a valid phone number for the selected country.");
     }
+  };
+
+  const handleCountryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value as CountryCode;
+    setPhoneCountry(next);
+    // Re-validate against the new country: clear a stale error if it now passes.
+    if (!form.guestPhone || isValidPhone(form.guestPhone, next)) setPhoneError("");
   };
 
   const handleProceed = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidPHPhone(form.guestPhone)) {
-      setPhoneError("Please enter a valid Philippine mobile number (e.g. 09171234567).");
+    if (!isValidPhone(form.guestPhone, phoneCountry)) {
+      setPhoneError("Please enter a valid phone number for the selected country.");
       setError("Please enter a valid phone number so we can reach you about your stay.");
       return;
     }
@@ -379,6 +417,8 @@ export default function BookingForm({
         body: JSON.stringify({
           propertyId,
           ...form,
+          // Send a clean E.164 number so the server parses it unambiguously (any country).
+          guestPhone: parsePhoneNumberFromString(form.guestPhone, phoneCountry)?.number ?? form.guestPhone,
           totalPrice: total,
           nightlyTotal: computedNightlyTotal,
           paymentMethod,
@@ -640,9 +680,21 @@ export default function BookingForm({
             <div><label className={labelCls}>Email Address *</label><input name="guestEmail" type="email" required value={form.guestEmail} onChange={handle} placeholder="maria@example.com" className={inputCls} /></div>
             <div>
               <label className={labelCls}>Phone Number *</label>
-              <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} onBlur={handlePhoneBlur}
-                aria-invalid={!!phoneError} placeholder="09171234567 or +63 917 123 4567"
-                className={`${inputCls} ${phoneError ? "border-red-400 focus:border-red-400 focus:ring-red-100" : ""}`} />
+              <div className="flex gap-2">
+                <select
+                  aria-label="Country code"
+                  value={phoneCountry}
+                  onChange={handleCountryChange}
+                  className={`${inputCls} w-[7.5rem] flex-shrink-0 pr-2 ${phoneError ? "border-red-400" : ""}`}
+                >
+                  {COUNTRY_OPTIONS.map((c) => (
+                    <option key={c.code} value={c.code}>{c.flag} +{c.calling} {c.name}</option>
+                  ))}
+                </select>
+                <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} onBlur={handlePhoneBlur}
+                  aria-invalid={!!phoneError} placeholder="917 123 4567"
+                  className={`${inputCls} flex-1 ${phoneError ? "border-red-400 focus:border-red-400 focus:ring-red-100" : ""}`} />
+              </div>
               {phoneError
                 ? <p className="text-[11px] text-red-600 mt-1">{phoneError}</p>
                 : <p className="text-[11px] text-charcoal/45 mt-1">So we can reach you about your stay if needed.</p>}
