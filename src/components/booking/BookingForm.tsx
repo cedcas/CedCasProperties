@@ -47,6 +47,13 @@ const QR: Record<string, string> = {
 const AIRBNB_FEE_RATE = 0.142;
 const STRIPE_FEE_RATE = 0.06;
 
+// Validate a Philippine mobile number.
+// Accepts: 09XXXXXXXXX (11 digits), +639XXXXXXXXX, or 639XXXXXXXXX — spaces/dashes/parens are ignored.
+function isValidPHPhone(raw: string): boolean {
+  const cleaned = raw.replace(/[\s\-()]/g, "");
+  return /^09\d{9}$/.test(cleaned) || /^\+?639\d{9}$/.test(cleaned);
+}
+
 // ── Stripe payment inner component ──────────────────────────────────────────
 function StripePaymentForm({
   clientSecret,
@@ -119,6 +126,7 @@ export default function BookingForm({
   const [availabilityError, setAvailabilityError] = useState("");
   const [rulesAgreed, setRulesAgreed] = useState(false);
   const [termsAgreed, setTermsAgreed] = useState(false);
+  const [phoneError, setPhoneError] = useState("");
 
   // Discount code state
   const [discountCodeInput, setDiscountCodeInput] = useState("");
@@ -181,6 +189,10 @@ export default function BookingForm({
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    if (name === "guestPhone") {
+      // Clear the error once the number becomes valid (or the field is emptied).
+      if (!value || isValidPHPhone(value)) setPhoneError("");
+    }
     setForm((p) => {
       const next = { ...p, [name]: value };
       if (name === "checkIn" || name === "checkOut") {
@@ -301,8 +313,19 @@ export default function BookingForm({
     }
   };
 
+  const handlePhoneBlur = () => {
+    if (form.guestPhone && !isValidPHPhone(form.guestPhone)) {
+      setPhoneError("Please enter a valid Philippine mobile number (e.g. 09171234567).");
+    }
+  };
+
   const handleProceed = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isValidPHPhone(form.guestPhone)) {
+      setPhoneError("Please enter a valid Philippine mobile number (e.g. 09171234567).");
+      setError("Please enter a valid phone number so we can reach you about your stay.");
+      return;
+    }
     if (!form.checkIn || !form.checkOut) { setError("Please select check-in and check-out dates."); return; }
     if (new Date(form.checkOut) <= new Date(form.checkIn)) { setError("Check-out must be after check-in."); return; }
     if (availabilityError) { setError(availabilityError); return; }
@@ -617,8 +640,12 @@ export default function BookingForm({
             <div><label className={labelCls}>Email Address *</label><input name="guestEmail" type="email" required value={form.guestEmail} onChange={handle} placeholder="maria@example.com" className={inputCls} /></div>
             <div>
               <label className={labelCls}>Phone Number *</label>
-              <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} placeholder="09171234567 or +63 917 123 4567" className={inputCls} />
-              <p className="text-[11px] text-charcoal/45 mt-1">So we can reach you about your stay if needed.</p>
+              <input name="guestPhone" type="tel" required value={form.guestPhone} onChange={handle} onBlur={handlePhoneBlur}
+                aria-invalid={!!phoneError} placeholder="09171234567 or +63 917 123 4567"
+                className={`${inputCls} ${phoneError ? "border-red-400 focus:border-red-400 focus:ring-red-100" : ""}`} />
+              {phoneError
+                ? <p className="text-[11px] text-red-600 mt-1">{phoneError}</p>
+                : <p className="text-[11px] text-charcoal/45 mt-1">So we can reach you about your stay if needed.</p>}
             </div>
           </div>
         </div>
