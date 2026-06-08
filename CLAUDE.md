@@ -217,6 +217,7 @@ Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
 
 1. **Update [About HIL/HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md)**
    - This file is the durable technical record of the system. Keep it in sync with the code.
+   - **Always place the last 5 commits/pushed on `main` at the very top of the file** (above the title), under a `## Recent Commits` heading — as a table of `commit | date | message`. Refresh this block every time the spec gets updated so it reflects the latest 5 commits. Get them with `git log -5 --pretty=format:"%h%x09%ad%x09%s" --date=short`.
    - Add/update sections that cover what changed this session: new models, new routes, new admin pages, new env vars, new crons, new libs, retired code, migration steps.
    - Don't rewrite the whole file — surgically update the affected sections. Include file paths (`src/...`) so future devs can jump to code.
    - If the file doesn't exist yet, create it with a full technical snapshot of the current codebase state.
