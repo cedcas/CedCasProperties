@@ -64,7 +64,7 @@ function StaticPropertyCards() {
     {
       name: "The Lipa Retreat",
       type: "2BR",
-      price: "₱2,500",
+      price: "From ₱2,500",
       location: "Lipa City, Batangas",
       gradient: "linear-gradient(135deg,#2d4820 0%,#3B5323 50%,#4a6b30 100%)",
       amenities: ["wifi", "snowflake", "car", "tv"],
@@ -72,7 +72,7 @@ function StaticPropertyCards() {
     {
       name: "Casa Verde Lipa",
       type: "3BR",
-      price: "₱3,800",
+      price: "From ₱3,800",
       location: "Lipa City, Batangas",
       gradient: "linear-gradient(135deg,#1e3310 0%,#2d4820 50%,#3B5323 100%)",
       amenities: ["wifi", "snowflake", "car", "utensils"],
@@ -80,7 +80,7 @@ function StaticPropertyCards() {
     {
       name: "The Urban Suite",
       type: "Studio",
-      price: "₱1,800",
+      price: "From ₱1,800",
       location: "Lipa City, Batangas",
       gradient: "linear-gradient(135deg,#2C2C2C 0%,#3d3d3d 50%,#3B5323 100%)",
       amenities: ["wifi", "snowflake", "car", "mug-hot"],

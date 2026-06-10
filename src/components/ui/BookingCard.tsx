@@ -130,7 +130,7 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       {/* Price */}
       {pricePerNight > 0 ? (
         <div className="hidden sm:flex items-baseline gap-1.5 mb-1">
-          <span className="font-bold text-charcoal text-[1.8rem]">₱{pricePerNight.toLocaleString()}</span>
+          <span className="font-bold text-charcoal text-[1.8rem]">From ₱{pricePerNight.toLocaleString()}</span>
           <span className="text-charcoal/40 text-[13px]">/ night</span>
         </div>
       ) : (

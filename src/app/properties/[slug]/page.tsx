@@ -439,7 +439,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 <div>
                   <strong>Rate:</strong>{" "}
                   {pricingNotes.rate || (Number(property.pricePerNight) > 0
-                    ? `₱${Number(property.pricePerNight).toLocaleString()} per night`
+                    ? `From ₱${Number(property.pricePerNight).toLocaleString()} per night`
                     : "Rate coming soon")}
                 </div>
                 {pricingNotes.weeklyDiscount && <div>{pricingNotes.weeklyDiscount}</div>}
