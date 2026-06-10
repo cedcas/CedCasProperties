@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
@@ -18,6 +18,8 @@ export default async function BookPage({
   const { checkIn, checkOut } = await searchParams;
   const property = await prisma.property.findUnique({ where: { slug, isActive: true } });
   if (!property) notFound();
+  // Pricing not configured yet — can't book. Send back to the property page.
+  if (Number(property.pricePerNight) <= 0) redirect(`/properties/${slug}`);
 
   return (
     <>

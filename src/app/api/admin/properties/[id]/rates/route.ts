@@ -25,12 +25,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
 
-  if (!["weekday", "weekend", "override"].includes(rateType)) {
+  // The weekday/base rate now lives in Property.pricePerNight (patched via the
+  // property PUT endpoint), so it must never be persisted as a PropertyRate row.
+  if (!["weekend", "override"].includes(rateType)) {
     return NextResponse.json({ error: "Invalid rateType" }, { status: 400 });
   }
 
-  // For weekday/weekend, upsert by rateType + dayOfWeek
-  if (rateType === "weekday" || rateType === "weekend") {
+  // For the weekend rate, upsert the single weekend row
+  if (rateType === "weekend") {
     const existing = await prisma.propertyRate.findFirst({
       where: { propertyId: Number(id), rateType },
     });

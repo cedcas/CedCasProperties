@@ -14,7 +14,6 @@ export default function PropertyForm({ property }: { property?: Property }) {
     slug:           property?.slug          ?? "",
     description:    property?.description   ?? "",
     type:           property?.type          ?? "",
-    pricePerNight:  property?.pricePerNight?.toString() ?? "",
     location:       property?.location      ?? "Lipa City, Batangas",
     bedrooms:       property?.bedrooms?.toString() ?? "1",
     bathrooms:      property?.bathrooms?.toString() ?? "1",
@@ -97,13 +96,21 @@ export default function PropertyForm({ property }: { property?: Property }) {
       </div>
 
       <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
-        <h3 className="font-serif font-semibold text-charcoal mb-5">Pricing & Capacity</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div><label className={labelCls}>Price / Night (₱) *</label><input name="pricePerNight" type="number" required value={form.pricePerNight} onChange={handle} placeholder="2500" className={inputCls} /></div>
+        <h3 className="font-serif font-semibold text-charcoal mb-5">Capacity</h3>
+        <div className="grid grid-cols-3 gap-4">
           <div><label className={labelCls}>Bedrooms</label><input name="bedrooms" type="number" value={form.bedrooms} onChange={handle} min="0" className={inputCls} /></div>
           <div><label className={labelCls}>Bathrooms</label><input name="bathrooms" type="number" value={form.bathrooms} onChange={handle} min="0" className={inputCls} /></div>
           <div><label className={labelCls}>Max Guests</label><input name="maxGuests" type="number" value={form.maxGuests} onChange={handle} min="1" className={inputCls} /></div>
         </div>
+        <p className="text-[11.5px] text-charcoal/45 mt-4 flex items-start gap-1.5">
+          <i className="fa-solid fa-circle-info mt-0.5 text-forest" />
+          <span>Nightly pricing (weekday rate, weekend rate, and date overrides) is managed on the{" "}
+            {isEdit
+              ? <a href={`/admin/properties/${property.id}/rates`} className="text-forest underline">Rates page</a>
+              : <strong>Rates page</strong>}
+            {isEdit ? "." : " after you create the property."}
+          </span>
+        </p>
       </div>
 
       <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">

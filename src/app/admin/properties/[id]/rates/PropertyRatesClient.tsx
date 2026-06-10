@@ -12,28 +12,61 @@ interface RateEntry {
 
 interface Props {
   propertyId: number;
-  defaultRate: number;
+  baseRate: number;
   initialRates: RateEntry[];
 }
 
-export default function PropertyRatesClient({ propertyId, defaultRate, initialRates }: Props) {
+export default function PropertyRatesClient({ propertyId, baseRate, initialRates }: Props) {
   const [rates, setRates] = useState<RateEntry[]>(initialRates);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Weekday/weekend forms
-  const [weekdayRate, setWeekdayRate] = useState(() => String(rates.find((r) => r.rateType === "weekday")?.rate ?? ""));
+  // The weekday / base rate is the Property.pricePerNight column (not a PropertyRate row).
+  const [base, setBase] = useState(baseRate);
+  const [weekdayRate, setWeekdayRate] = useState(() => (baseRate > 0 ? String(baseRate) : ""));
   const [weekendRate, setWeekendRate] = useState(() => String(rates.find((r) => r.rateType === "weekend")?.rate ?? ""));
 
   // Override form
   const [overrideForm, setOverrideForm] = useState({ specificDate: "", rate: "", note: "" });
 
+  const hasWeekend = rates.some((r) => r.rateType === "weekend");
+  const isComplete = base > 0 && hasWeekend;
+
   const inputCls = "w-full px-3 py-2 rounded-[8px] border border-black/10 text-[14px] text-gray-800 focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10";
   const labelCls = "text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1 block";
 
+  // Save the weekday / base rate → Property.pricePerNight (the single source of truth).
+  const saveWeekday = async () => {
+    if (!weekdayRate || isNaN(Number(weekdayRate)) || Number(weekdayRate) <= 0) {
+      setError("Weekday / base rate must be a positive number.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`/api/admin/properties/${propertyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pricePerNight: Number(weekdayRate) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save rate");
+      setBase(Number(weekdayRate));
+      setSuccess("Weekday / base rate saved.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error saving rate");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const saveRate = async (rateType: string, rate: string) => {
-    if (!rate || isNaN(Number(rate))) return;
+    if (!rate || isNaN(Number(rate)) || Number(rate) <= 0) {
+      setError("Rate must be a positive number.");
+      return;
+    }
     setSaving(true);
     setError("");
     setSuccess("");
@@ -105,31 +138,38 @@ export default function PropertyRatesClient({ propertyId, defaultRate, initialRa
       {error && <div className="p-3 bg-red-50 border border-red-200 rounded-[8px] text-[13px] text-red-700">{error}</div>}
       {success && <div className="p-3 bg-green-50 border border-green-200 rounded-[8px] text-[13px] text-green-700">{success}</div>}
 
+      {/* Completeness banner */}
+      {!isComplete && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-[10px] text-[13px] text-amber-800 flex items-start gap-2">
+          <i className="fa-solid fa-triangle-exclamation mt-0.5 flex-shrink-0" />
+          <span>
+            <strong>Pricing incomplete.</strong> Set both a weekday/base rate
+            {base > 0 ? " ✓" : " (not set)"} and a weekend rate{hasWeekend ? " ✓" : " (not set)"} before
+            activating this property — guests can&apos;t book until both are saved.
+          </span>
+        </div>
+      )}
+
       {/* Weekday/Weekend rates */}
       <div className="bg-white rounded-[16px] p-6 border border-black/[.08] shadow-sm">
         <h2 className="font-semibold text-charcoal mb-1">Weekday &amp; Weekend Rates</h2>
-        <p className="text-gray-400 text-[13px] mb-5">Sun–Thu = weekday, Fri–Sat = weekend. Leave blank to use the default rate (₱{defaultRate.toLocaleString()}/night).</p>
+        <p className="text-gray-400 text-[13px] mb-5">Sun–Thu = weekday/base rate, Fri–Sat = weekend rate. Both are required. Date overrides below take priority over either.</p>
         <div className="grid grid-cols-2 gap-5">
           <div>
-            <label className={labelCls}>Weekday Rate (₱)</label>
+            <label className={labelCls}>Weekday / Base Rate (₱) *</label>
             <div className="flex gap-2">
-              <input type="number" min={0} step={1} value={weekdayRate} onChange={(e) => setWeekdayRate(e.target.value)} placeholder={String(defaultRate)} className={inputCls} />
-              <button type="button" disabled={saving} onClick={() => saveRate("weekday", weekdayRate)}
+              <input type="number" min={1} step={1} value={weekdayRate} onChange={(e) => setWeekdayRate(e.target.value)} placeholder="e.g. 2800" className={inputCls} />
+              <button type="button" disabled={saving} onClick={saveWeekday}
                 className="px-4 py-2 bg-forest text-white rounded-[8px] text-[13px] font-semibold disabled:opacity-50 hover:bg-forest/90 whitespace-nowrap">
                 Save
               </button>
             </div>
-            {rates.find((r) => r.rateType === "weekday") && (
-              <button type="button" onClick={() => deleteRate(rates.find((r) => r.rateType === "weekday")!.id)}
-                className="text-[12px] text-red-400 hover:text-red-600 mt-1">
-                <i className="fa-solid fa-xmark mr-1" />Remove weekday rate (use default)
-              </button>
-            )}
+            <p className="text-[11px] text-gray-400 mt-1">This is the property&apos;s headline price and the rate for any night without a weekend rate or override.</p>
           </div>
           <div>
-            <label className={labelCls}>Weekend Rate (₱)</label>
+            <label className={labelCls}>Weekend Rate (₱) *</label>
             <div className="flex gap-2">
-              <input type="number" min={0} step={1} value={weekendRate} onChange={(e) => setWeekendRate(e.target.value)} placeholder={String(defaultRate)} className={inputCls} />
+              <input type="number" min={1} step={1} value={weekendRate} onChange={(e) => setWeekendRate(e.target.value)} placeholder="e.g. 3500" className={inputCls} />
               <button type="button" disabled={saving} onClick={() => saveRate("weekend", weekendRate)}
                 className="px-4 py-2 bg-forest text-white rounded-[8px] text-[13px] font-semibold disabled:opacity-50 hover:bg-forest/90 whitespace-nowrap">
                 Save
@@ -138,7 +178,7 @@ export default function PropertyRatesClient({ propertyId, defaultRate, initialRa
             {rates.find((r) => r.rateType === "weekend") && (
               <button type="button" onClick={() => deleteRate(rates.find((r) => r.rateType === "weekend")!.id)}
                 className="text-[12px] text-red-400 hover:text-red-600 mt-1">
-                <i className="fa-solid fa-xmark mr-1" />Remove weekend rate (use default)
+                <i className="fa-solid fa-xmark mr-1" />Remove weekend rate
               </button>
             )}
           </div>

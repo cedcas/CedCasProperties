@@ -47,7 +47,11 @@ export default async function PropertiesPage() {
                     <div className="text-charcoal/40 text-[12px]">{p.location}</div>
                   </td>
                   <td className="px-5 py-4 text-[13px] text-charcoal/70">{p.type}</td>
-                  <td className="px-5 py-4 text-[13px] font-semibold text-charcoal">₱{Number(p.pricePerNight).toLocaleString()}</td>
+                  <td className="px-5 py-4 text-[13px] font-semibold text-charcoal">
+                    {Number(p.pricePerNight) > 0
+                      ? `₱${Number(p.pricePerNight).toLocaleString()}`
+                      : <span className="text-amber-600 font-medium">Not set</span>}
+                  </td>
                   <td className="px-5 py-4">
                     <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${p.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
                       {p.isActive ? "Active" : "Inactive"}

@@ -5,7 +5,8 @@ export default async function Properties() {
   let properties: Awaited<ReturnType<typeof prisma.property.findMany>> = [];
   try {
     properties = await prisma.property.findMany({
-      where: { isActive: true },
+      // pricePerNight > 0 hides properties whose pricing hasn't been configured yet
+      where: { isActive: true, pricePerNight: { gt: 0 } },
       orderBy: { createdAt: "desc" },
       take: 6,
     });

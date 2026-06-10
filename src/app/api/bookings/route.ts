@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       name: true,
       pricePerNight: true,
       airbnbIcsUrl: true,
+      rates: { select: { rateType: true } },
       bookings: {
         where: { status: { in: ["confirmed", "pending"] } },
         select: { checkIn: true, checkOut: true },
@@ -57,6 +58,24 @@ export async function POST(req: NextRequest) {
   });
 
   if (!property) return NextResponse.json({ error: "Property not found" }, { status: 404 });
+
+  // ── Pricing guard ──────────────────────────────────────────────────────────
+  // Never let an unpriced property be booked (would otherwise charge ₱0).
+  if (Number(property.pricePerNight) <= 0) {
+    return NextResponse.json({ error: "This property isn't available for booking yet — pricing hasn't been set up." }, { status: 400 });
+  }
+  // Weekend rate is required: block a stay that includes a Fri/Sat when no weekend rate exists.
+  const hasWeekendRate = property.rates.some((r) => r.rateType === "weekend");
+  if (!hasWeekendRate) {
+    let stayHasWeekend = false;
+    for (const d = new Date(checkInDate); d < checkOutDate; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay();
+      if (dow === 5 || dow === 6) { stayHasWeekend = true; break; }
+    }
+    if (stayHasWeekend) {
+      return NextResponse.json({ error: "Weekend pricing for these dates isn't available yet. Please contact us or choose different dates." }, { status: 400 });
+    }
+  }
 
   // ── Availability check: DB bookings ──────────────────────────────────────
   const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>

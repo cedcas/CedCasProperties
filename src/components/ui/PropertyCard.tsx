@@ -55,8 +55,14 @@ export default function PropertyCard({ property, index }: { property: Property; 
             <span className="text-[12px] text-charcoal/50 mt-0.5 block">{property.type} · Entire Unit</span>
           </div>
           <div className="text-right">
-            <div className="font-bold text-charcoal text-[1.1rem]">₱{Number(property.pricePerNight).toLocaleString()}</div>
-            <div className="text-[11px] text-charcoal/45">/night</div>
+            {Number(property.pricePerNight) > 0 ? (
+              <>
+                <div className="font-bold text-charcoal text-[1.1rem]">₱{Number(property.pricePerNight).toLocaleString()}</div>
+                <div className="text-[11px] text-charcoal/45">/night</div>
+              </>
+            ) : (
+              <div className="text-[12px] text-charcoal/45 font-medium">Rate coming soon</div>
+            )}
           </div>
         </div>
 

@@ -214,6 +214,12 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     telephone: CONTACT_PHONE,
   };
 
+  // Omit price fields entirely when pricing isn't configured (avoids ₱0 in JSON-LD)
+  if (Number(property.pricePerNight) <= 0) {
+    delete vacationRental.priceRange;
+    delete vacationRental.makesOffer;
+  }
+
   if (imageUrls.length > 0) {
     vacationRental.image = imageUrls;
   }

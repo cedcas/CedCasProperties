@@ -218,6 +218,18 @@ export default function BookingForm({
     }
   }, [slug]);
 
+  // When dates arrive pre-filled via URL params (guest clicked "Book" on the
+  // property card), the date inputs' onChange never fires — so fetch the daily
+  // rates and availability once on mount. Without this, computedNightlyTotal
+  // falls back to nights × pricePerNight and Stripe is charged the wrong amount.
+  useEffect(() => {
+    if (initialCheckIn && initialCheckOut) {
+      checkAvailability(initialCheckIn, initialCheckOut);
+      fetchDailyRates(initialCheckIn, initialCheckOut);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     if (name === "guestPhone") {

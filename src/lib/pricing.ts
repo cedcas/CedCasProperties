@@ -10,7 +10,9 @@ export interface DailyRateEntry {
 
 /**
  * Compute the nightly rate for each date in a stay.
- * Falls back to the property's default pricePerNight if no override/weekday/weekend rate is configured.
+ * Priority: specific date override > weekend rate (Fri/Sat) > base rate (`defaultRate`,
+ * i.e. the property's weekday/base `pricePerNight`). A weekend night with no weekend
+ * rate configured falls back to the base rate (defensive — never charges 0).
  */
 export async function getDailyRates(
   propertyId: number,
@@ -29,7 +31,7 @@ export async function getDailyRates(
     const dateStr = cursor.toISOString().split("T")[0];
     const dow = cursor.getDay(); // 0=Sun..6=Sat
 
-    // Priority: specific date override > weekday/weekend rule > default
+    // Priority: specific date override > weekend rule > base rate
     const override = rates.find(
       (r) =>
         r.rateType === "override" &&
@@ -41,9 +43,7 @@ export async function getDailyRates(
       entries.push({ date: dateStr, rate: Number(override.rate), note: override.note });
     } else {
       const isWeekend = dow === 5 || dow === 6; // Fri or Sat
-      const rule = rates.find((r) =>
-        isWeekend ? r.rateType === "weekend" : r.rateType === "weekday"
-      );
+      const rule = isWeekend ? rates.find((r) => r.rateType === "weekend") : undefined;
       entries.push({ date: dateStr, rate: rule ? Number(rule.rate) : defaultRate, note: rule?.note });
     }
 
@@ -51,6 +51,18 @@ export async function getDailyRates(
   }
 
   return entries;
+}
+
+/**
+ * A property is fully priced only when it has a base/weekday rate (pricePerNight > 0)
+ * AND a weekend rate. Used to gate public visibility/booking and to flag incomplete
+ * setups in the admin Rates page.
+ */
+export function isPricingComplete(
+  pricePerNight: number,
+  rates: { rateType: string }[]
+): boolean {
+  return pricePerNight > 0 && rates.some((r) => r.rateType === "weekend");
 }
 
 export function sumDailyRates(entries: DailyRateEntry[]): number {

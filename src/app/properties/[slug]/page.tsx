@@ -191,11 +191,17 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 </h1>
               </div>
               <div className="text-right">
-                <div className="text-white/60 text-[12px] font-medium uppercase tracking-wider mb-1">Starting from</div>
-                <div className="font-bold text-white" style={{ fontSize: "clamp(1.5rem,3vw,2rem)" }}>
-                  ₱{Number(property.pricePerNight).toLocaleString()}
-                </div>
-                <div className="text-white/60 text-[13px]">per night</div>
+                {Number(property.pricePerNight) > 0 ? (
+                  <>
+                    <div className="text-white/60 text-[12px] font-medium uppercase tracking-wider mb-1">Starting from</div>
+                    <div className="font-bold text-white" style={{ fontSize: "clamp(1.5rem,3vw,2rem)" }}>
+                      ₱{Number(property.pricePerNight).toLocaleString()}
+                    </div>
+                    <div className="text-white/60 text-[13px]">per night</div>
+                  </>
+                ) : (
+                  <div className="text-white/70 text-[14px] font-medium">Rate coming soon</div>
+                )}
               </div>
             </div>
           </div>
@@ -432,7 +438,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               <div className="bg-white rounded-[12px] p-6 border border-black/[.06] space-y-2 text-charcoal/75 text-[14px] leading-[1.8]">
                 <div>
                   <strong>Rate:</strong>{" "}
-                  {pricingNotes.rate || `₱${Number(property.pricePerNight).toLocaleString()} per night`}
+                  {pricingNotes.rate || (Number(property.pricePerNight) > 0
+                    ? `₱${Number(property.pricePerNight).toLocaleString()} per night`
+                    : "Rate coming soon")}
                 </div>
                 {pricingNotes.weeklyDiscount && <div>{pricingNotes.weeklyDiscount}</div>}
                 {pricingNotes.monthlyDiscount && <div>{pricingNotes.monthlyDiscount}</div>}

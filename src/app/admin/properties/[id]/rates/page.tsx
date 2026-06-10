@@ -37,13 +37,13 @@ export default async function PropertyRatesPage({ params }: { params: Promise<{ 
       <div className="mb-8">
         <h1 className="text-[1.6rem] font-serif font-semibold text-charcoal">Daily Rate Pricing</h1>
         <p className="text-gray-500 text-[14px] mt-1">
-          Set weekday/weekend rates or override pricing for specific dates. Default rate: ₱{Number(property.pricePerNight).toLocaleString()}/night.
+          This is the only place a property&apos;s price is set. Configure the weekday/base rate, weekend rate, and any date overrides.
         </p>
       </div>
 
       <PropertyRatesClient
         propertyId={property.id}
-        defaultRate={Number(property.pricePerNight)}
+        baseRate={Number(property.pricePerNight)}
         initialRates={property.rates.map((r) => ({
           ...r,
           rate: Number(r.rate),

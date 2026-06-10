@@ -94,7 +94,10 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
     fetchDailyRates(checkIn, checkOut);
   }, [checkIn, checkOut, slug, fetchDailyRates]);
 
+  const notPriced = pricePerNight <= 0;
+
   const handleBook = () => {
+    if (notPriced) return;
     // Require both dates before proceeding
     if (!checkIn && !checkOut) {
       setDateError("Please select your check-in and check-out dates to continue.");
@@ -125,10 +128,14 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
     <div className="bg-white rounded-[20px] p-6 shadow-[0_8px_40px_rgba(44,44,44,.10)] border border-black/[.05]">
 
       {/* Price */}
-      <div className="hidden sm:flex items-baseline gap-1.5 mb-1">
-        <span className="font-bold text-charcoal text-[1.8rem]">₱{pricePerNight.toLocaleString()}</span>
-        <span className="text-charcoal/40 text-[13px]">/ night</span>
-      </div>
+      {pricePerNight > 0 ? (
+        <div className="hidden sm:flex items-baseline gap-1.5 mb-1">
+          <span className="font-bold text-charcoal text-[1.8rem]">₱{pricePerNight.toLocaleString()}</span>
+          <span className="text-charcoal/40 text-[13px]">/ night</span>
+        </div>
+      ) : (
+        <div className="hidden sm:block font-bold text-charcoal text-[1.4rem] mb-1">Rate coming soon</div>
+      )}
       <p className="hidden sm:block text-[12px] text-charcoal/35 mb-5">Entire unit · {type}</p>
 
       {/* Date pickers */}
@@ -241,12 +248,12 @@ export default function BookingCard({ slug, pricePerNight, maxGuests, bedrooms, 
       {/* CTA */}
       <button
         onClick={handleBook}
-        disabled={availability === "unavailable" || availability === "checking" || (!!propertyRules && !rulesAgreed)}
+        disabled={notPriced || availability === "unavailable" || availability === "checking" || (!!propertyRules && !rulesAgreed)}
         className="w-full flex items-center justify-center gap-2 py-3.5 rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
-        style={{ background: (availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
+        style={{ background: (notPriced || availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
       >
         <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} />
-        {availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${Math.round(computedNightlyTotal).toLocaleString()}` : "Book this Property"}
+        {notPriced ? "Not Available Yet" : availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${Math.round(computedNightlyTotal).toLocaleString()}` : "Book this Property"}
       </button>
 
       {availability === "available" && (

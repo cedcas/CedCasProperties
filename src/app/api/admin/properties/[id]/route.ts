@@ -8,23 +8,36 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
   const { id } = await params;
   const data = await req.json();
+
+  // Build a partial update: only write fields that are actually present in the body.
+  // This lets the property form (no pricing fields) and the Rates page (pricePerNight
+  // only) both PUT here safely, and avoids the old `parseFloat("") → NaN` corruption.
+  const update: Record<string, unknown> = {};
+  if (data.name !== undefined)         update.name = data.name;
+  if (data.slug !== undefined)         update.slug = data.slug;
+  if (data.description !== undefined)  update.description = data.description;
+  if (data.type !== undefined)         update.type = data.type;
+  if (data.location !== undefined)     update.location = data.location;
+  if (data.bedrooms !== undefined)     update.bedrooms = parseInt(data.bedrooms);
+  if (data.bathrooms !== undefined)    update.bathrooms = parseInt(data.bathrooms);
+  if (data.maxGuests !== undefined)    update.maxGuests = parseInt(data.maxGuests);
+  if (data.amenities !== undefined)    update.amenities = data.amenities;
+  if (data.isActive !== undefined)     update.isActive = data.isActive;
+  if (data.isFeatured !== undefined)   update.isFeatured = data.isFeatured;
+  if (data.airbnbIcsUrl !== undefined) update.airbnbIcsUrl = data.airbnbIcsUrl ?? null;
+
+  // pricePerNight (the weekday/base rate) is patched only from the Rates page.
+  if (data.pricePerNight !== undefined && data.pricePerNight !== "") {
+    const ppn = parseFloat(data.pricePerNight);
+    if (!Number.isFinite(ppn) || ppn <= 0) {
+      return NextResponse.json({ error: "Weekday / base rate must be a positive number." }, { status: 400 });
+    }
+    update.pricePerNight = ppn;
+  }
+
   const property = await prisma.property.update({
     where: { id: Number(id) },
-    data: {
-      name:          data.name,
-      slug:          data.slug,
-      description:   data.description,
-      type:          data.type,
-      pricePerNight: parseFloat(data.pricePerNight),
-      location:      data.location,
-      bedrooms:      parseInt(data.bedrooms),
-      bathrooms:     parseInt(data.bathrooms),
-      maxGuests:     parseInt(data.maxGuests),
-      amenities:     data.amenities,
-      isActive:      data.isActive,
-      isFeatured:    data.isFeatured,
-      airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
-    },
+    data: update,
   });
   return NextResponse.json(property);
 }

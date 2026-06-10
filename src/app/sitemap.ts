@@ -5,7 +5,7 @@ const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const properties = await prisma.property.findMany({
-    where: { isActive: true },
+    where: { isActive: true, pricePerNight: { gt: 0 } },
     select: { slug: true, updatedAt: true },
   });
 

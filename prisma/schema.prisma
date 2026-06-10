@@ -14,7 +14,7 @@ model Property {
   name          String
   description   String         @db.Text
   type          String // "2BR" | "3BR" | "Studio" etc.
-  pricePerNight Decimal        @db.Decimal(10, 2)
+  pricePerNight Decimal        @default(0) @db.Decimal(10, 2) // weekday / base nightly rate; 0 = not yet configured. Edited only on the Rates page.
   location      String
   bedrooms      Int            @default(1)
   bathrooms     Int            @default(1)
@@ -178,7 +178,7 @@ model PropertyRate {
   id           Int       @id @default(autoincrement())
   property     Property  @relation(fields: [propertyId], references: [id])
   propertyId   Int
-  rateType     String // "weekday" | "weekend" | "override"
+  rateType     String // "weekend" | "override" (weekday/base rate lives in Property.pricePerNight)
   dayOfWeek    Int? // 0=Sun, 1=Mon...6=Sat; null for overrides
   specificDate DateTime? // for rateType="override"
   rate         Decimal   @db.Decimal(10, 2)

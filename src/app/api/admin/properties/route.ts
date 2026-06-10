@@ -8,20 +8,22 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const data = await req.json();
+  // Pricing is no longer set on create — pricePerNight defaults to 0 ("not configured").
+  // The admin sets the weekday + weekend rate on the Rates page before activating.
+  // New properties start inactive so a ₱0 property never goes live before it's priced.
   const property = await prisma.property.create({
     data: {
       name:          data.name,
       slug:          data.slug,
       description:   data.description,
       type:          data.type,
-      pricePerNight: parseFloat(data.pricePerNight),
       location:      data.location,
       bedrooms:      parseInt(data.bedrooms),
       bathrooms:     parseInt(data.bathrooms),
       maxGuests:     parseInt(data.maxGuests),
       amenities:     data.amenities   ?? "[]",
       images:        data.images      ?? "[]",
-      isActive:      data.isActive    ?? true,
+      isActive:      data.isActive    ?? false,
       isFeatured:    data.isFeatured  ?? false,
       airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
     },

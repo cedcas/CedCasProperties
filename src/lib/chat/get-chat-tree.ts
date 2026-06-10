@@ -7,7 +7,8 @@ import { chatTree, type ChatNode } from "./chat-tree";
  */
 export async function getChatTree(): Promise<Record<string, ChatNode>> {
   const properties = await prisma.property.findMany({
-    where: { isActive: true },
+    // only surface fully-priced properties in the chat assistant
+    where: { isActive: true, pricePerNight: { gt: 0 } },
     select: {
       slug: true,
       name: true,
