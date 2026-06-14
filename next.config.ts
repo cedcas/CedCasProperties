@@ -30,8 +30,8 @@ const nextConfig: NextConfig = {
               // Connections: own origin + GA + Stripe
               "connect-src 'self' https://www.google-analytics.com https://api.stripe.com",
 
-              // Frames: only Stripe for 3D-Secure
-              "frame-src https://js.stripe.com",
+              // Frames: Stripe for 3D-Secure + OpenStreetMap for the property map
+              "frame-src https://js.stripe.com https://www.openstreetmap.org",
 
               // Prevent this site from being embedded in iframes
               "frame-ancestors 'none'",
