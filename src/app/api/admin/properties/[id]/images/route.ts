@@ -1,36 +1,34 @@
 import { NextResponse } from "next/server";
-import { put, del } from "@vercel/blob";
+import { del } from "@vercel/blob";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ id: string }> };
 
-// POST — upload a new image, save URL to property.images
+// POST — record an image URL on property.images.
+// The file itself is uploaded directly from the browser to Vercel Blob
+// (see ./upload/route.ts) to bypass the 4.5 MB serverless body limit; this
+// endpoint only receives the resulting URL as a small JSON payload.
 export async function POST(req: Request, { params }: Params) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-  if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 });
-
-  const blob = await put(`properties/${id}/${Date.now()}-${file.name}`, file, {
-    access: "public",
-  });
+  const { url } = await req.json();
+  if (!url || typeof url !== "string") return NextResponse.json({ error: "No url provided" }, { status: 400 });
 
   const property = await prisma.property.findUnique({ where: { id: Number(id) } });
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const images: string[] = JSON.parse(property.images || "[]");
-  images.push(blob.url);
+  images.push(url);
 
   const updated = await prisma.property.update({
     where: { id: Number(id) },
     data: { images: JSON.stringify(images) },
   });
 
-  return NextResponse.json({ url: blob.url, images: JSON.parse(updated.images) });
+  return NextResponse.json({ url, images: JSON.parse(updated.images) });
 }
 
 // PATCH — set featured image { url: string }

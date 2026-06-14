@@ -1,5 +1,6 @@
 "use client";
 import { useState, useRef } from "react";
+import { upload as uploadToBlob } from "@vercel/blob/client";
 
 interface ImageManagerProps {
   propertyId: number;
@@ -19,9 +20,18 @@ export default function ImageManager({ propertyId, initialImages, initialFeature
     setError("");
     try {
       for (const file of Array.from(files)) {
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await fetch(`/api/admin/properties/${propertyId}/images`, { method: "POST", body: fd });
+        // Upload the file straight to Vercel Blob from the browser — bypasses
+        // the 4.5 MB serverless request-body limit that caused 413 errors.
+        const blob = await uploadToBlob(`properties/${propertyId}/${file.name}`, file, {
+          access: "public",
+          handleUploadUrl: `/api/admin/properties/${propertyId}/images/upload`,
+        });
+        // Persist the resulting URL (tiny JSON payload, no size concern).
+        const res = await fetch(`/api/admin/properties/${propertyId}/images`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: blob.url }),
+        });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
           throw new Error(body?.error || `Upload failed (${res.status})`);
