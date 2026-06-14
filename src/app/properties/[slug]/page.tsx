@@ -366,15 +366,18 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               </div>
             )}
 
-            {/* Where you'll be — area-level map. Zoom 13 keeps it city/subdivision
-                level (no exact pin) to preserve the gated-village privacy; the
-                schema geo uses the same Lipa City fallback for the same reason. */}
+            {/* Where you'll be — area-level map centered on BellaVita Subdivision,
+                Brgy. Anilao, Lipa City. The bbox shows the neighborhood only (no
+                exact pin) to preserve the gated-village privacy; the exact address
+                is shared after booking. OpenStreetMap is used because Google's
+                ?output=embed URL now returns X-Frame-Options: SAMEORIGIN and is
+                refused inside an iframe. */}
             <div>
               <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">Where you&apos;ll be</h2>
               <div className="rounded-[12px] overflow-hidden border border-black/[.06]">
                 <iframe
-                  title={`Map of ${property.location || "Lipa City"}, Batangas`}
-                  src={`https://www.google.com/maps?q=${encodeURIComponent(`${property.location || "Lipa City"}, Batangas, Philippines`)}&z=13&output=embed`}
+                  title={`Map of ${property.location || "BellaVita, Anilao, Lipa City"}, Batangas`}
+                  src="https://www.openstreetmap.org/export/embed.html?bbox=121.16261,13.9124,121.18661,13.9284&layer=mapnik"
                   loading="lazy"
                   referrerPolicy="no-referrer-when-downgrade"
                   className="w-full aspect-[16/9] border-0 block"
