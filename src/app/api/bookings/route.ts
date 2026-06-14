@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
-import { getDailyRates, sumDailyRates, calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
+import { getDailyRates, sumDailyRates, calcStripeFee, calcExtraGuestFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
@@ -48,6 +48,9 @@ export async function POST(req: NextRequest) {
     select: {
       name: true,
       pricePerNight: true,
+      maxGuests: true,
+      includedGuests: true,
+      extraGuestFeePerNight: true,
       airbnbIcsUrl: true,
       rates: { select: { rateType: true } },
       bookings: {
@@ -58,6 +61,17 @@ export async function POST(req: NextRequest) {
   });
 
   if (!property) return NextResponse.json({ error: "Property not found" }, { status: 404 });
+
+  // ── Guest capacity guard ────────────────────────────────────────────────────
+  // The booking form caps the guest dropdown at maxGuests, but never trust the client:
+  // reject anything over capacity (or a non-positive count) server-side.
+  const guestCount = Number(guests) || 1;
+  if (guestCount < 1 || guestCount > property.maxGuests) {
+    return NextResponse.json(
+      { error: `This property accommodates up to ${property.maxGuests} guest${property.maxGuests !== 1 ? "s" : ""}.` },
+      { status: 400 }
+    );
+  }
 
   // ── Pricing guard ──────────────────────────────────────────────────────────
   // Never let an unpriced property be booked (would otherwise charge ₱0).
@@ -154,8 +168,17 @@ export async function POST(req: NextRequest) {
     Number(property.pricePerNight)
   );
   const serverNightlyTotal = sumDailyRates(dailyRates);
-  const stripeFee = paymentMethod === "stripe" ? calcStripeFee(serverNightlyTotal - discountAmount) : 0;
-  const computedTotal = serverNightlyTotal - discountAmount + stripeFee;
+  // Extra-guest fee — recomputed from the property's own fields (never trust the client total).
+  // Promo discounts the nightly base only; the fee is added on top, then Stripe's 6% on the full amount.
+  const extraGuestFee = calcExtraGuestFee(
+    guestCount,
+    property.includedGuests,
+    Number(property.extraGuestFeePerNight),
+    dailyRates.length
+  );
+  const chargeBeforeStripe = serverNightlyTotal + extraGuestFee - discountAmount;
+  const stripeFee = paymentMethod === "stripe" ? calcStripeFee(chargeBeforeStripe) : 0;
+  const computedTotal = chargeBeforeStripe + stripeFee;
 
   // ── Save booking ──────────────────────────────────────────────────────────
   // Stripe payments with a successful PaymentIntent are auto-confirmed
@@ -169,9 +192,10 @@ export async function POST(req: NextRequest) {
       guestPhone: guestPhoneE164,
       checkIn:   checkInDate,
       checkOut:  checkOutDate,
-      guests:    Number(guests) || 1,
+      guests:    guestCount,
       totalPrice: computedTotal,
       nightlyTotal: serverNightlyTotal,
+      extraGuestFee: extraGuestFee > 0 ? extraGuestFee : null,
       stripeFee:  stripeFee > 0 ? stripeFee : null,
       discountCode: discountCode || null,
       discountAmount: discountAmount > 0 ? discountAmount : null,
@@ -215,6 +239,11 @@ export async function POST(req: NextRequest) {
         .join("")
     : `<tr><td style="padding:4px 0;color:#888;font-size:13px">${nights} night${nights!==1?"s":""} × ₱${dailyRates[0].rate.toLocaleString()}</td><td style="text-align:right;font-size:13px">₱${serverNightlyTotal.toLocaleString()}</td></tr>`;
 
+  const extraGuests = Math.max(0, guestCount - property.includedGuests);
+  const extraGuestFeeRow = extraGuestFee > 0
+    ? `<tr><td style="padding:4px 0;color:#888;font-size:13px">Extra guest fee (${extraGuests} guest${extraGuests !== 1 ? "s" : ""} × ₱${Number(property.extraGuestFeePerNight).toLocaleString()} × ${nights} night${nights !== 1 ? "s" : ""})</td><td style="text-align:right;font-size:13px">₱${extraGuestFee.toLocaleString()}</td></tr>`
+    : "";
+
   const discountRow = discountAmount > 0
     ? `<tr><td style="padding:4px 0;color:#2a7a2a;font-size:13px">Promo code (${discountCode})</td><td style="text-align:right;font-size:13px;color:#2a7a2a">−₱${discountAmount.toLocaleString()}</td></tr>`
     : "";
@@ -226,6 +255,7 @@ export async function POST(req: NextRequest) {
   const priceBreakdownHtml = `
     <table style="width:100%;font-size:14px;border-collapse:collapse;margin-top:8px">
       ${nightlyBreakdownRows}
+      ${extraGuestFeeRow}
       ${discountRow}
       ${stripeFeeRow}
       <tr style="border-top:1px solid #e5e5e5">

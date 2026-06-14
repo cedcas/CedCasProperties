@@ -42,6 +42,8 @@ export default async function BookPage({
             propertyType={property.type}
             pricePerNight={Number(property.pricePerNight)}
             maxGuests={property.maxGuests}
+            includedGuests={property.includedGuests}
+            extraGuestFeePerNight={Number(property.extraGuestFeePerNight)}
             bedrooms={property.bedrooms}
             slug={slug}
             initialCheckIn={checkIn ?? ""}

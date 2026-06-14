@@ -72,3 +72,17 @@ export function sumDailyRates(entries: DailyRateEntry[]): number {
 export function calcStripeFee(nightlyTotal: number): number {
   return Math.round(nightlyTotal * STRIPE_FEE_RATE * 100) / 100;
 }
+
+/**
+ * Extra-guest fee for a stay: ₱fee × (guests − includedGuests) × nights.
+ * Returns 0 when disabled (fee ≤ 0), within the included threshold, or for an empty stay.
+ */
+export function calcExtraGuestFee(
+  guests: number,
+  includedGuests: number,
+  feePerNight: number,
+  nights: number
+): number {
+  if (feePerNight <= 0 || guests <= includedGuests || nights <= 0) return 0;
+  return Math.round((guests - includedGuests) * feePerNight * nights * 100) / 100;
+}

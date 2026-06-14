@@ -18,6 +18,9 @@ export default async function PropertyRatesPage({ params }: { params: Promise<{ 
       id: true,
       name: true,
       pricePerNight: true,
+      maxGuests: true,
+      includedGuests: true,
+      extraGuestFeePerNight: true,
       rates: {
         orderBy: [{ rateType: "asc" }, { specificDate: "asc" }],
       },
@@ -44,6 +47,9 @@ export default async function PropertyRatesPage({ params }: { params: Promise<{ 
       <PropertyRatesClient
         propertyId={property.id}
         baseRate={Number(property.pricePerNight)}
+        maxGuests={property.maxGuests}
+        includedGuests={property.includedGuests}
+        extraGuestFeePerNight={Number(property.extraGuestFeePerNight)}
         initialRates={property.rates.map((r) => ({
           ...r,
           rate: Number(r.rate),

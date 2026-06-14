@@ -21,6 +21,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (data.bedrooms !== undefined)     update.bedrooms = parseInt(data.bedrooms);
   if (data.bathrooms !== undefined)    update.bathrooms = parseInt(data.bathrooms);
   if (data.maxGuests !== undefined)    update.maxGuests = parseInt(data.maxGuests);
+  if (data.includedGuests !== undefined) update.includedGuests = parseInt(data.includedGuests);
   if (data.amenities !== undefined)    update.amenities = data.amenities;
   if (data.isActive !== undefined)     update.isActive = data.isActive;
   if (data.isFeatured !== undefined)   update.isFeatured = data.isFeatured;
@@ -34,6 +35,15 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Weekday / base rate must be a positive number." }, { status: 400 });
     }
     update.pricePerNight = ppn;
+  }
+
+  // Extra-guest fee per night (patched from the Rates page). 0 = disabled.
+  if (data.extraGuestFeePerNight !== undefined && data.extraGuestFeePerNight !== "") {
+    const egf = parseFloat(data.extraGuestFeePerNight);
+    if (!Number.isFinite(egf) || egf < 0) {
+      return NextResponse.json({ error: "Extra guest fee must be 0 or positive." }, { status: 400 });
+    }
+    update.extraGuestFeePerNight = egf;
   }
 
   const property = await prisma.property.update({

@@ -19,6 +19,8 @@ model Property {
   bedrooms      Int            @default(1)
   bathrooms     Int            @default(1)
   maxGuests     Int            @default(2)
+  includedGuests        Int      @default(1) // extra-guest fee applies to guests beyond this
+  extraGuestFeePerNight Decimal  @default(0) @db.Decimal(10, 2) // ₱/extra guest/night; 0 = disabled
   images        String         @db.Text // JSON array of image URLs
   featuredImage String?        @db.Text // URL of the featured/cover image
   amenities     String         @db.Text // JSON array
@@ -60,6 +62,7 @@ model Booking {
   guests                Int                @default(1)
   totalPrice            Decimal            @db.Decimal(10, 2)
   nightlyTotal          Decimal?           @db.Decimal(10, 2) // base nightly rate total (before fees/discounts)
+  extraGuestFee         Decimal?           @db.Decimal(10, 2) // extra-guest fee charged for this booking
   stripeFee             Decimal?           @db.Decimal(10, 2) // Stripe 6% transaction fee
   discountCode          String? // applied promo code
   discountAmount        Decimal?           @db.Decimal(10, 2) // discount amount (PHP)

@@ -13,10 +13,13 @@ interface RateEntry {
 interface Props {
   propertyId: number;
   baseRate: number;
+  maxGuests: number;
+  includedGuests: number;
+  extraGuestFeePerNight: number;
   initialRates: RateEntry[];
 }
 
-export default function PropertyRatesClient({ propertyId, baseRate, initialRates }: Props) {
+export default function PropertyRatesClient({ propertyId, baseRate, maxGuests, includedGuests, extraGuestFeePerNight, initialRates }: Props) {
   const [rates, setRates] = useState<RateEntry[]>(initialRates);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -29,6 +32,10 @@ export default function PropertyRatesClient({ propertyId, baseRate, initialRates
 
   // Override form
   const [overrideForm, setOverrideForm] = useState({ specificDate: "", rate: "", note: "" });
+
+  // Extra-guest fee (Property.includedGuests + Property.extraGuestFeePerNight columns)
+  const [guestThreshold, setGuestThreshold] = useState(() => String(includedGuests || 1));
+  const [extraFeePerNight, setExtraFeePerNight] = useState(() => (extraGuestFeePerNight > 0 ? String(extraGuestFeePerNight) : ""));
 
   const hasWeekend = rates.some((r) => r.rateType === "weekend");
   const isComplete = base > 0 && hasWeekend;
@@ -57,6 +64,37 @@ export default function PropertyRatesClient({ propertyId, baseRate, initialRates
       setSuccess("Weekday / base rate saved.");
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Error saving rate");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Save the extra-guest fee + threshold → Property.includedGuests / Property.extraGuestFeePerNight.
+  const saveGuestFee = async () => {
+    const threshold = parseInt(guestThreshold);
+    if (!Number.isFinite(threshold) || threshold < 1) {
+      setError("“Charge after” must be 1 guest or more.");
+      return;
+    }
+    const fee = extraFeePerNight === "" ? 0 : Number(extraFeePerNight);
+    if (isNaN(fee) || fee < 0) {
+      setError("Extra guest fee must be 0 or positive.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    setSuccess("");
+    try {
+      const res = await fetch(`/api/admin/properties/${propertyId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ includedGuests: threshold, extraGuestFeePerNight: fee }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save");
+      setSuccess(fee > 0 ? "Extra guest fee saved." : "Extra guest fee disabled.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error saving");
     } finally {
       setSaving(false);
     }
@@ -183,6 +221,37 @@ export default function PropertyRatesClient({ propertyId, baseRate, initialRates
             )}
           </div>
         </div>
+      </div>
+
+      {/* Extra guest fee */}
+      <div className="bg-white rounded-[16px] p-6 border border-black/[.08] shadow-sm">
+        <h2 className="font-semibold text-charcoal mb-1">Extra Guest Fee</h2>
+        <p className="text-gray-400 text-[13px] mb-5">
+          Charge a per-night fee for each guest beyond a threshold (like Airbnb). This property sleeps up to {maxGuests}. Leave the fee at 0 to disable.
+        </p>
+        <div className="grid grid-cols-2 gap-5 items-end">
+          <div>
+            <label className={labelCls}>Charge after (guests included)</label>
+            <input type="number" min={1} step={1} value={guestThreshold} onChange={(e) => setGuestThreshold(e.target.value)} placeholder="e.g. 5" className={inputCls} />
+            <p className="text-[11px] text-gray-400 mt-1">No fee for stays at or under this guest count.</p>
+          </div>
+          <div>
+            <label className={labelCls}>Extra fee per guest / night (₱)</label>
+            <div className="flex gap-2">
+              <input type="number" min={0} step={1} value={extraFeePerNight} onChange={(e) => setExtraFeePerNight(e.target.value)} placeholder="e.g. 400" className={inputCls} />
+              <button type="button" disabled={saving} onClick={saveGuestFee}
+                className="px-4 py-2 bg-forest text-white rounded-[8px] text-[13px] font-semibold disabled:opacity-50 hover:bg-forest/90 whitespace-nowrap">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+        {Number(extraFeePerNight) > 0 && Number(guestThreshold) >= 1 && (
+          <p className="text-[12px] text-gray-500 mt-3">
+            <i className="fa-solid fa-circle-info mr-1 text-forest/60" />
+            ₱{Number(extraFeePerNight).toLocaleString()} per night for each guest after {guestThreshold}.
+          </p>
+        )}
       </div>
 
       {/* Date overrides */}

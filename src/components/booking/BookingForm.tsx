@@ -39,6 +39,8 @@ interface Props {
   propertyType: string;
   pricePerNight: number;
   maxGuests: number;
+  includedGuests: number;
+  extraGuestFeePerNight: number;
   bedrooms: number;
   slug: string;
   initialCheckIn?: string;
@@ -142,7 +144,7 @@ function StripePaymentForm({
 }
 
 export default function BookingForm({
-  propertyId, propertyName, propertyType, pricePerNight, maxGuests, bedrooms, slug,
+  propertyId, propertyName, propertyType, pricePerNight, maxGuests, includedGuests, extraGuestFeePerNight, bedrooms, slug,
   initialCheckIn = "", initialCheckOut = "", propertyRules,
 }: Props) {
   const [form, setForm] = useState({
@@ -264,8 +266,14 @@ export default function BookingForm({
   );
 
   const discountAmount = appliedDiscount?.discountAmount ?? 0;
-  const stripeFeePHP = paymentMethod === "stripe" ? Math.round((computedNightlyTotal - discountAmount) * STRIPE_FEE_RATE * 100) / 100 : 0;
-  const total = computedNightlyTotal - discountAmount + stripeFeePHP;
+  // Extra-guest fee — mirrors calcExtraGuestFee() in src/lib/pricing.ts (server is authoritative).
+  const extraGuests = Math.max(0, (Number(form.guests) || 1) - includedGuests);
+  const extraGuestFee = extraGuestFeePerNight > 0 && nights > 0
+    ? Math.round(extraGuests * extraGuestFeePerNight * nights * 100) / 100
+    : 0;
+  // Promo discounts nightly base only; fee added on top, then Stripe's 6% on the full amount.
+  const stripeFeePHP = paymentMethod === "stripe" ? Math.round((computedNightlyTotal + extraGuestFee - discountAmount) * STRIPE_FEE_RATE * 100) / 100 : 0;
+  const total = computedNightlyTotal + extraGuestFee - discountAmount + stripeFeePHP;
 
   const { airbnbTotal, savings } = useMemo(() => {
     const at = computedNightlyTotal * (1 + AIRBNB_FEE_RATE);
@@ -530,6 +538,12 @@ export default function BookingForm({
                   </div>
                 )
             }
+            {extraGuestFee > 0 && (
+              <div className="flex justify-between text-charcoal/50">
+                <span>Extra guest fee ({extraGuests} guest{extraGuests !== 1 ? "s" : ""} × ₱{extraGuestFeePerNight.toLocaleString()} × {nights} night{nights !== 1 ? "s" : ""})</span>
+                <span>₱{Math.round(extraGuestFee).toLocaleString()}</span>
+              </div>
+            )}
             {discountAmount > 0 && (
               <div className="flex justify-between text-green-700">
                 <span>Promo ({appliedDiscount?.code})</span>
@@ -763,6 +777,12 @@ export default function BookingForm({
                 <div className="flex items-center justify-between text-charcoal/55">
                   <span>{nights} night{nights !== 1 ? "s" : ""} × ₱{(dailyRates[0]?.rate ?? pricePerNight).toLocaleString()}</span>
                   <span className="font-bold text-charcoal">₱{Math.round(computedNightlyTotal).toLocaleString()}</span>
+                </div>
+              )}
+              {extraGuestFee > 0 && (
+                <div className="flex items-center justify-between text-charcoal/55">
+                  <span>Extra guest fee ({extraGuests} guest{extraGuests !== 1 ? "s" : ""} × ₱{extraGuestFeePerNight.toLocaleString()} × {nights} night{nights !== 1 ? "s" : ""})</span>
+                  <span>₱{Math.round(extraGuestFee).toLocaleString()}</span>
                 </div>
               )}
               {discountAmount > 0 && (
