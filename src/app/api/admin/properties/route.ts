@@ -26,6 +26,7 @@ export async function POST(req: NextRequest) {
       isActive:      data.isActive    ?? false,
       isFeatured:    data.isFeatured  ?? false,
       airbnbIcsUrl:  data.airbnbIcsUrl ?? null,
+      propertyRules: data.propertyRules ?? null,
     },
   });
 

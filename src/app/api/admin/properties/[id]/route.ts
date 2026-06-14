@@ -25,6 +25,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (data.isActive !== undefined)     update.isActive = data.isActive;
   if (data.isFeatured !== undefined)   update.isFeatured = data.isFeatured;
   if (data.airbnbIcsUrl !== undefined) update.airbnbIcsUrl = data.airbnbIcsUrl ?? null;
+  if (data.propertyRules !== undefined) update.propertyRules = data.propertyRules ?? null;
 
   // pricePerNight (the weekday/base rate) is patched only from the Rates page.
   if (data.pricePerNight !== undefined && data.pricePerNight !== "") {
