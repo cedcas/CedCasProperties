@@ -18,7 +18,7 @@ export default function TermsPage() {
       <main className="bg-cream min-h-screen pt-28 pb-20">
         <div className="max-w-3xl mx-auto px-6">
           <h1 className="font-serif font-semibold text-charcoal text-[2rem] mb-2">Terms of Service</h1>
-          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: April 11, 2026</p>
+          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: June 16, 2026</p>
 
           <div className="prose-custom space-y-8 text-[14.5px] text-charcoal/75 leading-[1.85]">
             <section>
@@ -72,18 +72,11 @@ export default function TermsPage() {
 
             <section>
               <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">6. House Rules</h2>
-              <p>All guests are expected to follow these general rules during their stay:</p>
-              <ul className="list-disc pl-5 space-y-2 mt-2">
-                <li>Treat the property and its furnishings with care.</li>
-                <li>No smoking inside the property.</li>
-                <li>Noise should be kept to a reasonable level, especially after 10:00 PM.</li>
-                <li>No unauthorized parties or events.</li>
-                <li>The number of overnight guests must not exceed the count declared in your booking.</li>
-                <li>Pets are not allowed unless the specific property listing states otherwise.</li>
-                <li>Guests are responsible for any damage to the property during their stay.</li>
-              </ul>
+              <p>
+                Each property has its own set of house rules, which are provided to you during the booking process and at the property itself. Guests are expected to read and observe the house rules of each property they stay in.
+              </p>
               <p className="mt-3">
-                Individual properties may have additional rules, which will be shown to you during the booking process. You must agree to any property-specific rules before completing your booking.
+                Failure to follow a property&rsquo;s house rules may result in additional fees and, in serious cases, may lead to cancellation of your stay without refund.
               </p>
             </section>
 
