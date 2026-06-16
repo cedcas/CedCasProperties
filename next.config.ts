@@ -27,8 +27,14 @@ const nextConfig: NextConfig = {
               // Fonts: own origin + Font Awesome CDN
               "font-src 'self' https://cdnjs.cloudflare.com",
 
-              // Connections: own origin + GA + Stripe
-              "connect-src 'self' https://www.google-analytics.com https://api.stripe.com",
+              // Connections: own origin + GA + Stripe + Vercel Blob.
+              // Admin image upload is a CLIENT-SIDE upload — the browser PUTs the
+              // file directly to the Vercel Blob API (vercel.com/api/blob, which
+              // may redirect to *.public.blob.vercel-storage.com). Without these
+              // in connect-src the browser blocks the fetch; Safari reports it as
+              // "Load failed", the Blob SDK treats it as a network error and
+              // retries 10× with exponential backoff (~10 min) → stuck "Uploading…".
+              "connect-src 'self' https://www.google-analytics.com https://api.stripe.com https://vercel.com https://*.public.blob.vercel-storage.com",
 
               // Frames: Stripe for 3D-Secure + OpenStreetMap for the property map
               "frame-src https://js.stripe.com https://www.openstreetmap.org",

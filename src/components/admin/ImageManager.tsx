@@ -20,28 +20,45 @@ export default function ImageManager({ propertyId, initialImages, initialFeature
     setError("");
     try {
       for (const file of Array.from(files)) {
-        // Upload the file straight to Vercel Blob from the browser — bypasses
-        // the 4.5 MB serverless request-body limit that caused 413 errors.
-        const blob = await uploadToBlob(`properties/${propertyId}/${file.name}`, file, {
-          access: "public",
-          handleUploadUrl: `/api/admin/properties/${propertyId}/images/upload`,
-        });
-        // Persist the resulting URL (tiny JSON payload, no size concern).
-        const res = await fetch(`/api/admin/properties/${propertyId}/images`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: blob.url }),
-        });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error || `Upload failed (${res.status})`);
+        // Fail fast instead of hanging: if a fetch is blocked (e.g. CSP) or the
+        // network drops, the Blob SDK otherwise retries ~10× with exponential
+        // backoff (~10 min) before erroring. A 60s ceiling per file surfaces the
+        // problem quickly rather than leaving the UI stuck on "Uploading…".
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 60_000);
+        try {
+          // Upload the file straight to Vercel Blob from the browser — bypasses
+          // the 4.5 MB serverless request-body limit that caused 413 errors.
+          const blob = await uploadToBlob(`properties/${propertyId}/${file.name}`, file, {
+            access: "public",
+            handleUploadUrl: `/api/admin/properties/${propertyId}/images/upload`,
+            abortSignal: ctrl.signal,
+          });
+          // Persist the resulting URL (tiny JSON payload, no size concern).
+          const res = await fetch(`/api/admin/properties/${propertyId}/images`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: blob.url }),
+            signal: ctrl.signal,
+          });
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body?.error || `Upload failed (${res.status})`);
+          }
+          const data = await res.json();
+          setImages(data.images);
+          if (!featured) setFeatured(data.url);
+        } finally {
+          clearTimeout(timer);
         }
-        const data = await res.json();
-        setImages(data.images);
-        if (!featured) setFeatured(data.url);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      const aborted = err instanceof Error && (err.name === "AbortError" || /abort/i.test(err.message));
+      setError(
+        aborted
+          ? "Upload timed out. Check your connection and try again — if it keeps failing, the image host may be blocked."
+          : err instanceof Error ? err.message : "Upload failed."
+      );
     } finally {
       setUploading(false);
     }
