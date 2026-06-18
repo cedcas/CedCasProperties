@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
+import { formatStayDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +102,7 @@ export default async function DashboardPage() {
                   <div className="text-charcoal/45 text-[12px]">{b.property.name}</div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[12px] text-charcoal/50">{new Date(b.checkIn).toLocaleDateString()} → {new Date(b.checkOut).toLocaleDateString()}</div>
+                  <div className="text-[12px] text-charcoal/50">{formatStayDate(b.checkIn, { year: "numeric", month: "numeric", day: "numeric" })} → {formatStayDate(b.checkOut, { year: "numeric", month: "numeric", day: "numeric" })}</div>
                   <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.status === "confirmed" ? "bg-green-100 text-green-700" : b.status === "cancelled" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
                     {b.status}
                   </span>

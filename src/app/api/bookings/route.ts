@@ -6,6 +6,7 @@ import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
 import { codeAppliesToProperty } from "@/lib/promo";
+import { formatStayDate } from "@/lib/dates";
 
 export async function POST(req: NextRequest) {
   const {
@@ -229,13 +230,13 @@ export async function POST(req: NextRequest) {
   }
 
   const nights = dailyRates.length;
-  const fmtDate = (d: string) => new Date(d).toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+  const fmtDate = (d: string) => formatStayDate(d, { weekday: "short", year: "numeric", month: "long", day: "numeric" });
 
   // Build itemized nightly rates HTML table rows
   const hasVariedRates = dailyRates.some((r) => r.rate !== dailyRates[0].rate);
   const nightlyBreakdownRows = hasVariedRates
     ? dailyRates
-        .map((r) => `<tr><td style="padding:4px 0;color:#888;font-size:13px">${new Date(r.date).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})}</td><td style="text-align:right;font-size:13px">₱${r.rate.toLocaleString()}</td></tr>`)
+        .map((r) => `<tr><td style="padding:4px 0;color:#888;font-size:13px">${formatStayDate(r.date,{weekday:"short",month:"short",day:"numeric"})}</td><td style="text-align:right;font-size:13px">₱${r.rate.toLocaleString()}</td></tr>`)
         .join("")
     : `<tr><td style="padding:4px 0;color:#888;font-size:13px">${nights} night${nights!==1?"s":""} × ₱${dailyRates[0].rate.toLocaleString()}</td><td style="text-align:right;font-size:13px">₱${serverNightlyTotal.toLocaleString()}</td></tr>`;
 

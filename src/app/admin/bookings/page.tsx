@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import DeleteButton from "@/components/admin/DeleteButton";
 import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
+import { formatStayDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function BookingsPage() {
                     </td>
                     <td className="px-5 py-4 text-[13px] text-charcoal/70">{b.property.name}</td>
                     <td className="px-5 py-4 text-[12px] text-charcoal/60">
-                      {new Date(b.checkIn).toLocaleDateString()} →<br />{new Date(b.checkOut).toLocaleDateString()}
+                      {formatStayDate(b.checkIn, { year: "numeric", month: "numeric", day: "numeric" })} →<br />{formatStayDate(b.checkOut, { year: "numeric", month: "numeric", day: "numeric" })}
                     </td>
                     <td className="px-5 py-4 text-[13px] text-charcoal/70 text-center">{b.guests}</td>
                     <td className="px-5 py-4 text-[13px] font-semibold text-charcoal">₱{Number(b.totalPrice).toLocaleString()}</td>

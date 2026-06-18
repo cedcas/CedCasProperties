@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
+import { formatStayDate } from "@/lib/dates";
 import {
   materializeScheduledMessagesForBooking,
   flushDueScheduledMessages,
@@ -41,7 +42,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   // Send confirmation email to guest when status moves to "confirmed"
   if (status === "confirmed") {
-    const fmtDate = (d: Date) => d.toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+    const fmtDate = (d: Date) => formatStayDate(d, { weekday: "short", year: "numeric", month: "long", day: "numeric" });
     const nights = Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000);
 
     // Build itemized price breakdown from stored booking fields

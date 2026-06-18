@@ -1,4 +1,5 @@
 import type { Booking, Property } from "@prisma/client";
+import { formatStayDate } from "@/lib/dates";
 
 export type TemplateContext = {
   booking: Pick<Booking, "guestName" | "guestEmail" | "guestPhone" | "checkIn" | "checkOut" | "guests" | "totalPrice" | "notes">;
@@ -8,11 +9,11 @@ export type TemplateContext = {
 const VAR_RE = /\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g;
 
 function fmtDate(d: Date): string {
-  return d.toLocaleDateString("en-PH", { weekday: "short", year: "numeric", month: "long", day: "numeric" });
+  return formatStayDate(d, { weekday: "short", year: "numeric", month: "long", day: "numeric" });
 }
 
 function fmtShortDate(d: Date): string {
-  return d.toLocaleDateString("en-PH", { month: "numeric", day: "numeric" });
+  return formatStayDate(d, { month: "numeric", day: "numeric" });
 }
 
 function splitName(full: string): { first: string; last: string } {

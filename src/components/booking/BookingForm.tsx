@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import PaymentQR from "./PaymentQR";
+import { formatStayDate } from "@/lib/dates";
 
 // Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
 // We also accept a runtime key returned from the payment-intent API as a fallback.
@@ -517,8 +518,8 @@ export default function BookingForm({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3 text-[13px] text-charcoal/55 mb-4">
-            <div><span className="text-charcoal/35 text-[11px] block">CHECK-IN</span>{new Date(form.checkIn).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</div>
-            <div><span className="text-charcoal/35 text-[11px] block">CHECK-OUT</span>{new Date(form.checkOut).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</div>
+            <div><span className="text-charcoal/35 text-[11px] block">CHECK-IN</span>{formatStayDate(form.checkIn, { month: "short", day: "numeric", year: "numeric" })}</div>
+            <div><span className="text-charcoal/35 text-[11px] block">CHECK-OUT</span>{formatStayDate(form.checkOut, { month: "short", day: "numeric", year: "numeric" })}</div>
             <div><span className="text-charcoal/35 text-[11px] block">GUEST</span>{form.guestName}</div>
             <div><span className="text-charcoal/35 text-[11px] block">GUESTS</span>{form.guests} pax</div>
           </div>
@@ -527,7 +528,7 @@ export default function BookingForm({
             {hasVariedRates
               ? dailyRates.map((r) => (
                   <div key={r.date} className="flex justify-between text-charcoal/50">
-                    <span>{new Date(r.date).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})}</span>
+                    <span>{formatStayDate(r.date,{weekday:"short",month:"short",day:"numeric"})}</span>
                     <span>₱{r.rate.toLocaleString()}</span>
                   </div>
                 ))
@@ -764,7 +765,7 @@ export default function BookingForm({
                 <>
                   {dailyRates.map((r) => (
                     <div key={r.date} className="flex items-center justify-between text-charcoal/55">
-                      <span>{new Date(r.date).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"})}{r.note ? <span className="ml-1 text-[11px] text-charcoal/30">({r.note})</span> : null}</span>
+                      <span>{formatStayDate(r.date,{weekday:"short",month:"short",day:"numeric"})}{r.note ? <span className="ml-1 text-[11px] text-charcoal/30">({r.note})</span> : null}</span>
                       <span>₱{r.rate.toLocaleString()}</span>
                     </div>
                   ))}

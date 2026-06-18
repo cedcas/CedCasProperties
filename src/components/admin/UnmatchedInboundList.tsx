@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { formatStayDate } from "@/lib/dates";
 
 type Row = {
   id: number;
@@ -133,7 +134,7 @@ export default function UnmatchedInboundList({ initialRows }: { initialRows: Row
                       className="text-left px-3 py-2 rounded-[8px] hover:bg-cream border border-transparent hover:border-forest/20 disabled:opacity-50"
                     >
                       <div className="text-[13px] font-semibold text-charcoal">{b.guestName} — {b.property.name}</div>
-                      <div className="text-[11.5px] text-charcoal/50">{b.guestEmail} · {b.guestPhone} · {new Date(b.checkIn).toLocaleDateString()}–{new Date(b.checkOut).toLocaleDateString()} · {b.status}</div>
+                      <div className="text-[11.5px] text-charcoal/50">{b.guestEmail} · {b.guestPhone} · {formatStayDate(b.checkIn, { year: "numeric", month: "numeric", day: "numeric" })}–{formatStayDate(b.checkOut, { year: "numeric", month: "numeric", day: "numeric" })} · {b.status}</div>
                     </button>
                   ))}
                 </div>

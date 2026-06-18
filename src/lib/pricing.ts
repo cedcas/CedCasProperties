@@ -29,7 +29,7 @@ export async function getDailyRates(
 
   while (cursor < checkOut) {
     const dateStr = cursor.toISOString().split("T")[0];
-    const dow = cursor.getDay(); // 0=Sun..6=Sat
+    const dow = cursor.getUTCDay(); // 0=Sun..6=Sat — UTC, to match dateStr regardless of runtime tz
 
     // Priority: specific date override > weekend rule > base rate
     const override = rates.find(
@@ -47,7 +47,7 @@ export async function getDailyRates(
       entries.push({ date: dateStr, rate: rule ? Number(rule.rate) : defaultRate, note: rule?.note });
     }
 
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
 
   return entries;
