@@ -14,9 +14,9 @@ const CONTACT_PHONE = "+639066554415";
 const LIPA_CITY_GEO = { latitude: 13.9411, longitude: 121.1638 };
 
 // Per-property bed configuration. Google's VacationRental rich result accepts
-// BedDetails entries to describe what guests will actually sleep on. With only
-// two units today this lookup is intentionally simple; if/when a third
-// property is added, lift this into a Property column.
+// BedDetails entries to describe what guests will actually sleep on. This
+// lookup is intentionally simple; if it keeps growing, lift it into a Property
+// column.
 // `typeOfBed` values are drawn from schema.org's BedType enum where one
 // applies (QueenBed, SofaBed, Bunkbed); otherwise free text.
 const BEDS_BY_SLUG: Record<string, Array<{ count: number; type: string }>> = {
@@ -30,6 +30,23 @@ const BEDS_BY_SLUG: Record<string, Array<{ count: number; type: string }>> = {
     { count: 1, type: "SofaBed" },
     { count: 2, type: "Floor mattress" },
     { count: 1, type: "Bunkbed" },
+  ],
+  // Mickey in Lipa — three configurations of the same themed house.
+  "mickey-in-lipa--family-staycation--sleeps-7": [
+    { count: 1, type: "QueenBed" },
+    { count: 1, type: "Day bed" },
+    { count: 2, type: "Floor mattress" },
+  ],
+  "mickey-in-lipa--family-house--sleeps-11": [
+    { count: 1, type: "QueenBed" },
+    { count: 1, type: "Bunkbed" },
+    { count: 1, type: "Day bed" },
+  ],
+  "mickey-in-lipa--full-family-house--sleeps-15": [
+    { count: 1, type: "QueenBed" },
+    { count: 2, type: "Bunkbed" },
+    { count: 1, type: "Day bed" },
+    { count: 2, type: "Floor mattress" },
   ],
 };
 

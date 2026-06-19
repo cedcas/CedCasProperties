@@ -200,7 +200,7 @@ const TWO_BR: PropertySeoContent = {
     monthlyDiscount: "Monthly stays: dedicated rate available — message for terms",
     paymentMethods:
       "GCash, BPI InstaPay (no fees), Stripe / credit card (6% processing fee applies)",
-    deposit: "50% to secure the booking; balance on or before check-in",
+    deposit: "Full payment required at the time of booking to secure your dates",
     cancellation: "100% refund 7+ days out; 50% refund 3–7 days out; no refund inside 3 days",
   },
   propertyFaqs: [
@@ -397,7 +397,7 @@ const ONE_BR: PropertySeoContent = {
       "Monthly stays (28+ nights): dedicated remote-work rate available — message for terms",
     paymentMethods:
       "GCash, BPI InstaPay (no fees), Stripe / credit card (6% processing fee applies)",
-    deposit: "50% to secure the booking; balance on or before check-in",
+    deposit: "Full payment required at the time of booking to secure your dates",
     cancellation: "100% refund 7+ days out; 50% refund 3–7 days out; no refund inside 3 days",
   },
   propertyFaqs: [
