@@ -453,7 +453,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                     "GCash, BPI InstaPay (no fees), Stripe / credit card (6% processing fee applies)"}
                 </div>
                 {pricingNotes.deposit && (
-                  <div><strong>Deposit:</strong> {pricingNotes.deposit}</div>
+                  <div><strong>Payment:</strong> {pricingNotes.deposit}</div>
                 )}
                 {pricingNotes.cancellation && (
                   <div><strong>Cancellation:</strong> {pricingNotes.cancellation}</div>
