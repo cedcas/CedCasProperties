@@ -13,6 +13,13 @@ const CONTACT_PHONE = "+639066554415";
 // geo requirement without disclosing exact addresses.
 const LIPA_CITY_GEO = { latitude: 13.9411, longitude: 121.1638 };
 
+// Site-wide fallback check-in / check-out times (ISO 8601 time-of-day). Google's
+// VacationRental enhancement flags a missing checkinTime/checkoutTime as a
+// critical issue, so we always emit these — a property's own housePolicies
+// values override the default when they parse cleanly.
+const DEFAULT_CHECKIN_ISO = "14:00:00";
+const DEFAULT_CHECKOUT_ISO = "12:00:00";
+
 // Per-property bed configuration. Google's VacationRental rich result accepts
 // BedDetails entries to describe what guests will actually sleep on. This
 // lookup is intentionally simple; if it keeps growing, lift it into a Property
@@ -81,10 +88,11 @@ type HousePolicies = {
 // doesn't clearly match — we'd rather omit than emit a wrong value.
 function parseTimeToIso(raw?: string): string | null {
   if (!raw) return null;
-  const ampm = raw.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  // Accepts "2:00 PM", "12:00 PM (noon)", and hour-only forms like "3 PM" / "3PM".
+  const ampm = raw.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)/i);
   if (ampm) {
     let hours = parseInt(ampm[1], 10);
-    const minutes = parseInt(ampm[2], 10);
+    const minutes = ampm[2] ? parseInt(ampm[2], 10) : 0;
     if (hours < 1 || hours > 12 || minutes < 0 || minutes > 59) return null;
     const meridiem = ampm[3].toUpperCase();
     if (meridiem === "PM" && hours !== 12) hours += 12;
@@ -164,10 +172,6 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const accommodation: Record<string, unknown> = {
     "@type": "Accommodation",
-    // Optional recommended field — points to a more specific schema.org class
-    // so Google can disambiguate the unit type. Both units are fully-furnished
-    // whole homes in a gated subdivision.
-    additionalType: "https://schema.org/House",
     name: property.name,
     description: property.heroSummary || property.description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
@@ -190,7 +194,6 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
-    additionalType: "https://schema.org/House",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
@@ -222,10 +225,20 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     // rejects it even though Google's lenient Rich Results Test ignores it.
     makesOffer: {
       "@type": "Offer",
-      price: Number(property.pricePerNight),
+      identifier: property.slug,
       priceCurrency: "PHP",
       availability: "https://schema.org/InStock",
       url: `${url}/book`,
+      // `priceSpecification` (UnitPriceSpecification, priced per night) is what
+      // Google's VacationRental Offer expects — a bare `price` triggers the
+      // "missing priceSpecification" + "invalid itemtype" enhancement errors.
+      priceSpecification: {
+        "@type": "UnitPriceSpecification",
+        price: Number(property.pricePerNight),
+        priceCurrency: "PHP",
+        unitCode: "DAY",
+        unitText: "night",
+      },
     },
     knowsLanguage: ["en", "fil"],
     telephone: CONTACT_PHONE,
@@ -241,12 +254,11 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     vacationRental.image = imageUrls;
   }
 
-  if (checkinTimeIso) {
-    vacationRental.checkinTime = checkinTimeIso;
-  }
-  if (checkoutTimeIso) {
-    vacationRental.checkoutTime = checkoutTimeIso;
-  }
+  // Always emit checkin/checkout — fall back to the site default when the
+  // property's housePolicies don't carry a parseable time (Google flags a
+  // missing value as a critical VacationRental issue).
+  vacationRental.checkinTime = checkinTimeIso ?? DEFAULT_CHECKIN_ISO;
+  vacationRental.checkoutTime = checkoutTimeIso ?? DEFAULT_CHECKOUT_ISO;
   if (petsAllowed !== null) {
     vacationRental.petsAllowed = petsAllowed;
   }
