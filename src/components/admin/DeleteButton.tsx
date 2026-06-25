@@ -2,7 +2,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function DeleteButton({ id, type }: { id: number; type: "property" | "booking" | "message" | "testimonial" }) {
+export default function DeleteButton({ id, type, redirectTo }: { id: number; type: "property" | "booking" | "message" | "testimonial"; redirectTo?: string }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
 
@@ -15,7 +15,8 @@ export default function DeleteButton({ id, type }: { id: number; type: "property
 
   const handleDelete = async () => {
     await fetch(urlMap[type], { method: "DELETE" });
-    router.refresh();
+    if (redirectTo) router.push(redirectTo);
+    else router.refresh();
   };
 
   if (confirming) {

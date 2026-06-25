@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import DeleteButton from "@/components/admin/DeleteButton";
 import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
@@ -29,7 +30,7 @@ export default async function BookingsPage() {
             <table className="w-full min-w-[700px]">
               <thead>
                 <tr className="border-b border-black/[.06] bg-[#F8F9FA]">
-                  {["Guest", "Property", "Dates", "Guests", "Total", "Status", "Actions"].map((h) => (
+                  {["Guest", "Property", "Dates", "Guests", "Total", "Status", "", "Actions"].map((h) => (
                     <th key={h} className="text-left px-5 py-3.5 text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide">{h}</th>
                   ))}
                 </tr>
@@ -38,8 +39,10 @@ export default async function BookingsPage() {
                 {bookings.map((b) => (
                   <tr key={b.id} className="hover:bg-[#FAFAFA] transition-colors">
                     <td className="px-5 py-4">
-                      <div className="font-medium text-charcoal text-[14px]">{b.guestName}</div>
-                      <div className="text-charcoal/40 text-[12px]">{b.guestEmail}</div>
+                      <Link href={`/admin/bookings/${b.id}`} className="group">
+                        <div className="font-medium text-charcoal text-[14px] group-hover:text-forest transition-colors">{b.guestName}</div>
+                        <div className="text-charcoal/40 text-[12px]">{b.guestEmail}</div>
+                      </Link>
                     </td>
                     <td className="px-5 py-4 text-[13px] text-charcoal/70">{b.property.name}</td>
                     <td className="px-5 py-4 text-[12px] text-charcoal/60">
@@ -48,6 +51,9 @@ export default async function BookingsPage() {
                     <td className="px-5 py-4 text-[13px] text-charcoal/70 text-center">{b.guests}</td>
                     <td className="px-5 py-4 text-[13px] font-semibold text-charcoal">₱{Number(b.totalPrice).toLocaleString()}</td>
                     <td className="px-5 py-4"><BookingStatusSelect id={b.id} status={b.status} /></td>
+                    <td className="px-5 py-4">
+                      <Link href={`/admin/bookings/${b.id}`} className="text-[12px] font-semibold text-forest hover:underline">View</Link>
+                    </td>
                     <td className="px-5 py-4"><DeleteButton id={b.id} type="booking" /></td>
                   </tr>
                 ))}
