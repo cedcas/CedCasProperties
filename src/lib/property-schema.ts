@@ -20,6 +20,11 @@ const LIPA_CITY_GEO = { latitude: 13.9411, longitude: 121.1638 };
 const DEFAULT_CHECKIN_ISO = "14:00:00";
 const DEFAULT_CHECKOUT_ISO = "12:00:00";
 
+// Philippines is UTC+8 (no DST). Google's VacationRental example qualifies
+// checkin/checkout times with an explicit offset ("18:00:00+08:00"); a bare
+// zoneless time is rejected, so we always append the offset.
+const PH_UTC_OFFSET = "+08:00";
+
 // Per-property bed configuration. Google's VacationRental rich result accepts
 // BedDetails entries to describe what guests will actually sleep on. This
 // lookup is intentionally simple; if it keeps growing, lift it into a Property
@@ -172,6 +177,9 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const accommodation: Record<string, unknown> = {
     "@type": "Accommodation",
+    // Google's vacation-rental enum (NOT a schema.org URL). The whole home is
+    // rented, so "EntirePlace" is the correct Accommodation-level value.
+    additionalType: "EntirePlace",
     name: property.name,
     description: property.heroSummary || property.description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
@@ -194,10 +202,16 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
 
   const vacationRental: Record<string, unknown> = {
     "@type": "VacationRental",
+    // Google's vacation-rental enum value (plain string, not a schema.org URL).
+    additionalType: "House",
     identifier: property.slug,
     name: property.name,
     description: property.heroSummary || property.description,
     url,
+    // Google REQUIRES latitude/longitude as direct string properties on the
+    // VacationRental (the nested `geo` is kept as extra, valid context).
+    latitude: String(LIPA_CITY_GEO.latitude),
+    longitude: String(LIPA_CITY_GEO.longitude),
     address: {
       "@type": "PostalAddress",
       streetAddress: "BellaVita Subdivision",
@@ -218,47 +232,29 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
       url: BASE_URL,
     },
     tourBookingPage: `${url}/book`,
+    // Google's VacationRental spec has NO Offer/makesOffer/priceSpecification —
+    // price for this rich result comes from a Hotel Center feed, not on-page
+    // markup. Emitting an Offer makes Google's parser reject the whole item
+    // ("invalid itemtype" / "invalid object type for priceSpecification"), so
+    // we carry the price signal only via the valid `priceRange` field.
     priceRange: `₱${property.pricePerNight}`,
-    // `makesOffer` (Organization property, inherited by LodgingBusiness/
-    // VacationRental) is the schema-valid way to attach an Offer. `offers` is
-    // NOT a valid property of VacationRental — the Schema Markup Validator
-    // rejects it even though Google's lenient Rich Results Test ignores it.
-    makesOffer: {
-      "@type": "Offer",
-      identifier: property.slug,
-      priceCurrency: "PHP",
-      availability: "https://schema.org/InStock",
-      url: `${url}/book`,
-      // `priceSpecification` (UnitPriceSpecification, priced per night) is what
-      // Google's VacationRental Offer expects — a bare `price` triggers the
-      // "missing priceSpecification" + "invalid itemtype" enhancement errors.
-      priceSpecification: {
-        "@type": "UnitPriceSpecification",
-        price: Number(property.pricePerNight),
-        priceCurrency: "PHP",
-        unitCode: "DAY",
-        unitText: "night",
-      },
-    },
     knowsLanguage: ["en", "fil"],
     telephone: CONTACT_PHONE,
   };
 
-  // Omit price fields entirely when pricing isn't configured (avoids ₱0 in JSON-LD)
+  // Omit price entirely when pricing isn't configured (avoids ₱0 in JSON-LD)
   if (Number(property.pricePerNight) <= 0) {
     delete vacationRental.priceRange;
-    delete vacationRental.makesOffer;
   }
 
   if (imageUrls.length > 0) {
     vacationRental.image = imageUrls;
   }
 
-  // Always emit checkin/checkout — fall back to the site default when the
-  // property's housePolicies don't carry a parseable time (Google flags a
-  // missing value as a critical VacationRental issue).
-  vacationRental.checkinTime = checkinTimeIso ?? DEFAULT_CHECKIN_ISO;
-  vacationRental.checkoutTime = checkoutTimeIso ?? DEFAULT_CHECKOUT_ISO;
+  // Always emit checkin/checkout (with PH UTC offset) — fall back to the site
+  // default when the property's housePolicies don't carry a parseable time.
+  vacationRental.checkinTime = `${checkinTimeIso ?? DEFAULT_CHECKIN_ISO}${PH_UTC_OFFSET}`;
+  vacationRental.checkoutTime = `${checkoutTimeIso ?? DEFAULT_CHECKOUT_ISO}${PH_UTC_OFFSET}`;
   if (petsAllowed !== null) {
     vacationRental.petsAllowed = petsAllowed;
   }
