@@ -7,7 +7,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const data = await req.json();
+  const body = await req.json();
+
+  // Whitelist editable fields — never trust the client to set code/usageCount/etc.
+  const data: { isActive?: boolean; notes?: string | null } = {};
+  if (typeof body.isActive === "boolean") data.isActive = body.isActive;
+  if ("notes" in body) {
+    data.notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
+  }
 
   const updated = await prisma.discountCode.update({
     where: { id: Number(id) },

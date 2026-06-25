@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { code, type, value, maxUses, propertyIds } = await req.json();
+  const { code, type, value, maxUses, propertyIds, notes } = await req.json();
 
   if (!code || !type || value === undefined) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -49,6 +49,7 @@ export async function POST(req: Request) {
         value: Number(value),
         maxUses: maxUses ? Number(maxUses) : null,
         propertyIds: propertyIdsJson,
+        notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
       },
     });
     return NextResponse.json(discount);

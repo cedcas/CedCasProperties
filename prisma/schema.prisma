@@ -173,6 +173,7 @@ model DiscountCode {
   usageCount Int      @default(0)
   maxUses    Int? // null = unlimited
   propertyIds String? @db.Text // JSON array of Property ids. null/empty = applies to ALL properties
+  notes      String? @db.Text // free-form admin notes/comments — editable after creation
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 }

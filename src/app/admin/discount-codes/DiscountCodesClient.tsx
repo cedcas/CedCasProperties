@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { DiscountCode } from "@prisma/client";
 import { parsePropertyIds } from "@/lib/promo";
 
@@ -15,12 +15,47 @@ interface Props {
 
 export default function DiscountCodesClient({ initialCodes, properties }: Props) {
   const [codes, setCodes] = useState<DiscountCode[]>(initialCodes);
-  const [form, setForm] = useState({ code: "", type: "percentage", value: "", maxUses: "" });
+  const [form, setForm] = useState({ code: "", type: "percentage", value: "", maxUses: "", notes: "" });
   const [scope, setScope] = useState<"all" | "specific">("all");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Per-row editable notes
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [savedNotesId, setSavedNotesId] = useState<number | null>(null);
+
+  const toggleNotes = (code: DiscountCode) => {
+    if (expandedId === code.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(code.id);
+    setNotesDraft(code.notes ?? "");
+    setSavedNotesId(null);
+  };
+
+  const saveNotes = async (code: DiscountCode) => {
+    setSavingNotes(true);
+    setSavedNotesId(null);
+    try {
+      const res = await fetch(`/api/admin/discount-codes/${code.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: notesDraft }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setCodes((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        setSavedNotesId(code.id);
+      }
+    } finally {
+      setSavingNotes(false);
+    }
+  };
 
   const togglePropertyId = (id: number) =>
     setSelectedPropertyIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -54,12 +89,13 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
           value: parseFloat(form.value),
           maxUses: form.maxUses ? parseInt(form.maxUses) : null,
           propertyIds: scope === "specific" ? selectedPropertyIds : null,
+          notes: form.notes,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create code");
       setCodes([data, ...codes]);
-      setForm({ code: "", type: "percentage", value: "", maxUses: "" });
+      setForm({ code: "", type: "percentage", value: "", maxUses: "", notes: "" });
       setScope("all");
       setSelectedPropertyIds([]);
       setSuccess(`Promo code "${data.code}" created successfully.`);
@@ -181,6 +217,16 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
               </div>
             )}
           </div>
+          <div className="col-span-2 sm:col-span-4">
+            <label className={labelCls}>Notes</label>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              placeholder="Optional — e.g. campaign name, who it's for, expiry reminder. Editable anytime."
+              rows={2}
+              className={`${inputCls} resize-y`}
+            />
+          </div>
           <div className="col-span-2 sm:col-span-4 flex items-center gap-3">
             <button
               type="submit"
@@ -214,7 +260,8 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
               <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400 text-[13px]">No promo codes yet.</td></tr>
             )}
             {codes.map((code) => (
-              <tr key={code.id} className="border-b border-black/[.04] last:border-none hover:bg-gray-50/50">
+              <Fragment key={code.id}>
+              <tr className={`border-b border-black/[.04] hover:bg-gray-50/50 ${expandedId === code.id ? "" : "last:border-none"}`}>
                 <td className="px-5 py-4 font-mono font-bold text-forest">{code.code}</td>
                 <td className="px-4 py-4 text-gray-600 capitalize">{code.type}</td>
                 <td className="px-4 py-4 font-semibold text-charcoal">
@@ -238,12 +285,52 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
                     {code.isActive ? "Active" : "Inactive"}
                   </button>
                 </td>
-                <td className="px-4 py-4 text-right">
+                <td className="px-4 py-4 text-right whitespace-nowrap">
+                  <button
+                    onClick={() => toggleNotes(code)}
+                    title={code.notes ? "Edit notes" : "Add notes"}
+                    className={`mr-3 transition-colors text-[13px] ${code.notes ? "text-gold hover:text-gold/80" : "text-gray-300 hover:text-gray-500"}`}
+                  >
+                    <i className={code.notes ? "fa-solid fa-note-sticky" : "fa-regular fa-note-sticky"} />
+                  </button>
                   <button onClick={() => deleteCode(code.id)} className="text-red-400 hover:text-red-600 transition-colors text-[13px]">
                     <i className="fa-solid fa-trash" />
                   </button>
                 </td>
               </tr>
+              {expandedId === code.id && (
+                <tr className="border-b border-black/[.04] last:border-none bg-gray-50/60">
+                  <td colSpan={7} className="px-5 py-4">
+                    <label className={labelCls}>Notes for {code.code}</label>
+                    <textarea
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      rows={3}
+                      placeholder="Add anything — campaign, recipient, why it exists, when to retire it…"
+                      className={`${inputCls} resize-y`}
+                    />
+                    <div className="mt-2 flex items-center gap-3">
+                      <button
+                        onClick={() => saveNotes(code)}
+                        disabled={savingNotes}
+                        className="px-4 py-1.5 bg-forest text-white rounded-[8px] text-[13px] font-semibold hover:bg-forest/90 disabled:opacity-50 transition-colors"
+                      >
+                        {savingNotes ? "Saving…" : "Save notes"}
+                      </button>
+                      <button
+                        onClick={() => setExpandedId(null)}
+                        className="text-gray-500 hover:text-gray-700 text-[13px]"
+                      >
+                        Close
+                      </button>
+                      {savedNotesId === code.id && !savingNotes && (
+                        <span className="text-green-600 text-[13px]"><i className="fa-solid fa-check mr-1" />Saved</span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
           </tbody>
         </table>
