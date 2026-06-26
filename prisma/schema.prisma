@@ -178,6 +178,30 @@ model DiscountCode {
   updatedAt  DateTime @updatedAt
 }
 
+model Ambassador {
+  id              Int       @id @default(autoincrement())
+  name            String
+  phone           String // mobile number
+  email           String    @unique // one application per email
+  facebookUrl     String    @db.Text
+  otherSocials    String?   @db.Text // Instagram / TikTok / YouTube — optional
+  audienceSize    String? // free-text reach, e.g. "~5k IG followers" — optional vetting signal
+  city            String
+  occupation      String
+  motivation      String    @db.Text // "Why do you want to partner with Haven in Lipa?"
+  promotionPlan   String    @db.Text // "How do you plan to promote us?"
+  gcashNumber     String // for reward payouts
+  agreedToTermsAt DateTime // consent timestamp (Ambassador Guidelines)
+  status          String    @default("pending") // "pending" | "approved" | "rejected"
+  notes           String?   @db.Text // free-form admin notes
+  promoCode       String?   @unique // reserved: link to the issued DiscountCode.code on approval
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([status])
+  @@index([email])
+}
+
 model PropertyRate {
   id           Int       @id @default(autoincrement())
   property     Property  @relation(fields: [propertyId], references: [id])

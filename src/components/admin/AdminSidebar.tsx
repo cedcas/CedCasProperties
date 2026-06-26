@@ -9,6 +9,7 @@ const NAV = [
   { href: "/admin/properties",      icon: "fa-house",            label: "Properties" },
   { href: "/admin/bookings",        icon: "fa-calendar-check",   label: "Bookings" },
   { href: "/admin/customers",       icon: "fa-address-book",     label: "Customers" },
+  { href: "/admin/ambassadors",     icon: "fa-user-tie",         label: "Ambassadors" },
   { href: "/admin/messages",        icon: "fa-envelope",         label: "Messages" },
   { href: "/admin/testimonials",    icon: "fa-star",             label: "Testimonials" },
   { href: "/admin/discount-codes",  icon: "fa-tag",              label: "Promo Codes" },

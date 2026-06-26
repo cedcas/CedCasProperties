@@ -105,6 +105,7 @@ export default async function Footer() {
                 ["Location",       "/#location",   false],
                 ["Guest Reviews",  "/#testimonials", false],
                 ["FAQ",            "/faq",         false],
+                ["Become an Ambassador", "/ambassadors", false],
                 ["Contact Us",     "/#contact",    false],
                 ["Book a Stay",    "/#cta",        false],
               ].map(([label, href, external]) => (
