@@ -75,6 +75,27 @@ model Booking {
   updatedAt             DateTime           @updatedAt
   scheduledMessages     ScheduledMessage[]
   guestMessages         GuestMessage[]
+  additionalCharges     AdditionalCharge[]
+}
+
+model AdditionalCharge {
+  id                    Int       @id @default(autoincrement())
+  booking               Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  bookingId             Int
+  description           String // "Early check-in", "Extra cleaning", "Damage — broken lamp"
+  amount                Decimal   @db.Decimal(10, 2) // base amount (before any card fee)
+  token                 String    @unique // opaque, unguessable; drives the public /pay/<token> URL
+  status                String    @default("pending") // pending | awaiting_verification | paid | cancelled
+  paymentMethod         String? // "gcash" | "bpi" | "stripe" — set when guest pays
+  stripeFee             Decimal?  @db.Decimal(10, 2) // 6% surcharge, only for card
+  stripePaymentIntentId String?
+  notifiedAt            DateTime? // when the guest email was (re)sent
+  paidAt                DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([bookingId])
+  @@index([status])
 }
 
 model QuickReply {
