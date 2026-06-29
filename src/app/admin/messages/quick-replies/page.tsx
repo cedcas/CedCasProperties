@@ -7,7 +7,6 @@ export default async function QuickRepliesPage() {
   const [replies, properties] = await Promise.all([
     prisma.quickReply.findMany({
       orderBy: [{ isActive: "desc" }, { name: "asc" }],
-      include: { property: { select: { id: true, name: true, type: true } } },
     }),
     prisma.property.findMany({
       where: { isActive: true },

@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { TEMPLATE_VARS } from "@/lib/templates";
 import { smsLength } from "@/lib/sms-length";
+import { parsePropertyIds } from "@/lib/promo";
 
 type PropertyLite = { id: number; name: string; type: string };
 
@@ -13,8 +14,7 @@ type Channel = "email" | "sms";
 type QuickReply = {
   id: number;
   name: string;
-  propertyId: number | null;
-  property?: PropertyLite | null;
+  propertyIds: string | null; // JSON array of property ids; null/empty = all properties
   subject: string;
   bodyTemplate: string;
   trigger: "auto" | "manual";
@@ -30,7 +30,7 @@ type QuickReply = {
 type FormState = {
   id?: number;
   name: string;
-  propertyId: number | null;
+  propertyIds: number[];
   subject: string;
   bodyTemplate: string;
   trigger: "auto" | "manual";
@@ -49,7 +49,7 @@ const ANCHOR_LABELS: Record<Anchor, string> = {
 
 const blankForm: FormState = {
   name: "",
-  propertyId: null,
+  propertyIds: [],
   subject: "",
   bodyTemplate: "",
   trigger: "manual",
@@ -80,20 +80,43 @@ export default function QuickRepliesManager({
 }) {
   const [replies, setReplies] = useState<QuickReply[]>(initialReplies);
   const [form, setForm] = useState<FormState | null>(null);
+  const [scope, setScope] = useState<"all" | "specific">("all");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const propLabel = (ids: number[]): string => {
+    if (ids.length === 0) return "All properties";
+    const names = ids
+      .map((id) => properties.find((p) => p.id === id)?.name)
+      .filter((n): n is string => !!n);
+    if (names.length === 0) return "All properties";
+    if (names.length <= 2) return names.join(", ");
+    return `${names.slice(0, 2).join(", ")} +${names.length - 2} more`;
+  };
+
+  const togglePropertyId = (id: number) => {
+    if (!form) return;
+    const has = form.propertyIds.includes(id);
+    setForm({
+      ...form,
+      propertyIds: has ? form.propertyIds.filter((x) => x !== id) : [...form.propertyIds, id],
+    });
+  };
+
   const startCreate = () => {
     setError(null);
+    setScope("all");
     setForm({ ...blankForm });
   };
 
   const startEdit = (r: QuickReply) => {
     setError(null);
+    const ids = parsePropertyIds(r.propertyIds);
+    setScope(ids.length > 0 ? "specific" : "all");
     setForm({
       id: r.id,
       name: r.name,
-      propertyId: r.propertyId,
+      propertyIds: ids,
       subject: r.subject,
       bodyTemplate: r.bodyTemplate,
       trigger: r.trigger,
@@ -116,7 +139,7 @@ export default function QuickRepliesManager({
     setError(null);
     const payload = {
       name: form.name,
-      propertyId: form.propertyId,
+      propertyIds: scope === "all" ? [] : form.propertyIds,
       subject: form.subject,
       bodyTemplate: form.bodyTemplate,
       trigger: form.trigger,
@@ -206,7 +229,7 @@ export default function QuickRepliesManager({
                     </span>
                   </div>
                   <div className="text-[12.5px] text-charcoal/55 mb-1">
-                    {r.property ? `${r.property.name}` : "All properties"}
+                    {propLabel(parsePropertyIds(r.propertyIds))}
                     <span className="text-charcoal/25 mx-2">·</span>
                     {formatTrigger(r)}
                   </div>
@@ -252,16 +275,39 @@ export default function QuickRepliesManager({
 
               <div>
                 <label className="block text-[12px] font-semibold text-charcoal/70 mb-1.5 uppercase tracking-wide">Applies to</label>
-                <select
-                  value={form.propertyId ?? ""}
-                  onChange={(e) => setForm({ ...form, propertyId: e.target.value === "" ? null : Number(e.target.value) })}
-                  className="w-full px-3 py-2.5 rounded-[8px] border border-black/[.1] text-[14px] bg-white focus:outline-none focus:border-forest/40"
-                >
-                  <option value="">All properties</option>
-                  {properties.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.type})</option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScope("all")}
+                    className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold border transition-colors ${scope === "all" ? "bg-forest text-white border-forest" : "bg-white text-charcoal/65 border-black/10 hover:border-forest"}`}
+                  >
+                    All properties
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScope("specific")}
+                    className={`px-4 py-2 rounded-[8px] text-[13px] font-semibold border transition-colors ${scope === "specific" ? "bg-forest text-white border-forest" : "bg-white text-charcoal/65 border-black/10 hover:border-forest"}`}
+                  >
+                    Specific properties
+                  </button>
+                </div>
+                {scope === "specific" && (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {properties.length === 0 && (
+                      <p className="text-charcoal/40 text-[13px]">No active properties to choose from.</p>
+                    )}
+                    {properties.map((p) => (
+                      <button
+                        type="button"
+                        key={p.id}
+                        onClick={() => togglePropertyId(p.id)}
+                        className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors ${form.propertyIds.includes(p.id) ? "bg-forest text-white border-forest" : "bg-white text-charcoal/65 border-black/10 hover:border-forest"}`}
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -438,7 +484,7 @@ export default function QuickRepliesManager({
               </button>
               <button
                 onClick={save}
-                disabled={saving || !form.name.trim() || !form.subject.trim() || !form.bodyTemplate.trim()}
+                disabled={saving || !form.name.trim() || !form.subject.trim() || !form.bodyTemplate.trim() || (scope === "specific" && form.propertyIds.length === 0)}
                 className="px-5 py-2 rounded-[8px] bg-forest text-white text-[13px] font-semibold hover:bg-forest/90 disabled:opacity-40"
               >
                 {saving ? "Saving…" : form.id ? "Save Changes" : "Create"}

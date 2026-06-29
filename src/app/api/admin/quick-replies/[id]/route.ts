@@ -2,16 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAction, getIpFromRequest } from "@/lib/log";
+import { normalizePropertyIds } from "../route";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const reply = await prisma.quickReply.findUnique({
-    where: { id: Number(id) },
-    include: { property: { select: { id: true, name: true, type: true } } },
-  });
+  const reply = await prisma.quickReply.findUnique({ where: { id: Number(id) } });
   if (!reply) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(reply);
 }
@@ -25,7 +23,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const data: Record<string, unknown> = {};
   if (typeof body.name === "string") data.name = body.name.trim();
-  if (body.propertyId === null || typeof body.propertyId === "number") data.propertyId = body.propertyId;
+  if (body.propertyIds !== undefined) {
+    const scope = await normalizePropertyIds(body.propertyIds);
+    if ("error" in scope) return NextResponse.json({ error: scope.error }, { status: 400 });
+    data.propertyIds = scope.value;
+  }
   if (typeof body.subject === "string") data.subject = body.subject.trim();
   if (typeof body.bodyTemplate === "string") data.bodyTemplate = body.bodyTemplate;
   if (typeof body.isActive === "boolean") data.isActive = body.isActive;

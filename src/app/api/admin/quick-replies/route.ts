@@ -3,13 +3,29 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAction, getIpFromRequest } from "@/lib/log";
 
+/**
+ * Normalize an incoming `propertyIds` array into a stored JSON string (or null = all properties).
+ * Dedupes, keeps integers only, and validates every id still exists. Returns { error } on a bad id.
+ */
+export async function normalizePropertyIds(
+  propertyIds: unknown,
+): Promise<{ value: string | null } | { error: string }> {
+  if (!Array.isArray(propertyIds) || propertyIds.length === 0) return { value: null };
+  const ids = [...new Set(propertyIds.map(Number).filter((n) => Number.isInteger(n)))];
+  if (ids.length === 0) return { value: null };
+  const existing = await prisma.property.findMany({ where: { id: { in: ids } }, select: { id: true } });
+  if (existing.length !== ids.length) {
+    return { error: "One or more selected properties no longer exist" };
+  }
+  return { value: JSON.stringify(ids) };
+}
+
 export async function GET() {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const replies = await prisma.quickReply.findMany({
     orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    include: { property: { select: { id: true, name: true, type: true } } },
   });
   return NextResponse.json(replies);
 }
@@ -32,10 +48,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "offsetHours is required when trigger is auto" }, { status: 400 });
   }
 
+  const scope = await normalizePropertyIds(body.propertyIds);
+  if ("error" in scope) return NextResponse.json({ error: scope.error }, { status: 400 });
+
   const reply = await prisma.quickReply.create({
     data: {
       name: String(body.name ?? "").trim(),
-      propertyId: body.propertyId === null || body.propertyId === undefined ? null : Number(body.propertyId),
+      propertyIds: scope.value,
       subject: String(body.subject ?? "").trim(),
       bodyTemplate: String(body.bodyTemplate ?? ""),
       trigger,
