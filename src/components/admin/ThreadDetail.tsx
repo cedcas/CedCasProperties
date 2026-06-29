@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { scopeAppliesToProperty } from "@/lib/promo";
 
 type Channel = "email" | "sms";
 
@@ -37,7 +38,7 @@ type QuickReply = {
   name: string;
   subject: string;
   bodyTemplate: string;
-  propertyId: number | null;
+  propertyIds: string | null;
   trigger: "auto" | "manual";
   channel: Channel;
   isActive: boolean;
@@ -90,9 +91,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
     setMessages(thread.messages);
     setReplies(
       allReplies
-        .filter(
-          (r) => r.isActive && (r.propertyId === null || r.propertyId === thread.booking.property.id),
-        )
+        .filter((r) => r.isActive && scopeAppliesToProperty(r.propertyIds, thread.booking.property.id))
         .sort((a, b) => {
           if (a.trigger !== b.trigger) return a.trigger === "manual" ? -1 : 1;
           return a.name.localeCompare(b.name);

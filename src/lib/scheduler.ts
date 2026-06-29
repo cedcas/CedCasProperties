@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { sendGuestMessage, type Channel } from "@/lib/guestMessages";
+import { scopeAppliesToProperty } from "@/lib/promo";
 
 function computeSendAt(anchor: Date, offsetHours: number): Date {
   return new Date(anchor.getTime() + offsetHours * 60 * 60 * 1000);
@@ -34,13 +35,12 @@ export async function materializeScheduledMessagesForBooking(bookingId: number):
   const booking = await prisma.booking.findUnique({ where: { id: bookingId } });
   if (!booking || booking.status !== "confirmed") return 0;
 
-  const replies = await prisma.quickReply.findMany({
-    where: {
-      isActive: true,
-      trigger: "auto",
-      OR: [{ propertyId: null }, { propertyId: booking.propertyId }],
-    },
+  // JSON-array membership isn't cleanly queryable via Prisma on MySQL, so fetch all
+  // active auto replies and filter by property scope in JS. The set is tiny.
+  const allAutoReplies = await prisma.quickReply.findMany({
+    where: { isActive: true, trigger: "auto" },
   });
+  const replies = allAutoReplies.filter((r) => scopeAppliesToProperty(r.propertyIds, booking.propertyId));
 
   if (replies.length === 0) return 0;
 
