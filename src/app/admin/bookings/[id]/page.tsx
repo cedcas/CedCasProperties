@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import DeleteButton from "@/components/admin/DeleteButton";
 import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
+import AdditionalChargesManager from "@/components/admin/AdditionalChargesManager";
 import { formatStayDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -17,9 +18,24 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const booking = await prisma.booking.findUnique({
     where: { id: Number(id) },
-    include: { property: { select: { name: true, slug: true } } },
+    include: {
+      property: { select: { name: true, slug: true } },
+      additionalCharges: { orderBy: { createdAt: "desc" } },
+    },
   });
   if (!booking) notFound();
+
+  const charges = booking.additionalCharges.map((c) => ({
+    id: c.id,
+    description: c.description,
+    amount: Number(c.amount),
+    token: c.token,
+    status: c.status,
+    paymentMethod: c.paymentMethod,
+    notifiedAt: c.notifiedAt ? c.notifiedAt.toISOString() : null,
+    paidAt: c.paidAt ? c.paidAt.toISOString() : null,
+    createdAt: c.createdAt.toISOString(),
+  }));
 
   const nights = nightsBetween(booking.checkIn, booking.checkOut);
 
@@ -108,6 +124,9 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           </dl>
         </section>
       </div>
+
+      {/* Additional charges */}
+      <AdditionalChargesManager bookingId={booking.id} guestName={booking.guestName} initialCharges={charges} />
 
       {/* Notes */}
       {booking.notes && (
