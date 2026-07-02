@@ -4,6 +4,7 @@ import Link from "next/link";
 import DeleteButton from "@/components/admin/DeleteButton";
 import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
 import AdditionalChargesManager from "@/components/admin/AdditionalChargesManager";
+import NotesEditor from "@/components/admin/NotesEditor";
 import { formatStayDate } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,15 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             <Row label="Check-out" value={formatStayDate(booking.checkOut)} />
             <Row label="Nights" value={String(nights)} />
           </dl>
+          <div className="mt-5 pt-4 border-t border-black/[.06]">
+            <NotesEditor
+              endpoint={`/api/admin/bookings/${booking.id}`}
+              field="notes"
+              initialValue={booking.notes}
+              label="Comment / Notes"
+              placeholder="Notes about this stay (e.g. check-in time, guest review)…"
+            />
+          </div>
         </section>
 
         {/* Payment */}
@@ -128,13 +138,16 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       {/* Additional charges */}
       <AdditionalChargesManager bookingId={booking.id} guestName={booking.guestName} initialCharges={charges} />
 
-      {/* Notes */}
-      {booking.notes && (
-        <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] mt-6">
-          <h2 className="font-serif font-semibold text-charcoal text-[1rem] mb-3">Notes</h2>
-          <p className="text-[13.5px] text-charcoal/70 whitespace-pre-wrap">{booking.notes}</p>
-        </section>
-      )}
+      {/* Additional charges notes */}
+      <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] mt-6">
+        <NotesEditor
+          endpoint={`/api/admin/bookings/${booking.id}`}
+          field="chargesNotes"
+          initialValue={booking.chargesNotes}
+          label="Charges Comment / Notes"
+          placeholder="Notes about charges, damages, or incidentals for this booking…"
+        />
+      </section>
 
       {/* Meta */}
       <div className="mt-6 text-[12px] text-charcoal/40 flex flex-wrap gap-x-6 gap-y-1">

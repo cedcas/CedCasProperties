@@ -69,7 +69,8 @@ model Booking {
   status                String             @default("pending") // pending | confirmed | cancelled
   paymentMethod         String? // "gcash" | "bpi" | "stripe"
   stripePaymentIntentId String? // Stripe PaymentIntent ID
-  notes                 String?            @db.Text
+  notes                 String?            @db.Text // admin free-form notes shown in the Stay section
+  chargesNotes          String?            @db.Text // admin free-form notes shown in the Additional Charges section
   optedOutAt            DateTime? // set when guest replies STOP; suppresses future SMS
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
@@ -291,6 +292,17 @@ model AdminPermission {
   userManagement Boolean   @default(false)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
+}
+
+// Per-customer admin notes. Customers are derived clusters (see src/lib/customers.ts),
+// so there is no Customer table to hang a column on. Keyed by normalized email
+// (normEmail) — the most stable customer identity across booking churn.
+model CustomerNote {
+  id            Int      @id @default(autoincrement())
+  customerEmail String   @unique // normalized (lowercased, trimmed) email = the customer key
+  note          String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model AdminLog {

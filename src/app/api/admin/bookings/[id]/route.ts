@@ -183,6 +183,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   return NextResponse.json(booking);
 }
 
+// Lightweight field edits (admin notes). Kept separate from PUT, which carries the
+// heavy status-transition side effects (confirmation emails, scheduler).
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { id } = await params;
+  const body = await req.json();
+
+  const data: { notes?: string | null; chargesNotes?: string | null } = {};
+  if ("notes" in body) {
+    data.notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
+  }
+  if ("chargesNotes" in body) {
+    data.chargesNotes = typeof body.chargesNotes === "string" && body.chargesNotes.trim() ? body.chargesNotes.trim() : null;
+  }
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No editable fields provided" }, { status: 400 });
+  }
+
+  const booking = await prisma.booking.update({ where: { id: Number(id) }, data });
+
+  await logAction({
+    actor: session.user.name ?? "Admin",
+    actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+    actorId: parseInt(session.user.id),
+    action: `Updated booking #${id} notes`,
+    module: "bookings",
+    target: `booking-${id}`,
+    ipAddress: getIpFromRequest(req),
+    metadata: { fields: Object.keys(data) },
+  });
+
+  return NextResponse.json(booking);
+}
+
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
