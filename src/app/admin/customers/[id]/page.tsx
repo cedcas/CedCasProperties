@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { findCustomerCluster } from "@/lib/customers";
+import { findCustomerCluster, normEmail } from "@/lib/customers";
 import { formatStayDate } from "@/lib/dates";
+import NotesEditor from "@/components/admin/NotesEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,11 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
 
   const customer = findCustomerCluster(bookings, Number(id));
   if (!customer) notFound();
+
+  const customerEmail = normEmail(customer.email);
+  const customerNote = customerEmail
+    ? await prisma.customerNote.findUnique({ where: { customerEmail } })
+    : null;
 
   const stats = [
     { label: "Bookings", value: String(customer.bookingCount) },
@@ -49,6 +55,17 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           </div>
         ))}
       </div>
+
+      {/* Customer notes */}
+      <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] mb-8">
+        <NotesEditor
+          endpoint={`/api/admin/customers/${id}/note`}
+          field="note"
+          initialValue={customerNote?.note ?? null}
+          label="Customer Comment (internal · not shown to guest)"
+          placeholder="Notes about this customer (e.g. preferences, guest review, VIP)…"
+        />
+      </section>
 
       {/* Bookings */}
       <div className="bg-white rounded-[16px] shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] overflow-hidden">
