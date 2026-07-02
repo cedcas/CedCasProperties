@@ -93,13 +93,20 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
             <Row label="Check-out" value={formatStayDate(booking.checkOut)} />
             <Row label="Nights" value={String(nights)} />
           </dl>
+          {booking.notes && (
+            <div className="mt-5 pt-4 border-t border-black/[.06]">
+              <div className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-2">Guest&apos;s Request</div>
+              <p className="text-[13.5px] text-charcoal/70 whitespace-pre-wrap bg-cream/40 rounded-[10px] px-4 py-2.5">{booking.notes}</p>
+              <p className="text-[11px] text-charcoal/35 mt-1.5">Submitted by the guest at booking · read-only</p>
+            </div>
+          )}
           <div className="mt-5 pt-4 border-t border-black/[.06]">
             <NotesEditor
               endpoint={`/api/admin/bookings/${booking.id}`}
-              field="notes"
-              initialValue={booking.notes}
-              label="Comment / Notes"
-              placeholder="Notes about this stay (e.g. check-in time, guest review)…"
+              field="adminNotes"
+              initialValue={booking.adminNotes}
+              label="Admin Comment (internal · not shown to guest)"
+              placeholder="Internal notes about this stay (e.g. guest review, reminders)…"
             />
           </div>
         </section>
@@ -144,8 +151,8 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           endpoint={`/api/admin/bookings/${booking.id}`}
           field="chargesNotes"
           initialValue={booking.chargesNotes}
-          label="Charges Comment / Notes"
-          placeholder="Notes about charges, damages, or incidentals for this booking…"
+          label="Charges Comment (internal · not shown to guest)"
+          placeholder="Internal notes about charges, damages, or incidentals for this booking…"
         />
       </section>
 

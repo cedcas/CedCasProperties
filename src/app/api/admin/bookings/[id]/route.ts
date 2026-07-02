@@ -192,9 +192,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const body = await req.json();
 
-  const data: { notes?: string | null; chargesNotes?: string | null } = {};
-  if ("notes" in body) {
-    data.notes = typeof body.notes === "string" && body.notes.trim() ? body.notes.trim() : null;
+  // `notes` is the guest's own booking request — intentionally NOT editable here.
+  const data: { adminNotes?: string | null; chargesNotes?: string | null } = {};
+  if ("adminNotes" in body) {
+    data.adminNotes = typeof body.adminNotes === "string" && body.adminNotes.trim() ? body.adminNotes.trim() : null;
   }
   if ("chargesNotes" in body) {
     data.chargesNotes = typeof body.chargesNotes === "string" && body.chargesNotes.trim() ? body.chargesNotes.trim() : null;

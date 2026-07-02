@@ -62,7 +62,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           endpoint={`/api/admin/customers/${id}/note`}
           field="note"
           initialValue={customerNote?.note ?? null}
-          label="Customer Comment / Notes"
+          label="Customer Comment (internal · not shown to guest)"
           placeholder="Notes about this customer (e.g. preferences, guest review, VIP)…"
         />
       </section>

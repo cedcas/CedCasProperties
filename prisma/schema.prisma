@@ -69,8 +69,9 @@ model Booking {
   status                String             @default("pending") // pending | confirmed | cancelled
   paymentMethod         String? // "gcash" | "bpi" | "stripe"
   stripePaymentIntentId String? // Stripe PaymentIntent ID
-  notes                 String?            @db.Text // admin free-form notes shown in the Stay section
-  chargesNotes          String?            @db.Text // admin free-form notes shown in the Additional Charges section
+  notes                 String?            @db.Text // GUEST-submitted special requests (from the booking form); shown read-only to admin
+  adminNotes            String?            @db.Text // internal admin comment on the Stay (never shown to the guest)
+  chargesNotes          String?            @db.Text // internal admin comment in the Additional Charges section (never shown to the guest)
   optedOutAt            DateTime? // set when guest replies STOP; suppresses future SMS
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
