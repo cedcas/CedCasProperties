@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -6,6 +7,32 @@ import Footer from "@/components/layout/Footer";
 import BookingForm from "@/components/booking/BookingForm";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const property = await prisma.property.findUnique({
+    where: { slug, isActive: true },
+    select: { name: true },
+  });
+
+  const title = property ? `Book — ${property.name}` : "Book Your Stay";
+
+  return {
+    title,
+    // noindex, follow — thin booking-form endpoint: drop from index, keep link equity
+    robots: { index: false, follow: true },
+    // self-canonical; overrides the homepage canonical inherited from the root layout
+    alternates: { canonical: `/properties/${slug}/book` },
+    openGraph: {
+      title,
+      url: `/properties/${slug}/book`,
+    },
+  };
+}
 
 export default async function BookPage({
   params,
