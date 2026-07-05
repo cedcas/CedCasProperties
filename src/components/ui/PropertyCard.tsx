@@ -1,6 +1,7 @@
 import type { Property } from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
+import { extraGuestFeeApplies } from "@/lib/occupancy";
 
 const AMENITY_ICONS: Record<string, string> = {
   WiFi: "wifi",
@@ -18,6 +19,15 @@ export default function PropertyCard({ property, index }: { property: Property; 
   const images: string[] = JSON.parse(property.images || "[]");
   const coverImage = property.featuredImage || images[0] || null;
   const delayClass = index < 4 ? `reveal-d${index + 1}` : "reveal-d4";
+
+  // "From" only when an extra-guest fee can actually push the total above the
+  // base rate (fee > 0 AND maxGuests > includedGuests) — same predicate as the
+  // property page. Flat pricing shows the plain rate with no "From".
+  const showFrom = extraGuestFeeApplies({
+    maxGuests: property.maxGuests,
+    includedGuests: property.includedGuests,
+    extraGuestFeePerNight: Number(property.extraGuestFeePerNight),
+  });
 
   return (
     <div className={`bg-white rounded-[20px] overflow-hidden shadow-[0_4px_24px_rgba(44,44,44,.08)] hover:shadow-[0_12px_40px_rgba(44,44,44,.16)] hover:-translate-y-1.5 transition-all duration-350 reveal ${delayClass}`}>
@@ -57,7 +67,7 @@ export default function PropertyCard({ property, index }: { property: Property; 
           <div className="text-right">
             {Number(property.pricePerNight) > 0 ? (
               <>
-                <div className="font-bold text-charcoal text-[1.1rem]">From ₱{Number(property.pricePerNight).toLocaleString()}</div>
+                <div className="font-bold text-charcoal text-[1.1rem]">{showFrom ? "From " : ""}₱{Number(property.pricePerNight).toLocaleString()}</div>
                 <div className="text-[11px] text-charcoal/45">/night</div>
               </>
             ) : (
