@@ -9,7 +9,7 @@ import ScrollReveal from "@/components/ui/ScrollReveal";
 import BookingCard from "@/components/ui/BookingCard";
 import Testimonials from "@/components/sections/Testimonials";
 import { buildPropertyJsonLd } from "@/lib/property-schema";
-import { buildOccupancyNote } from "@/lib/occupancy";
+import { buildOccupancyNote, normalizePricingProse } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -146,6 +146,14 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const propertyFaqs: PropertyFaq[] = safeJsonParse(property.propertyFaqs, []);
   const coverImage = featuredUrl || images[0] || null;
 
+  // Force base-rate / included-guest numbers in authored prose to the live DB
+  // values so the copy can't drift from pricePerNight / includedGuests.
+  const normRate = (t: string | null | undefined) =>
+    normalizePricingProse(t, {
+      pricePerNight: Number(property.pricePerNight),
+      includedGuests: property.includedGuests,
+    });
+
   const jsonLd = buildPropertyJsonLd(property, reviewTestimonials);
 
   return (
@@ -268,7 +276,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             {property.heroSummary && (
               <div>
                 <p className="text-charcoal/75 text-[16px] leading-[1.85]">
-                  {property.heroSummary}
+                  {normRate(property.heroSummary)}
                 </p>
               </div>
             )}
@@ -451,9 +459,11 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
               <div className="bg-white rounded-[12px] p-6 border border-black/[.06] space-y-2 text-charcoal/75 text-[14px] leading-[1.8]">
                 <div>
                   <strong>Rate:</strong>{" "}
-                  {pricingNotes.rate || (Number(property.pricePerNight) > 0
+                  {pricingNotes.rate
+                    ? normRate(pricingNotes.rate)
+                    : Number(property.pricePerNight) > 0
                     ? `From ₱${Number(property.pricePerNight).toLocaleString()} per night`
-                    : "Rate coming soon")}
+                    : "Rate coming soon"}
                 </div>
                 {pricingNotes.weeklyDiscount && <div>{pricingNotes.weeklyDiscount}</div>}
                 {pricingNotes.monthlyDiscount && <div>{pricingNotes.monthlyDiscount}</div>}

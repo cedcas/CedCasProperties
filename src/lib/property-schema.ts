@@ -1,4 +1,5 @@
 import type { Property, Testimonial } from "@prisma/client";
+import { normalizePricingProse } from "@/lib/occupancy";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
@@ -163,6 +164,13 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
   const checkoutTimeIso = parseTimeToIso(housePolicies.checkOutTime);
   const petsAllowed = parsePolicyToBool(housePolicies.pets);
 
+  // Keep base-rate / included-guest numbers in the description prose in sync with
+  // the live DB values, matching the on-page copy (see normalizePricingProse).
+  const description = normalizePricingProse(property.heroSummary || property.description, {
+    pricePerNight: Number(property.pricePerNight),
+    includedGuests: property.includedGuests,
+  });
+
   // Build a deduped, absolute-URL image list — featured image first, then the
   // rest. Google recommends 8+ images for richest results.
   const imageUrls = Array.from(
@@ -181,7 +189,7 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     // rented, so "EntirePlace" is the correct Accommodation-level value.
     additionalType: "EntirePlace",
     name: property.name,
-    description: property.heroSummary || property.description,
+    description,
     occupancy: { "@type": "QuantitativeValue", value: property.maxGuests },
     numberOfBedrooms: property.bedrooms,
     numberOfBathroomsTotal: property.bathrooms,
@@ -206,7 +214,7 @@ export function buildPropertyJsonLd(property: Property, testimonials: Testimonia
     additionalType: "House",
     identifier: property.slug,
     name: property.name,
-    description: property.heroSummary || property.description,
+    description,
     url,
     // Google REQUIRES latitude/longitude as direct string properties on the
     // VacationRental (the nested `geo` is kept as extra, valid context).

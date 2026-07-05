@@ -35,3 +35,24 @@ export function buildOccupancyNote(f: OccupancyFee): string {
     f.includedGuests
   )} — additional guests are ${peso(f.extraGuestFeePerNight)}/guest per night. Full breakdown shown at booking; no hidden fees.`;
 }
+
+/**
+ * Normalize base-rate / included-guest numbers in authored prose to the live DB
+ * values so hand-written copy (heroSummary, pricingNotes.rate, …) can't drift
+ * from `pricePerNight` / `includedGuests`. Rewrites only the base-rate amount
+ * ("₱N per night" / "₱N/night") and the "covers N guests" count in place —
+ * every other number and all surrounding text is left untouched. The extra-guest
+ * fee is already number-free in prose, so it is not affected. Empty input → "".
+ */
+export function normalizePricingProse(
+  text: string | null | undefined,
+  base: { pricePerNight: number; includedGuests: number }
+): string {
+  if (!text) return "";
+  let out = text;
+  if (base.pricePerNight > 0) {
+    out = out.replace(/₱[\d,]+(?=\s*(?:per night|\/night))/gi, peso(base.pricePerNight));
+  }
+  out = out.replace(/covers \d+(?= guests?)/gi, `covers ${base.includedGuests}`);
+  return out;
+}
