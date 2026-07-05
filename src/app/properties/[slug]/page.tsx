@@ -84,6 +84,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       featuredImage: true,
       seoTitle: true,
       seoDescription: true,
+      pricePerNight: true,
+      includedGuests: true,
     },
   });
 
@@ -94,11 +96,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const title =
     property.seoTitle ||
     `${property.name} — ${property.type} Vacation Rental in ${property.location}`;
-  const description =
+  const description = normalizePricingProse(
     property.seoDescription ||
-    (property.description
-      ? property.description.slice(0, 155).replace(/\s+\S*$/, "")
-      : `${property.type} vacation rental in ${property.location}, Batangas. Book direct and save 15–20% vs. Airbnb.`);
+      (property.description
+        ? property.description.slice(0, 155).replace(/\s+\S*$/, "")
+        : `${property.type} vacation rental in ${property.location}, Batangas. Book direct and save 15–20% vs. Airbnb.`),
+    { pricePerNight: Number(property.pricePerNight), includedGuests: property.includedGuests }
+  );
 
   return {
     title,
