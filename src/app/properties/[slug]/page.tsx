@@ -9,6 +9,7 @@ import ScrollReveal from "@/components/ui/ScrollReveal";
 import BookingCard from "@/components/ui/BookingCard";
 import Testimonials from "@/components/sections/Testimonials";
 import { buildPropertyJsonLd } from "@/lib/property-schema";
+import { buildOccupancyNote } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -253,6 +254,15 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                 </div>
               ))}
             </div>
+
+            {/* Occupancy + extra-guest fee (factual capacity note) */}
+            <p className="text-[13px] text-charcoal/55 leading-relaxed -mt-4">
+              {buildOccupancyNote({
+                maxGuests: property.maxGuests,
+                includedGuests: property.includedGuests,
+                extraGuestFeePerNight: Number(property.extraGuestFeePerNight),
+              })}
+            </p>
 
             {/* Hero summary */}
             {property.heroSummary && (

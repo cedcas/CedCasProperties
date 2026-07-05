@@ -52,7 +52,7 @@ export default function PropertyCard({ property, index }: { property: Property; 
         <div className="flex items-start justify-between mb-3">
           <div>
             <h3 className="font-serif font-semibold text-charcoal text-[1.15rem] leading-tight">{property.name}</h3>
-            <span className="text-[12px] text-charcoal/50 mt-0.5 block">{property.type} · Entire Unit</span>
+            <span className="text-[12px] text-charcoal/50 mt-0.5 block">{property.type} · Sleeps up to {property.maxGuests}</span>
           </div>
           <div className="text-right">
             {Number(property.pricePerNight) > 0 ? (
