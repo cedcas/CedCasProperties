@@ -1011,7 +1011,12 @@ export default function CalendarClient({
       <div className={`${cardCls} overflow-hidden`}>
         <div className="flex items-center justify-between border-b border-black/[.06] px-5 py-4">
           <div>
-            <h3 className="text-charcoal font-serif font-semibold">Upcoming availability blocks</h3>
+            {/* "In this window", not "Upcoming": the grid fetches from the 1st of the
+                visible month, so a block that has already ended earlier this month is
+                legitimately listed here. Calling those "upcoming" was simply wrong. */}
+            <h3 className="text-charcoal font-serif font-semibold">
+              Availability blocks in this window
+            </h3>
             {/* This table lists BLOCKS only. A listing's own reservations are Booking
                 records, not blocks — the source event always stays on its own property and
                 only DERIVED blocks are created on siblings. Saying so here prevents the
