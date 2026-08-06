@@ -14,13 +14,21 @@ export default async function PropertiesPage() {
           <h1 className="font-serif font-semibold text-charcoal text-[1.8rem]">Properties</h1>
           <p className="text-charcoal/45 text-[14px] mt-1">{properties.length} listing{properties.length !== 1 ? "s" : ""}</p>
         </div>
-        <Link
-          href="/admin/properties/new"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold text-white"
-          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}
-        >
-          <i className="fa-solid fa-plus" /> Add Property
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/properties/inventory-groups"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-[10px] border border-black/10 text-[13px] text-charcoal/60 hover:text-forest hover:border-forest transition-colors"
+          >
+            <i className="fa-solid fa-layer-group" /> Inventory Groups
+          </Link>
+          <Link
+            href="/admin/properties/new"
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-[13px] font-semibold text-white"
+            style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}
+          >
+            <i className="fa-solid fa-plus" /> Add Property
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white rounded-[16px] shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] overflow-hidden">
