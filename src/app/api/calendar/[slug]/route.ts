@@ -1,14 +1,25 @@
 import { prisma } from "@/lib/prisma";
+import { buildVCalendar, type IcsExportEvent } from "@/lib/ical";
+import { bookingUid, manualBlockUid } from "@/lib/calendar-uids";
+import { BLOCKING_BOOKING_STATUSES, humanizeReason } from "@/lib/availability";
+import { todayUtc } from "@/lib/dates";
 
-// Airbnb requires DATE-only format (YYYYMMDD) for all-day blocking events
-function toDateOnly(date: Date): string {
-  return date.toISOString().split("T")[0].replace(/-/g, "");
-}
-
-// DTSTAMP must be a full datetime stamp
-function toDtStamp(date: Date): string {
-  return date.toISOString().replace(/[-:.]/g, "").slice(0, 15) + "Z";
-}
+// GET /api/calendar/[slug].ics — the outbound feed external calendars subscribe to.
+//
+// Exports, for this property:
+//   • HIL bookings in a blocking status                (UID: booking-{id}@…)
+//   • active manual blocks with exportToIcal           (UID: manual-block-{id}@…)
+//   • active shared-inventory sibling blocks           (UID: inventory-block-…@…)
+//
+// Deliberately does NOT export ExternalCalendarEvent rows. Those were imported FROM a
+// channel feed; echoing them back through the same property's feed would create a loop
+// where a channel re-imports its own reservations. A sibling block derived from an
+// imported event IS exported — but on the OTHER properties in the group, which is the
+// whole point of shared inventory.
+//
+// UIDs are deterministic (src/lib/calendar-uids.ts) and DTSTAMP now comes from each
+// record's updatedAt rather than the current time, so a feed fetched twice with no
+// underlying change is byte-for-byte identical.
 
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const rawSlug = (await params).slug;
@@ -17,10 +28,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
 
   const property = await prisma.property.findUnique({
     where: { slug },
-    include: {
+    select: {
+      id: true,
+      name: true,
       bookings: {
-        where: { status: { in: ["confirmed", "pending"] } },
-        select: { id: true, checkIn: true, checkOut: true },
+        where: { status: { in: [...BLOCKING_BOOKING_STATUSES] } },
+        select: { id: true, checkIn: true, checkOut: true, updatedAt: true },
       },
     },
   });
@@ -29,36 +42,50 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
     return new Response("Calendar not found", { status: 404 });
   }
 
-  const now = toDtStamp(new Date());
+  // Blocks are bounded to current-and-future: a past block is inert, and there is no value
+  // in growing the feed with historical maintenance windows.
+  const blocks = await prisma.availabilityBlock.findMany({
+    where: {
+      propertyId: property.id,
+      status: "active",
+      exportToIcal: true,
+      affectsAvailability: true,
+      endDate: { gt: todayUtc() },
+    },
+    select: {
+      id: true,
+      startDate: true,
+      endDate: true,
+      reason: true,
+      isSystemGenerated: true,
+      externalUid: true,
+      updatedAt: true,
+    },
+    orderBy: { startDate: "asc" },
+  });
 
-  const lines: string[] = [
-    "BEGIN:VCALENDAR",
-    "VERSION:2.0",
-    "PRODID:-//HavenInLipa//EN",
-    "CALSCALE:GREGORIAN",
-    "METHOD:PUBLISH",
-    `X-WR-CALNAME:${property.name} - HavenInLipa`,
-    "X-WR-TIMEZONE:Asia/Manila",
+  const events: IcsExportEvent[] = [
+    ...property.bookings.map((booking) => ({
+      uid: bookingUid(booking.id),
+      start: booking.checkIn,
+      end: booking.checkOut,
+      summary: "Not available",
+      stamp: booking.updatedAt,
+    })),
+    ...blocks.map((block) => ({
+      // Derived blocks already carry their deterministic UID; manual blocks fall back to
+      // the id-derived form in case externalUid was never stamped.
+      uid: block.externalUid ?? manualBlockUid(block.id),
+      start: block.startDate,
+      end: block.endDate,
+      // Kept generic for guest-facing channels — "Not available" rather than the internal
+      // reason. System-generated blocks say so, which helps when debugging a group.
+      summary: block.isSystemGenerated ? "Not available" : `Not available (${humanizeReason(block.reason)})`,
+      stamp: block.updatedAt,
+    })),
   ];
 
-  for (const booking of property.bookings) {
-    lines.push(
-      "BEGIN:VEVENT",
-      `UID:booking-${booking.id}@haveninlipa.com`,
-      `DTSTAMP:${now}`,
-      `DTSTART;VALUE=DATE:${toDateOnly(booking.checkIn)}`,
-      `DTEND;VALUE=DATE:${toDateOnly(booking.checkOut)}`,
-      "SUMMARY:Not available",
-      "STATUS:CONFIRMED",
-      "TRANSP:OPAQUE",
-      "END:VEVENT"
-    );
-  }
-
-  lines.push("END:VCALENDAR");
-
-  // iCal spec requires CRLF line endings
-  const body = lines.join("\r\n") + "\r\n";
+  const body = buildVCalendar({ calendarName: `${property.name} - HavenInLipa`, events });
 
   return new Response(body, {
     headers: {

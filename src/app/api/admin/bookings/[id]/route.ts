@@ -10,6 +10,7 @@ import {
   flushDueScheduledMessages,
   cancelScheduledMessagesForBooking,
 } from "@/lib/scheduler";
+import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -180,6 +181,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
   }
 
+  // Shared inventory: re-derive this booking's sibling blocks against its NEW status.
+  // Handles both directions — a booking that starts blocking creates sibling blocks, one
+  // that stops blocking (cancelled) removes only its own. Unrelated overlapping blocks,
+  // including manual maintenance on the same dates, are left untouched.
+  // Runs unconditionally rather than only on the confirmed transitions, because pending
+  // also blocks availability (see src/lib/booking-status.ts).
+  try {
+    await reconcileBookingDerivedBlocks(booking.id);
+  } catch (err) {
+    console.error("Inventory-group reconciliation failed:", err);
+  }
+
   return NextResponse.json(booking);
 }
 
@@ -225,16 +238,27 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
+
+  // Count the sibling blocks this booking generated before they cascade away with it, so
+  // the audit log records that those dates were reopened on the other listings.
+  const derivedBlocks = await prisma.availabilityBlock.findMany({
+    where: { sourceBookingId: Number(id), isSystemGenerated: true },
+    select: { id: true, propertyId: true },
+  });
+
   await prisma.booking.delete({ where: { id: Number(id) } });
 
   await logAction({
     actor: session.user.name ?? "Admin",
     actorRole: (session.user.role ?? "admin") as "admin" | "manager",
     actorId: parseInt(session.user.id),
-    action: `Deleted booking #${id}`,
+    action: `Deleted booking #${id}${derivedBlocks.length > 0 ? ` (also removed ${derivedBlocks.length} shared-inventory block${derivedBlocks.length === 1 ? "" : "s"})` : ""}`,
     module: "bookings",
     target: `booking-${id}`,
     ipAddress: getIpFromRequest(req),
+    ...(derivedBlocks.length > 0
+      ? { metadata: { derivedBlockIds: derivedBlocks.map((b) => b.id), affectedPropertyIds: derivedBlocks.map((b) => b.propertyId) } }
+      : {}),
   });
 
   return NextResponse.json({ success: true });

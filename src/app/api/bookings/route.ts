@@ -6,7 +6,9 @@ import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
 import { codeAppliesToProperty } from "@/lib/promo";
-import { formatStayDate } from "@/lib/dates";
+import { formatStayDate, toUtcMidnight } from "@/lib/dates";
+import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
+import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 
 export async function POST(req: NextRequest) {
   const {
@@ -36,8 +38,9 @@ export async function POST(req: NextRequest) {
   }
   const guestPhoneE164 = normalizedPhone.e164;
 
-  const checkInDate  = new Date(checkIn);
-  const checkOutDate = new Date(checkOut);
+  // Stay dates are calendar dates anchored at UTC midnight — see src/lib/dates.ts.
+  const checkInDate  = toUtcMidnight(checkIn);
+  const checkOutDate = toUtcMidnight(checkOut);
 
   if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate) {
     return NextResponse.json({ error: "Invalid check-in / check-out dates" }, { status: 400 });
@@ -52,12 +55,9 @@ export async function POST(req: NextRequest) {
       maxGuests: true,
       includedGuests: true,
       extraGuestFeePerNight: true,
-      airbnbIcsUrl: true,
       rates: { select: { rateType: true } },
-      bookings: {
-        where: { status: { in: ["confirmed", "pending"] } },
-        select: { checkIn: true, checkOut: true },
-      },
+      // Overlapping bookings and the external feed are no longer selected here —
+      // availability is resolved by src/lib/availability.ts below.
     },
   });
 
@@ -92,50 +92,30 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── Availability check: DB bookings ──────────────────────────────────────
-  const overlaps = (aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) =>
-    aStart < bEnd && aEnd > bStart;
-
-  for (const b of property.bookings) {
-    if (overlaps(checkInDate, checkOutDate, b.checkIn, b.checkOut)) {
-      return NextResponse.json({ error: "Those dates are already booked. Please choose different dates." }, { status: 409 });
+  // ── Availability enforcement ─────────────────────────────────────────────
+  // Single source of truth (src/lib/availability.ts): HIL bookings in a blocking status,
+  // manual blocks, shared-inventory sibling blocks, and persisted external calendar
+  // events. Replaces an inline overlap loop plus a duplicated inline iCal parser.
+  //
+  // `syncPolicy: "booking"` forces a refresh of the external feed if it is more than a
+  // couple of minutes stale, preserving the live-check-at-booking-time guarantee this
+  // route has always had — and no longer depending on a scheduler to have run.
+  //
+  // Server-side enforcement is required: the client disables unavailable dates, but this
+  // endpoint is publicly callable.
+  try {
+    await assertPropertyAvailable({
+      propertyId: Number(propertyId),
+      start: checkInDate,
+      end: checkOutDate,
+      syncPolicy: "booking",
+    });
+  } catch (err) {
+    if (err instanceof AvailabilityConflictError) {
+      // Guest-safe message: never reveals *why* (owner use, sibling listing, …).
+      return NextResponse.json({ error: err.message }, { status: err.status });
     }
-  }
-
-  // ── Availability check: Airbnb iCal ──────────────────────────────────────
-  if (property.airbnbIcsUrl) {
-    try {
-      const icsRes = await fetch(property.airbnbIcsUrl, {
-        headers: { "User-Agent": "HavenInLipa/1.0" },
-        signal: AbortSignal.timeout(5000),
-      });
-      if (icsRes.ok) {
-        const icsText = await icsRes.text();
-        const lines = icsText.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
-        let inEvent = false, evStart: Date | null = null, evEnd: Date | null = null;
-        const parseD = (s: string): Date | null => {
-          const c = s.trim();
-          if (/^\d{8}$/.test(c)) return new Date(`${c.slice(0,4)}-${c.slice(4,6)}-${c.slice(6,8)}T00:00:00Z`);
-          if (/^\d{8}T\d{6}/.test(c)) return new Date(`${c.slice(0,4)}-${c.slice(4,6)}-${c.slice(6,8)}T${c.slice(9,11)}:${c.slice(11,13)}:${c.slice(13,15)}${c.endsWith("Z")?"Z":""}`);
-          return null;
-        };
-        for (const raw of lines) {
-          const line = raw.trim();
-          if (line === "BEGIN:VEVENT")  { inEvent = true; evStart = null; evEnd = null; }
-          else if (line === "END:VEVENT") {
-            if (evStart && evEnd && overlaps(checkInDate, checkOutDate, evStart, evEnd)) {
-              return NextResponse.json({ error: "Those dates are not available (blocked on Airbnb). Please choose different dates." }, { status: 409 });
-            }
-            inEvent = false;
-          } else if (inEvent) {
-            if (/^DTSTART[;:]/.test(line)) evStart = parseD(line.split(":").slice(1).join(":"));
-            else if (/^DTEND[;:]/.test(line)) evEnd = parseD(line.split(":").slice(1).join(":"));
-          }
-        }
-      }
-    } catch {
-      console.warn("Airbnb iCal fetch failed during booking; skipping Airbnb check");
-    }
+    throw err;
   }
 
   // ── Discount code validation ──────────────────────────────────────────────
@@ -214,6 +194,16 @@ export async function POST(req: NextRequest) {
       where: { code: discountCode },
       data: { usageCount: { increment: 1 } },
     });
+  }
+
+  // Shared inventory: if this property is in an active inventory group, block the same
+  // nights on every sibling listing. No-op for a property that is ungrouped or whose
+  // group is inactive. Best-effort — a reconciliation failure must not fail a paid
+  // booking, and the next sync or status change converges.
+  try {
+    await reconcileBookingDerivedBlocks(booking.id);
+  } catch (err) {
+    console.error("[bookings] inventory-group propagation failed:", err);
   }
 
   // Promote any pre-booking Contact Us inquiries from this email into the new
