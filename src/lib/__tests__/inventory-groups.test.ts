@@ -236,6 +236,161 @@ describe("external calendar events as a propagation source", () => {
   });
 });
 
+describe("echo suppression for imported channel events", () => {
+  // HIL and Airbnb sync bidirectionally, so a block HIL exports comes back as an
+  // "imported" event. Left alone it becomes an independent source that outlives whatever
+  // caused it: cancel the booking and the echo keeps every sibling blocked forever.
+  const externalSource = (start: string, end: string, isActive = true): DerivedSource => ({
+    kind: "external_event",
+    id: 42,
+    propertyId: MICKEY_1BR,
+    start: d(start),
+    end: d(end),
+    isActive,
+  });
+
+  it("does not propagate when fully covered by a HIL booking on the same property", () => {
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-18"),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+
+    expect(plan.upserts).toEqual([]);
+  });
+
+  it("cancels echo-derived blocks that already exist", () => {
+    // Safe: the covering HIL record derives the very same siblings itself, so the dates
+    // stay blocked — only the redundant, deadlock-prone records go away.
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-18"),
+      group: GROUP,
+      existing: [
+        {
+          id: 700,
+          propertyId: MICKEY_2BR,
+          externalUid: externalDerivedBlockUid(42, MICKEY_2BR),
+          startDate: d("2026-08-15"),
+          endDate: d("2026-08-18"),
+          status: "active",
+        },
+      ],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+
+    expect(plan.upserts).toEqual([]);
+    expect(plan.cancels).toEqual([700]);
+  });
+
+  it("STILL propagates when only partially covered — the double-booking guard", () => {
+    // A real Airbnb reservation Aug 15–20 overlapping a HIL booking Aug 15–18. Suppressing
+    // it would leave the 18th and 19th bookable on siblings while the unit is occupied.
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-20"),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+
+    expect(plan.upserts.map((u) => u.propertyId)).toEqual([MICKEY_2BR, MICKEY_3BR]);
+    // The block spans the event's FULL range, not just the uncovered tail.
+    expect(plan.upserts[0].startDate).toEqual(d("2026-08-15"));
+    expect(plan.upserts[0].endDate).toEqual(d("2026-08-20"));
+  });
+
+  it("propagates when there is no coverage at all", () => {
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-09-01", "2026-09-05"),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [],
+    });
+    expect(plan.upserts.map((u) => u.propertyId)).toEqual([MICKEY_2BR, MICKEY_3BR]);
+  });
+
+  it("propagates when coverage is on unrelated dates", () => {
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-09-01", "2026-09-05"),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+    expect(plan.upserts).toHaveLength(2);
+  });
+
+  it("treats a run of back-to-back HIL records as continuous coverage", () => {
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-20"),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [
+        { start: d("2026-08-15"), end: d("2026-08-18") },
+        { start: d("2026-08-18"), end: d("2026-08-20") },
+      ],
+    });
+    expect(plan.upserts).toEqual([]);
+  });
+
+  it("is never applied to a HIL booking source, whatever the coverage", () => {
+    // A booking IS the original. Suppressing it would break core propagation.
+    const plan = planDerivedBlocks({
+      source: bookingSource(),
+      group: GROUP,
+      existing: [],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+    expect(plan.upserts.map((u) => u.propertyId)).toEqual([MICKEY_2BR, MICKEY_3BR]);
+  });
+
+  it("is never applied to a manual block source, whatever the coverage", () => {
+    const plan = planDerivedBlocks({
+      source: {
+        kind: "block",
+        id: 300,
+        propertyId: MICKEY_1BR,
+        start: d("2026-08-15"),
+        end: d("2026-08-18"),
+        isActive: true,
+      },
+      group: GROUP,
+      existing: [],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+    expect(plan.upserts).toHaveLength(2);
+  });
+
+  it("behaves as before when hilCoverage is omitted entirely", () => {
+    // Backwards compatibility: every existing caller passes nothing.
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-18"),
+      group: GROUP,
+      existing: [],
+    });
+    expect(plan.upserts).toHaveLength(2);
+  });
+
+  it("an inactive event is still cancelled even when covered", () => {
+    const plan = planDerivedBlocks({
+      source: externalSource("2026-08-15", "2026-08-18", false),
+      group: GROUP,
+      existing: [
+        {
+          id: 700,
+          propertyId: MICKEY_2BR,
+          externalUid: externalDerivedBlockUid(42, MICKEY_2BR),
+          startDate: d("2026-08-15"),
+          endDate: d("2026-08-18"),
+          status: "active",
+        },
+      ],
+      hilCoverage: [{ start: d("2026-08-15"), end: d("2026-08-18") }],
+    });
+    expect(plan.upserts).toEqual([]);
+    expect(plan.cancels).toEqual([700]);
+  });
+});
+
 describe("manual block scope", () => {
   // Test 11
   it("a listing-only manual block propagates to nothing", () => {

@@ -252,6 +252,41 @@ export default function CalendarClient({
       map.set(key, list);
     };
 
+    /**
+     * Name the HIL-originated record that fully covers [start, end), if any.
+     *
+     * Coverage counts bookings and admin-created blocks only — never derived blocks or
+     * other imported events, since those can themselves be links in an echo chain.
+     * Mirrors loadHilCoverage + isFullyCovered on the server; kept as a per-day-set check
+     * over merged coverage so a run of back-to-back records counts as continuous.
+     */
+    const coveringHilRecord = (start: string, end: string): string | null => {
+      const nights = eachDayKey(start, end);
+      if (nights.length === 0) return null;
+
+      const covered = new Set<string>();
+      let label: string | null = null;
+
+      for (const b of data.bookings) {
+        if (b.status === "cancelled") continue;
+        const own = eachDayKey(b.checkIn, b.checkOut);
+        if (own.some((n) => nights.includes(n))) {
+          own.forEach((n) => covered.add(n));
+          label ??= `booking #${b.id}`;
+        }
+      }
+      for (const bl of data.blocks) {
+        if (bl.status !== "active" || bl.isSystemGenerated || !bl.affectsAvailability) continue;
+        const own = eachDayKey(bl.startDate, bl.endDate);
+        if (own.some((n) => nights.includes(n))) {
+          own.forEach((n) => covered.add(n));
+          label ??= `the ${bl.reasonLabel.toLowerCase()} block`;
+        }
+      }
+
+      return nights.every((n) => covered.has(n)) ? label : null;
+    };
+
     for (const b of data.bookings) {
       if (b.status === "cancelled") continue;
       for (const key of eachDayKey(b.checkIn, b.checkOut)) {
@@ -267,11 +302,21 @@ export default function CalendarClient({
 
     for (const e of data.externalEvents) {
       if (e.status !== "active") continue;
+
+      // Mirror the server's echo rule (planDerivedBlocks / isFullyCovered) so the admin can
+      // SEE why an imported event produced no sibling blocks, instead of assuming it failed.
+      // HIL and the channel sync both ways, so our own exported block comes back as an
+      // "imported" event; when HIL already covers those nights it is redundant and must not
+      // propagate, or it would outlive the record that caused it.
+      const cover = coveringHilRecord(e.startDate, e.endDate);
+
       for (const key of eachDayKey(e.startDate, e.endDate)) {
         push(key, {
           kind: "external",
           title: e.summary?.trim() ? `Imported — ${e.summary}` : "Imported channel event",
-          detail: `From this listing's external calendar feed · ${formatKey(e.startDate)} → ${formatKey(e.endDate)}`,
+          detail: cover
+            ? `From this listing's external calendar feed · ${formatKey(e.startDate)} → ${formatKey(e.endDate)} · already covered by ${cover}, so it is not propagating to sibling listings`
+            : `From this listing's external calendar feed · ${formatKey(e.startDate)} → ${formatKey(e.endDate)}`,
           canEdit: false,
         });
       }

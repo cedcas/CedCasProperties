@@ -24,9 +24,15 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { toUtcMidnight, todayUtc } from "@/lib/dates";
+import {
+  toUtcMidnight,
+  todayUtc,
+  isFullyCovered,
+  rangesOverlap,
+  type DateRange,
+} from "@/lib/dates";
 import { derivedBlockUid, type DerivedSourceKind } from "@/lib/calendar-uids";
-import { bookingBlocksAvailability } from "@/lib/booking-status";
+import { bookingBlocksAvailability, BLOCKING_BOOKING_STATUSES } from "@/lib/booking-status";
 import { logAction } from "@/lib/log";
 
 /** Marker values shared by every derived block. */
@@ -100,17 +106,40 @@ function sourceRefs(source: DerivedSource) {
  * `cancelCutoff` limits cancellation to blocks ending after that date. Pass `null` to
  * cancel regardless of date (a vanished source has no valid shadows); pass today for
  * group/membership edits, where past blocks are inert history worth leaving alone.
+ *
+ * `hilCoverage` suppresses ECHOES. HIL and a channel sync bidirectionally: HIL exports a
+ * block, the channel imports it, and the channel's own feed then re-advertises it, so we
+ * import our own block back as an "external" event. Left alone that echo becomes an
+ * independent propagation source which outlives the record that caused it — cancel the
+ * original booking and the echo keeps every sibling blocked with no traceable cause.
+ *
+ * So an external event whose nights are ALREADY fully covered by a HIL-originated record
+ * on the same property does not propagate: the covering record derives those same
+ * siblings itself, making the echo pure redundancy. Coverage must be TOTAL — see
+ * isFullyCovered in src/lib/dates.ts for why an overlap test would be unsafe.
  */
 export function planDerivedBlocks(input: {
   source: DerivedSource;
   group: GroupSnapshot | null;
   existing: ExistingDerivedBlock[];
   cancelCutoff?: Date | null;
+  /**
+   * Active HIL-originated ranges on the SOURCE property — bookings in a blocking status
+   * plus active non-derived blocks. Deliberately excludes derived blocks and other
+   * external events: both can themselves be links in an echo chain, so counting them as
+   * coverage could suppress a legitimate source.
+   */
+  hilCoverage?: DateRange[];
 }): DerivedBlockPlan {
   const { source, group, existing } = input;
   const cutoff = input.cancelCutoff ?? null;
 
-  const propagating = Boolean(group?.isActive) && source.isActive;
+  // Only imported events can be echoes; HIL's own bookings and blocks are the originals.
+  const isEcho =
+    source.kind === "external_event" &&
+    isFullyCovered({ start: source.start, end: source.end }, input.hilCoverage ?? []);
+
+  const propagating = Boolean(group?.isActive) && source.isActive && !isEcho;
 
   const targets = propagating
     ? [...new Set(group!.memberPropertyIds)]
@@ -242,6 +271,102 @@ async function loadExistingDerived(source: DerivedSource, db: Db): Promise<Exist
   });
 }
 
+/**
+ * Active HIL-originated ranges on a property that overlap [start, end).
+ *
+ * "HIL-originated" means WE are the authority for it: a booking taken on this site, or a
+ * block an admin created. It deliberately excludes system-generated derived blocks and
+ * `ExternalCalendarEvent` rows, because either can itself be a link in an echo chain —
+ * counting them as coverage could suppress a legitimate channel reservation.
+ *
+ * Feeds echo-detection in planDerivedBlocks.
+ */
+async function loadHilCoverage(
+  propertyId: number,
+  start: Date,
+  end: Date,
+  db: Db = prisma
+): Promise<DateRange[]> {
+  const from = toUtcMidnight(start);
+  const to = toUtcMidnight(end);
+
+  const [bookings, blocks] = await Promise.all([
+    db.booking.findMany({
+      where: {
+        propertyId,
+        status: { in: [...BLOCKING_BOOKING_STATUSES] },
+        checkIn: { lt: to },
+        checkOut: { gt: from },
+      },
+      select: { checkIn: true, checkOut: true },
+    }),
+    db.availabilityBlock.findMany({
+      where: {
+        propertyId,
+        status: "active",
+        affectsAvailability: true,
+        isSystemGenerated: false,
+        startDate: { lt: to },
+        endDate: { gt: from },
+      },
+      select: { startDate: true, endDate: true },
+    }),
+  ]);
+
+  return [
+    ...bookings.map((b) => ({ start: b.checkIn, end: b.checkOut })),
+    ...blocks.map((b) => ({ start: b.startDate, end: b.endDate })),
+  ];
+}
+
+/**
+ * Re-reconcile imported events on a property that overlap a range whose coverage just
+ * shrank.
+ *
+ * When a booking is cancelled or a manual block is withdrawn, an imported event that was
+ * being suppressed as an echo may no longer be covered — and if it is a GENUINE channel
+ * reservation it must start blocking siblings again. Waiting for the next scheduled sync
+ * would leave siblings bookable for up to a sync interval while the unit is occupied, so
+ * the re-evaluation happens immediately.
+ */
+async function reconcileOverlappingExternalEvents(
+  propertyId: number,
+  start: Date,
+  end: Date,
+  db: Db = prisma
+): Promise<ReconcileResult> {
+  const events = await db.externalCalendarEvent.findMany({
+    where: {
+      propertyId,
+      status: "active",
+      startDate: { lt: toUtcMidnight(end) },
+      endDate: { gt: toUtcMidnight(start) },
+    },
+    select: { id: true, propertyId: true, startDate: true, endDate: true },
+  });
+
+  const total: ReconcileResult = { created: 0, updated: 0, cancelled: 0 };
+  for (const event of events) {
+    if (!rangesOverlap(toUtcMidnight(start), toUtcMidnight(end), event.startDate, event.endDate))
+      continue;
+    const r = await reconcileSource(
+      {
+        kind: "external_event",
+        id: event.id,
+        propertyId: event.propertyId,
+        start: event.startDate,
+        end: event.endDate,
+        isActive: true,
+      },
+      { db }
+    );
+    total.created += r.created;
+    total.updated += r.updated;
+    total.cancelled += r.cancelled;
+  }
+  return total;
+}
+
 export interface ReconcileResult {
   created: number;
   updated: number;
@@ -368,9 +493,13 @@ export async function reconcileSource(
   opts: { cancelCutoff?: Date | null; db?: Db; logLabel?: string; logTarget?: string } = {}
 ): Promise<ReconcileResult> {
   const db = opts.db ?? prisma;
-  const [group, existing] = await Promise.all([
+  const [group, existing, hilCoverage] = await Promise.all([
     getGroupForProperty(source.propertyId, db),
     loadExistingDerived(source, db),
+    // Only imported events can be echoes, so this query is skipped for every other source.
+    source.kind === "external_event"
+      ? loadHilCoverage(source.propertyId, source.start, source.end, db)
+      : Promise.resolve([] as DateRange[]),
   ]);
 
   const plan = planDerivedBlocks({
@@ -379,6 +508,7 @@ export async function reconcileSource(
     group,
     existing,
     cancelCutoff: opts.cancelCutoff ?? null,
+    hilCoverage,
   });
 
   const result = await applyPlan(plan, db);
@@ -409,17 +539,39 @@ export async function reconcileBookingDerivedBlocks(
   // Hard-deleted booking: its derived blocks cascade away with it, nothing to do.
   if (!booking) return { created: 0, updated: 0, cancelled: 0 };
 
-  return reconcileSource(
+  const blocks = bookingBlocksAvailability(booking.status);
+
+  const result = await reconcileSource(
     {
       kind: "booking",
       id: booking.id,
       propertyId: booking.propertyId,
       start: booking.checkIn,
       end: booking.checkOut,
-      isActive: bookingBlocksAvailability(booking.status),
+      isActive: blocks,
     },
     { db, logLabel: `booking #${booking.id}`, logTarget: `booking-${booking.id}` }
   );
+
+  // This booking no longer covers its dates, so an imported event that was suppressed as
+  // an echo of it may be a genuine channel reservation that must resume blocking siblings.
+  if (!blocks) {
+    try {
+      const extra = await reconcileOverlappingExternalEvents(
+        booking.propertyId,
+        booking.checkIn,
+        booking.checkOut,
+        db
+      );
+      result.created += extra.created;
+      result.updated += extra.updated;
+      result.cancelled += extra.cancelled;
+    } catch (err) {
+      console.error("[inventory-groups] re-reconcile of overlapping external events failed:", err);
+    }
+  }
+
+  return result;
 }
 
 /** Reconcile the sibling blocks generated by an imported external calendar event. */
@@ -466,7 +618,7 @@ export async function reconcileManualBlockDerivedBlocks(
   });
   if (!block || block.isSystemGenerated) return { created: 0, updated: 0, cancelled: 0 };
 
-  return reconcileSource(
+  const result = await reconcileSource(
     {
       kind: "block",
       id: block.id,
@@ -478,6 +630,28 @@ export async function reconcileManualBlockDerivedBlocks(
     },
     { db, logLabel: `availability block #${block.id}`, logTarget: `availability-block-${block.id}` }
   );
+
+  // A cancelled or no-longer-blocking manual block stops providing coverage, so an
+  // imported event suppressed as an echo of it must be re-evaluated straight away.
+  // Note this keys off the block's own availability, not its scope: a listing-only block
+  // still counts as HIL coverage even though it never propagates.
+  if (block.status !== "active" || !block.affectsAvailability) {
+    try {
+      const extra = await reconcileOverlappingExternalEvents(
+        block.propertyId,
+        block.startDate,
+        block.endDate,
+        db
+      );
+      result.created += extra.created;
+      result.updated += extra.updated;
+      result.cancelled += extra.cancelled;
+    } catch (err) {
+      console.error("[inventory-groups] re-reconcile of overlapping external events failed:", err);
+    }
+  }
+
+  return result;
 }
 
 // ── Group-level reconciliation ─────────────────────────────────────────────

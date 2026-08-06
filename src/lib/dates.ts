@@ -97,3 +97,53 @@ export function eachNightUtc(start: Date, end: Date): Date[] {
 export function rangesOverlap(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date): boolean {
   return aStart < bEnd && aEnd > bStart;
 }
+
+export interface DateRange {
+  start: Date;
+  end: Date;
+}
+
+/**
+ * Coalesce ranges into the smallest equivalent set of non-touching ranges.
+ *
+ * Adjacent ranges ARE merged (Aug 15–18 and Aug 18–20 become Aug 15–20), because with
+ * half-open ranges those two cover a continuous run of nights with no gap between them.
+ * Empty and inverted ranges are dropped — they occupy no nights.
+ */
+export function mergeRanges(ranges: DateRange[]): DateRange[] {
+  const valid = ranges
+    .map((r) => ({ start: toUtcMidnight(r.start), end: toUtcMidnight(r.end) }))
+    .filter((r) => r.end > r.start)
+    .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const merged: DateRange[] = [];
+  for (const range of valid) {
+    const last = merged[merged.length - 1];
+    // `>=` not `>`: touching ranges leave no uncovered night, so they merge.
+    if (last && range.start.getTime() <= last.end.getTime()) {
+      if (range.end > last.end) last.end = range.end;
+    } else {
+      merged.push({ start: range.start, end: range.end });
+    }
+  }
+  return merged;
+}
+
+/**
+ * Is every night of [start, end) covered by `coverage`?
+ *
+ * TOTAL containment, deliberately — not "overlaps". This gates whether an imported
+ * channel event is treated as an echo of something HIL already knows about
+ * (see planDerivedBlocks in src/lib/inventory-groups.ts). Loosening it to an overlap
+ * test would let a genuine channel reservation that merely *starts* inside a HIL
+ * booking stop propagating to sibling listings, leaving its uncovered nights bookable
+ * while the unit is occupied — a real double booking. Adjacent coverage ranges count
+ * as continuous, so a run of back-to-back bookings covers a span the way a human
+ * would expect.
+ */
+export function isFullyCovered(range: DateRange, coverage: DateRange[]): boolean {
+  const start = toUtcMidnight(range.start);
+  const end = toUtcMidnight(range.end);
+  if (!(end > start)) return false; // an empty range is never "covered"
+  return mergeRanges(coverage).some((c) => c.start <= start && c.end >= end);
+}
