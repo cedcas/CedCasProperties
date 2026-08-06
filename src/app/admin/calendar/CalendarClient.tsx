@@ -104,14 +104,27 @@ const REASONS: { value: string; label: string }[] = [
 
 type MarkerKind = "booking" | "external" | "manual" | "derived" | "maintenance" | "owner_use";
 
-/** Distinct visual treatment per record type, so the grid is readable at a glance. */
+/**
+ * Six pairwise-distinct HUES. Getting this wrong is easy here: the brand's
+ * `charcoal` token is #335238, which is a GREEN — an earlier revision used
+ * `bg-charcoal/60` for maintenance and it read as the same colour as `bg-forest`
+ * bookings, so a maintenance block looked like a reservation. Likewise a dusty
+ * pink for owner use was confusable with the coral shared-inventory marker.
+ *
+ * Maintenance keeps the yellow/amber family because it is the archetypal manual
+ * block and that is what an admin expects to see; the generic `manual` bucket
+ * (any other reason) is a neutral grey.
+ *
+ * Colour is a hint, not the only channel — every day cell also carries a text
+ * `title`/`aria-label`, and clicking a day lists the records in full.
+ */
 const MARKER_STYLES: Record<MarkerKind, { swatch: string; label: string }> = {
-  booking: { swatch: "bg-forest", label: "HIL booking" },
-  external: { swatch: "bg-[#8BCDB8]", label: "Imported channel event" },
-  manual: { swatch: "bg-[#FFDD3F]", label: "Manual block" },
-  derived: { swatch: "bg-[#FF5371]", label: "Shared-inventory block" },
-  maintenance: { swatch: "bg-charcoal/60", label: "Maintenance" },
-  owner_use: { swatch: "bg-[#E0A0B4]", label: "Owner use" },
+  booking: { swatch: "bg-forest", label: "HIL booking" }, // #4CA750 green
+  external: { swatch: "bg-[#2E86C1]", label: "Imported channel event" }, // blue
+  derived: { swatch: "bg-[#FF5371]", label: "Shared-inventory block" }, // brand coral
+  maintenance: { swatch: "bg-[#E0A800]", label: "Maintenance" }, // amber
+  owner_use: { swatch: "bg-[#8A6FBF]", label: "Owner use" }, // purple
+  manual: { swatch: "bg-[#6B7280]", label: "Other manual block" }, // neutral grey
 };
 
 interface DayEntry {
@@ -445,6 +458,9 @@ export default function CalendarClient({
   const sync = data?.syncState;
   const activeBlocks = (data?.blocks ?? []).filter((b) => b.status === "active");
   const editableBlocks = activeBlocks.filter((b) => !b.isSystemGenerated);
+  // This listing's OWN reservations. They occupy dates but are not AvailabilityBlock rows,
+  // so they never appear in the blocks table below — counted here to say so explicitly.
+  const ownBookingCount = (data?.bookings ?? []).filter((b) => b.status !== "cancelled").length;
 
   return (
     <div className="space-y-5">
@@ -811,7 +827,20 @@ export default function CalendarClient({
                         ? "border-forest ring-forest/20 ring-2"
                         : "hover:border-forest/40 border-black/[.06]"
                     } ${isPast ? "bg-black/[.02] opacity-55" : entries.length > 0 ? "bg-[#FAFAFA]" : "bg-white"}`}
-                    title={entries.map((e) => e.title).join("\n") || "Available"}
+                    // Text cue as well as colour: six hues on a 2px dot is not enough on
+                    // its own, and it fails entirely for a colour-blind admin.
+                    title={
+                      entries.length > 0
+                        ? entries
+                            .map((e) => `${MARKER_STYLES[e.kind].label}: ${e.title}`)
+                            .join("\n")
+                        : "Available"
+                    }
+                    aria-label={`${formatKey(key, { month: "long", day: "numeric" })} — ${
+                      entries.length > 0
+                        ? [...new Set(entries.map((e) => MARKER_STYLES[e.kind].label))].join(", ")
+                        : "available"
+                    }`}
                   >
                     <span
                       className={`text-[12.5px] font-semibold ${entries.length > 0 ? "text-charcoal" : "text-charcoal/50"}`}
@@ -822,10 +851,20 @@ export default function CalendarClient({
                       {kinds.map((k) => (
                         <span
                           key={k}
-                          className={`h-1.5 w-1.5 rounded-full ${MARKER_STYLES[k].swatch}`}
+                          className={`h-2 w-2 rounded-full ${MARKER_STYLES[k].swatch}`}
                         />
                       ))}
                     </span>
+                    {/* Name the dominant record inline so the grid is readable without
+                        decoding colours or hovering. */}
+                    {entries.length > 0 && (
+                      <span className="text-charcoal/55 mt-0.5 block truncate text-[9.5px] leading-tight">
+                        {MARKER_STYLES[kinds[0]].label
+                          .replace(" block", "")
+                          .replace("Imported channel event", "Imported")}
+                        {kinds.length > 1 ? ` +${kinds.length - 1}` : ""}
+                      </span>
+                    )}
                     {entries.length === 0 && !isPast && (
                       <span className="text-charcoal/30 mt-0.5 block text-[10px]">Available</span>
                     )}
@@ -926,8 +965,26 @@ export default function CalendarClient({
       {/* ── Manual blocks list ───────────────────────────────────────────── */}
       <div className={`${cardCls} overflow-hidden`}>
         <div className="flex items-center justify-between border-b border-black/[.06] px-5 py-4">
-          <h3 className="text-charcoal font-serif font-semibold">Upcoming blocks</h3>
-          <span className="text-charcoal/45 text-[12px]">
+          <div>
+            <h3 className="text-charcoal font-serif font-semibold">Upcoming availability blocks</h3>
+            {/* This table lists BLOCKS only. A listing's own reservations are Booking
+                records, not blocks — the source event always stays on its own property and
+                only DERIVED blocks are created on siblings. Saying so here prevents the
+                reasonable misreading that a listing with fewer rows is less protected. */}
+            <p className="text-charcoal/45 mt-1 text-[12px]">
+              Blocks only.{" "}
+              {ownBookingCount > 0 ? (
+                <>
+                  This listing&apos;s own {ownBookingCount} booking
+                  {ownBookingCount === 1 ? "" : "s"} in this window{" "}
+                  {ownBookingCount === 1 ? "is" : "are"} shown on the calendar above, not here.
+                </>
+              ) : (
+                <>This listing has no bookings of its own in this window.</>
+              )}
+            </p>
+          </div>
+          <span className="text-charcoal/45 shrink-0 text-[12px]">
             {activeBlocks.length} active ({editableBlocks.length} manual)
           </span>
         </div>
