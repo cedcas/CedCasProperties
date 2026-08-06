@@ -48,6 +48,11 @@ model Property {
   testimonials  Testimonial[]
   rates         PropertyRate[]
   quickReplies  QuickReply[]
+  // Shared inventory + availability blocks (Aug 2026). Relation fields only — no new columns.
+  inventoryMembership    InventoryGroupMember?
+  availabilityBlocks     AvailabilityBlock[]     @relation("BlockTargetProperty")
+  sourcedBlocks          AvailabilityBlock[]     @relation("BlockSourceProperty")
+  externalCalendarEvents ExternalCalendarEvent[]
 }
 
 model Booking {
@@ -78,6 +83,7 @@ model Booking {
   scheduledMessages     ScheduledMessage[]
   guestMessages         GuestMessage[]
   additionalCharges     AdditionalCharge[]
+  derivedBlocks         AvailabilityBlock[] // sibling blocks this booking generated on shared-inventory properties
 }
 
 model AdditionalCharge {
@@ -237,6 +243,129 @@ model PropertyRate {
   note         String?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
+}
+
+// ─── Shared inventory groups (Aug 2026) ─────────────────────────────────────
+// Some listings are different configurations of the SAME physical property
+// (e.g. Mickey in Lipa 1BR / 2BR / 3BR). Only one configuration may be occupied
+// during any overlapping date range, so a qualifying reservation on one member
+// generates system blocks on every other active member. Channel-neutral by design:
+// the source may be a HIL Booking, an imported external calendar event, or a
+// group-scoped manual block. See src/lib/inventory-groups.ts.
+model InventoryGroup {
+  id        Int      @id @default(autoincrement())
+  name      String
+  // Safe by default: a new group propagates NOTHING until deliberately switched on.
+  // Activating starts writing sibling blocks that flow out through the iCal feeds.
+  isActive  Boolean  @default(false)
+  notes     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members InventoryGroupMember[]
+  blocks  AvailabilityBlock[]
+}
+
+model InventoryGroupMember {
+  id               Int            @id @default(autoincrement())
+  inventoryGroup   InventoryGroup @relation(fields: [inventoryGroupId], references: [id], onDelete: Cascade)
+  inventoryGroupId Int
+  property         Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId       Int            @unique // enforces the one-group-per-property rule at the DB level
+  createdAt        DateTime       @default(now())
+
+  @@unique([inventoryGroupId, propertyId])
+  @@index([inventoryGroupId])
+}
+
+// Unavailable date ranges that are NOT HIL bookings: admin-created manual blocks
+// (maintenance, owner use, …) and system-generated shared-inventory sibling blocks.
+// Dates follow the Booking convention exactly — UTC midnight, startDate inclusive,
+// endDate EXCLUSIVE — so a stay may check in on another record's endDate.
+model AvailabilityBlock {
+  id         Int      @id @default(autoincrement())
+  property   Property @relation("BlockTargetProperty", fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId Int
+  startDate  DateTime // UTC midnight, INCLUSIVE
+  endDate    DateTime // UTC midnight, EXCLUSIVE
+
+  type                String // "manual" | "inventory_derived"
+  reason              String // maintenance | owner_use | repair | deep_cleaning | pest_control | temporary_hold | personal_reservation | other | inventory_group
+  internalNotes       String? @db.Text // never shown to guests
+  scope               String  @default("listing_only") // listing_only | inventory_group
+  status              String  @default("active") // active | cancelled — soft-cancelled, never deleted, to preserve audit history
+  isSystemGenerated   Boolean @default(false) // true = derived; must not be edited directly, change the source instead
+  affectsAvailability Boolean @default(true)
+  exportToIcal        Boolean @default(true)
+
+  // Source relationships. Exactly one source ref is set on a derived block.
+  sourceBooking         Booking?               @relation(fields: [sourceBookingId], references: [id], onDelete: Cascade)
+  sourceBookingId       Int?
+  sourceExternalEvent   ExternalCalendarEvent? @relation(fields: [sourceExternalEventId], references: [id], onDelete: Cascade)
+  sourceExternalEventId Int?
+  // SetNull rather than Cascade: InnoDB self-referential cascades are unreliable, and
+  // source blocks are soft-cancelled rather than deleted anyway.
+  parentBlock           AvailabilityBlock?     @relation("BlockDerivation", fields: [parentBlockId], references: [id], onDelete: SetNull)
+  parentBlockId         Int?
+  derivedBlocks         AvailabilityBlock[]    @relation("BlockDerivation")
+  sourceProperty        Property?              @relation("BlockSourceProperty", fields: [sourcePropertyId], references: [id], onDelete: SetNull)
+  sourcePropertyId      Int?
+  inventoryGroup        InventoryGroup?        @relation(fields: [inventoryGroupId], references: [id], onDelete: SetNull)
+  inventoryGroupId      Int?
+
+  // Doubles as the stable iCal UID AND the idempotency key for reconciliation upserts.
+  // Nullable so a manual block can be inserted then stamped with manual-block-{id} in the
+  // same transaction (MySQL permits multiple NULLs under a unique index).
+  externalUid String?   @unique @db.VarChar(191)
+  createdById Int? // AdminUser.id; null when system-generated. Plain Int, no relation.
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  cancelledAt DateTime?
+
+  @@index([propertyId, status, startDate, endDate])
+  @@index([sourceBookingId])
+  @@index([sourceExternalEventId])
+  @@index([inventoryGroupId])
+  @@index([parentBlockId])
+}
+
+// Persisted events parsed from Property.airbnbIcsUrl. Previously these were fetched and
+// parsed live on every availability check then discarded, which left no stable record to
+// match on the next sync — so sibling propagation and cancellation reconciliation were
+// impossible. Rows are marked removed, never deleted. See src/lib/external-calendar-sync.ts.
+model ExternalCalendarEvent {
+  id          Int       @id @default(autoincrement())
+  property    Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  propertyId  Int
+  externalUid String    @db.VarChar(191) // VEVENT UID from the feed
+  summary     String?   @db.Text
+  startDate   DateTime // UTC midnight, INCLUSIVE
+  endDate     DateTime // UTC midnight, EXCLUSIVE
+  status      String    @default("active") // active | removed
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  removedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  derivedBlocks AvailabilityBlock[]
+
+  @@unique([propertyId, externalUid])
+  @@index([propertyId, status, startDate, endDate])
+}
+
+// Per-property iCal sync health. Makes a broken feed visible in admin instead of failing
+// open silently, and drives the sync-on-demand staleness check. Deliberately holds a plain
+// propertyId with no relation, mirroring EmailPollState.
+model ExternalCalendarSyncState {
+  id            Int       @id @default(autoincrement())
+  propertyId    Int       @unique
+  lastSyncedAt  DateTime? // last SUCCESSFUL sync
+  lastAttemptAt DateTime? // claimed before fetching, so concurrent callers don't stampede
+  lastStatus    String? // ok | fetch_failed | parse_failed | not_configured
+  lastError     String?   @db.Text
+  eventCount    Int       @default(0)
+  updatedAt     DateTime  @updatedAt
 }
 
 model Testimonial {
