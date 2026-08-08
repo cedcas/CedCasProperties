@@ -35,6 +35,26 @@ jobs:
           DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
       - run: npm run typecheck
 
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # Prisma types are needed because the availability/inventory modules import
+      # generated types, even though the tests themselves never touch a database.
+      - name: Generate Prisma client (for types)
+        run: npx prisma generate
+        env:
+          DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
+      # Runs the suite twice, under TZ=America/Chicago and TZ=Asia/Manila, so a
+      # local-time date bug cannot pass by virtue of the runner being on UTC.
+      - run: npm test
+
   build:
     name: Build
     runs-on: ubuntu-latest

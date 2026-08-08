@@ -1,0 +1,43 @@
+name: Sync External Calendars
+
+# REDUNDANT BACKSTOP ONLY — not the primary mechanism.
+#
+# Measured delivery for this repo's scheduled workflows is roughly 12% of a */15 schedule
+# and 39% of an hourly one, with observed gaps up to 3h30m. GitHub throttles short-interval
+# schedules on shared runners, so this workflow is expected to skip most of its slots.
+#
+# Availability correctness therefore does NOT depend on this job:
+#   1. sync-on-demand   — a stale feed is re-synced before any availability answer, and
+#                         always within 2 minutes before a booking commits
+#                         (see src/lib/availability.ts + external-calendar-sync.ts)
+#   2. manual refresh   — "Sync channel calendars now" in /admin/calendar
+#   3. cron-job.org     — the primary pre-warmer at */15 (configured outside this repo;
+#                         see "External calendar sync" in the technical specification)
+#   4. this workflow    — free redundancy, plus workflow_dispatch as a second manual trigger
+#
+# Concurrent runs are safe: the endpoint claims each feed via ExternalCalendarSyncState
+# .lastAttemptAt, and unique indexes make duplicate events and blocks impossible.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: sync-external-calendars
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call Vercel cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+               --max-time 90 \
+               -H "Authorization: Bearer $CRON_SECRET" \
+               https://haveninlipa.com/api/cron/sync-external-calendars
