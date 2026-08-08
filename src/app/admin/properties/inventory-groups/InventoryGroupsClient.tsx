@@ -46,9 +46,20 @@ interface Group {
   blocks: PropagatedBlock[];
 }
 
+/**
+ * Show the year whenever it isn't the current one.
+ *
+ * Without it, a block for Aug 8 2026 and one for Aug 8 2027 both render as "Aug 8" and
+ * read as a duplicate bug — which is exactly how this list first looked in production,
+ * where two source events a year apart produced eight entirely correct blocks that
+ * appeared to be four repeated twice.
+ */
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-PH", {
+  const date = new Date(iso);
+  const thisYear = new Date().getUTCFullYear();
+  return date.toLocaleDateString("en-PH", {
     timeZone: "UTC",
+    ...(date.getUTCFullYear() === thisYear ? {} : { year: "numeric" }),
     month: "short",
     day: "numeric",
   });

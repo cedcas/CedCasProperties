@@ -163,11 +163,19 @@ function eachDayKey(startKey: string, endKey: string): string[] {
   return keys;
 }
 
-function formatKey(
-  key: string,
-  opts: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }
-): string {
-  return new Date(`${key}T00:00:00Z`).toLocaleDateString("en-PH", { timeZone: "UTC", ...opts });
+/**
+ * Default rendering adds the year whenever it isn't the current one, so two records a
+ * year apart never render identically and read as a duplicate. Callers passing explicit
+ * `opts` control the format entirely.
+ */
+function formatKey(key: string, opts?: Intl.DateTimeFormatOptions): string {
+  const date = new Date(`${key}T00:00:00Z`);
+  const resolved: Intl.DateTimeFormatOptions = opts ?? {
+    ...(date.getUTCFullYear() === new Date().getUTCFullYear() ? {} : { year: "numeric" }),
+    month: "short",
+    day: "numeric",
+  };
+  return date.toLocaleDateString("en-PH", { timeZone: "UTC", ...resolved });
 }
 
 function relativeTime(iso: string | null): string {
