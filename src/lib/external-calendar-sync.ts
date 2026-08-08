@@ -21,7 +21,7 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { toUtcMidnight, utcDateKey } from "@/lib/dates";
+import { toUtcMidnight, utcDateKey, todayUtc } from "@/lib/dates";
 import { parseIcsEvents, looksLikeVCalendar, type ParsedIcsEvent } from "@/lib/ical";
 import { syntheticExternalUid } from "@/lib/calendar-uids";
 import { reconcileExternalEventDerivedBlocks } from "@/lib/inventory-groups";
@@ -117,15 +117,32 @@ export function normalizeFeedEvents(parsed: ParsedIcsEvent[]): NormalizedFeedEve
 /**
  * Diff a freshly-fetched feed against what is already persisted. Pure — no DB, no clock.
  *
- * Only ever called with the output of a verified-successful fetch, which is what makes
- * `removedIds` trustworthy.
+ * Only ever called with the output of a verified-successful fetch, or with an empty feed
+ * when the property has no iCal URL configured. A FAILED fetch never reaches here, which
+ * is what makes `removedIds` trustworthy.
+ *
+ * `retractFrom` bounds retraction to current-and-future events (`endDate > retractFrom`).
+ * Two reasons it matters:
+ *
+ *  1. **History is never rewritten.** Removing or replacing a feed must not touch dates
+ *     that have already happened — a completed stay is a fact, not something the feed can
+ *     retract. Past records are inert anyway: availability starts at today, the iCal
+ *     export is bounded to today, and booking creation rejects past dates.
+ *  2. **Airbnb feeds do not carry past reservations.** Without this bound, the first sync
+ *     after any stay completes would mark that event "removed", cancel its derived blocks
+ *     and write a misleading audit line — on the normal happy path, for every stay.
+ *
+ * Omit it only where unbounded retraction is genuinely wanted; callers in this module
+ * always pass today.
  */
 export function planExternalEventSync(
   feedEvents: NormalizedFeedEvent[],
-  existing: ExistingExternalEvent[]
+  existing: ExistingExternalEvent[],
+  opts: { retractFrom?: Date } = {}
 ): ExternalSyncPlan {
   const existingByUid = new Map(existing.map((e) => [e.externalUid, e]));
   const seenUids = new Set(feedEvents.map((e) => e.externalUid));
+  const retractFrom = opts.retractFrom ? toUtcMidnight(opts.retractFrom) : null;
 
   const changedIds: number[] = [];
   const revivedIds: number[] = [];
@@ -142,6 +159,8 @@ export function planExternalEventSync(
 
   const removedIds = existing
     .filter((e) => e.status === "active" && !seenUids.has(e.externalUid))
+    // An event still running today counts as current, so `>` not `>=`.
+    .filter((e) => retractFrom === null || e.endDate > retractFrom)
     .map((e) => e.id);
 
   return { upserts: feedEvents, changedIds, removedIds, revivedIds };
@@ -261,6 +280,55 @@ const EMPTY_RESULT = {
 };
 
 /**
+ * Retract this property's current-and-future imported events, then reconcile the sibling
+ * blocks they justified. Used when nothing is asserting them any more — no feed URL
+ * configured, which is equivalent to a feed that lists nothing.
+ *
+ * Past events are deliberately left alone: a completed stay is a historical fact, not
+ * something a feed can withdraw, and past records affect nothing downstream anyway.
+ */
+async function retractEvents(
+  property: { id: number; name: string; slug: string },
+  ctx: { reason: string }
+): Promise<{ removed: number; blocksCancelled: number }> {
+  const cutoff = todayUtc();
+
+  const stale = await prisma.externalCalendarEvent.findMany({
+    where: { propertyId: property.id, status: "active", endDate: { gt: cutoff } },
+    select: { id: true },
+  });
+  if (stale.length === 0) return { removed: 0, blocksCancelled: 0 };
+
+  const ids = stale.map((e) => e.id);
+  const res = await prisma.externalCalendarEvent.updateMany({
+    where: { id: { in: ids }, status: "active" },
+    data: { status: "removed", removedAt: new Date() },
+  });
+
+  let blocksCancelled = 0;
+  for (const id of ids) {
+    const r = await reconcileExternalEventDerivedBlocks(id);
+    blocksCancelled += r.cancelled;
+  }
+
+  await logAction({
+    actor: "System",
+    actorRole: "admin",
+    action: `Retracted ${res.count} upcoming imported calendar event${res.count === 1 ? "" : "s"} on "${property.name}" — ${ctx.reason}. Past dates left untouched.`,
+    module: "bookings",
+    target: property.slug,
+    metadata: {
+      propertyId: property.id,
+      eventIds: ids,
+      reason: ctx.reason,
+      cutoff: utcDateKey(cutoff),
+    },
+  });
+
+  return { removed: res.count, blocksCancelled };
+}
+
+/**
  * Sync a single property's feed and reconcile the sibling blocks it justifies.
  *
  * Pass `force: false` with a `maxAgeMinutes` to make this a no-op when the feed was
@@ -289,12 +357,24 @@ export async function syncPropertyFeed(
 
   const url = property.airbnbIcsUrl?.trim();
   if (!url) {
+    // No feed configured means nothing is asserting imported events for this listing, so
+    // current-and-future ones are retracted — the same treatment as a successful but empty
+    // feed. This restores the behaviour the site had before events were persisted, when
+    // clearing the iCal URL simply stopped the live fetch and those dates reopened at once.
+    //
+    // Without this, clearing or replacing a URL stranded imported events as `active`
+    // forever: sync never ran for the property again, and imported events have no admin
+    // control by design, so the only way out was hand-editing the database.
+    //
+    // PAST events are untouched — see planExternalEventSync. Removing or replacing a feed
+    // must never rewrite dates that have already happened.
+    const retracted = await retractEvents(property, { reason: "no feed configured" });
     await recordSyncState(property.id, {
       status: "not_configured",
       succeeded: false,
       eventCount: 0,
     });
-    return { ...base, status: "not_configured", ...EMPTY_RESULT };
+    return { ...base, status: "not_configured", ...EMPTY_RESULT, ...retracted };
   }
 
   if (opts.force === false) {
@@ -327,7 +407,9 @@ export async function syncPropertyFeed(
     select: { id: true, externalUid: true, startDate: true, endDate: true, status: true },
   });
 
-  const plan = planExternalEventSync(outcome.events, existing);
+  // Bounded to current-and-future: Airbnb feeds do not carry past reservations, so an
+  // unbounded diff would mark every completed stay "removed" on the next sync.
+  const plan = planExternalEventSync(outcome.events, existing, { retractFrom: todayUtc() });
   const existingByUid = new Map(existing.map((e) => [e.externalUid, e]));
   const now = new Date();
 
@@ -460,8 +542,12 @@ export async function syncPropertyFeed(
 export async function syncAllActiveProperties(
   opts: { force?: boolean } = {}
 ): Promise<SyncRunSummary> {
+  // Every active property, including those with NO feed URL. Skipping the latter would
+  // leave imported events stranded forever when a URL is cleared or replaced, because the
+  // retraction lives in syncPropertyFeed. For a property with no URL and nothing to
+  // retract this is two cheap queries.
   const properties = await prisma.property.findMany({
-    where: { isActive: true, NOT: { airbnbIcsUrl: null } },
+    where: { isActive: true },
     select: { id: true, name: true },
     orderBy: { id: "asc" },
   });

@@ -191,6 +191,90 @@ describe("sync planning", () => {
     expect(runA.removedIds).toEqual([]);
   });
 
+  // ── History protection ───────────────────────────────────────────────────
+  // Removing or REPLACING a feed must never touch dates that have already happened.
+  // Only current-and-future events are retracted.
+  describe("retraction is bounded to current-and-future", () => {
+    const TODAY = d("2026-08-08");
+
+    const ev = (id: number, uid: string, start: string, end: string): ExistingExternalEvent => ({
+      id,
+      externalUid: uid,
+      startDate: d(start),
+      endDate: d(end),
+      status: "active",
+    });
+
+    it("does NOT retract an event entirely in the past", () => {
+      // The stay happened. A feed cannot withdraw history — and Airbnb feeds routinely
+      // drop past reservations, so without this every completed stay would be "removed".
+      const plan = planExternalEventSync([], [ev(1, "past", "2026-08-01", "2026-08-04")], {
+        retractFrom: TODAY,
+      });
+      expect(plan.removedIds).toEqual([]);
+    });
+
+    it("retracts an event entirely in the future", () => {
+      const plan = planExternalEventSync([], [ev(2, "future", "2026-09-01", "2026-09-04")], {
+        retractFrom: TODAY,
+      });
+      expect(plan.removedIds).toEqual([2]);
+    });
+
+    it("retracts an event still running today", () => {
+      // Started before today but not finished: those nights are still live inventory.
+      const plan = planExternalEventSync([], [ev(3, "straddling", "2026-08-06", "2026-08-10")], {
+        retractFrom: TODAY,
+      });
+      expect(plan.removedIds).toEqual([3]);
+    });
+
+    it("does NOT retract an event that ended exactly today", () => {
+      // endDate is exclusive, so an event ending today occupies no remaining night.
+      const plan = planExternalEventSync([], [ev(4, "ended-today", "2026-08-05", "2026-08-08")], {
+        retractFrom: TODAY,
+      });
+      expect(plan.removedIds).toEqual([]);
+    });
+
+    it("separates past from future in one pass — the feed-replacement case", () => {
+      // Exactly what happens when a URL is cleared or swapped: history survives intact,
+      // upcoming imported dates are released.
+      const plan = planExternalEventSync(
+        [],
+        [
+          ev(10, "old-1", "2026-07-01", "2026-07-05"),
+          ev(11, "old-2", "2026-08-01", "2026-08-03"),
+          ev(12, "upcoming-1", "2026-08-20", "2026-08-25"),
+          ev(13, "upcoming-2", "2026-09-10", "2026-09-12"),
+        ],
+        { retractFrom: TODAY }
+      );
+      expect(plan.removedIds.sort((a, b) => a - b)).toEqual([12, 13]);
+    });
+
+    it("still retracts everything when no bound is supplied", () => {
+      const plan = planExternalEventSync([], [ev(1, "past", "2026-08-01", "2026-08-04")]);
+      expect(plan.removedIds).toEqual([1]);
+    });
+
+    it("past events are untouched even while current ones are re-dated", () => {
+      const incoming = normalizeFeedEvents(
+        parseIcsEvents(feed([{ uid: "upcoming-1", start: "2026-08-21", end: "2026-08-26" }]))
+      );
+      const plan = planExternalEventSync(
+        incoming,
+        [
+          ev(10, "old-1", "2026-07-01", "2026-07-05"),
+          ev(12, "upcoming-1", "2026-08-20", "2026-08-25"),
+        ],
+        { retractFrom: TODAY }
+      );
+      expect(plan.changedIds).toEqual([12]); // dates moved
+      expect(plan.removedIds).toEqual([]); // the past event is NOT retracted
+    });
+  });
+
   it("an empty successful feed removes every active event but keeps the rows", () => {
     // Only ever reached on a VERIFIED-successful fetch. A failed or non-calendar response
     // skips planning entirely (see fetchFeed in external-calendar-sync.ts), which is what
