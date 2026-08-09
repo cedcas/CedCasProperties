@@ -86,12 +86,16 @@ export default function PropertyCard({ property, index }: { property: Property; 
           </div>
         )}
 
+        {/* Lands on the property page already scrolled to the booking widget (#book)
+            rather than the top of a long page — the discovery→booking friction fix. */}
         <Link
-          href={`/properties/${property.slug}`}
-          aria-label={`View details for ${property.name}`}
-          className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-[13px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
+          href={`/properties/${property.slug}#book`}
+          aria-label={`Check availability for ${property.name}`}
+          data-analytics="check_availability"
+          data-property={property.slug}
+          className="w-full flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-full text-[13px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
         >
-          View Details <i className="fa-solid fa-arrow-right text-[11px]" />
+          Check Availability <i className="fa-solid fa-arrow-right text-[11px]" />
         </Link>
       </div>
     </div>

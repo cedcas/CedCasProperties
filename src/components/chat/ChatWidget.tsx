@@ -112,6 +112,7 @@ export default function ChatWidget({ tree }: ChatWidgetProps) {
     <>
       {/* ── Floating Bubble ── */}
       <button
+        id="chat-fab"
         onClick={() => setOpen((o) => !o)}
         aria-label={open ? "Close chat" : "Chat with Haven"}
         className={`fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 cursor-pointer ${

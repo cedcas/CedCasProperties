@@ -7,9 +7,10 @@ import Footer from "@/components/layout/Footer";
 import PropertyGallery from "@/components/ui/PropertyGallery";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import BookingCard from "@/components/ui/BookingCard";
+import StickyBookingBar from "@/components/ui/StickyBookingBar";
 import Testimonials from "@/components/sections/Testimonials";
 import { buildPropertyJsonLd } from "@/lib/property-schema";
-import { buildOccupancyNote, normalizePricingProse } from "@/lib/occupancy";
+import { buildOccupancyNote, normalizePricingProse, sanitizeChargeProse } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -120,8 +121,17 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   };
 }
 
-export default async function PropertyDetailPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function PropertyDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  // Accepted so a future date-capture surface on the listing grid can deep-link
+  // straight into a pre-filled widget. Nothing links here with dates today.
+  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string }>;
+}) {
   const { slug } = await params;
+  const { checkIn: qCheckIn, checkOut: qCheckOut, guests: qGuests } = await searchParams;
   const property = await prisma.property.findUnique({ where: { slug, isActive: true } });
   if (!property) notFound();
 
@@ -150,13 +160,32 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
   const propertyFaqs: PropertyFaq[] = safeJsonParse(property.propertyFaqs, []);
   const coverImage = featuredUrl || images[0] || null;
 
+  // The three fields every fee surface on this page reads from.
+  const occupancy = {
+    maxGuests: property.maxGuests,
+    includedGuests: property.includedGuests,
+    extraGuestFeePerNight: Number(property.extraGuestFeePerNight),
+  };
+
   // Force base-rate / included-guest numbers in authored prose to the live DB
-  // values so the copy can't drift from pricePerNight / includedGuests.
+  // values so the copy can't drift from pricePerNight / includedGuests, and
+  // rewrite any vague "additional charges may apply" wording with real numbers.
   const normRate = (t: string | null | undefined) =>
-    normalizePricingProse(t, {
-      pricePerNight: Number(property.pricePerNight),
-      includedGuests: property.includedGuests,
-    });
+    normalizePricingProse(
+      t,
+      {
+        pricePerNight: Number(property.pricePerNight),
+        includedGuests: property.includedGuests,
+      },
+      occupancy
+    );
+
+  // Clamp a URL-supplied guest count into the property's real range.
+  const initialGuests = (() => {
+    const n = Number(qGuests);
+    if (!Number.isFinite(n)) return "";
+    return String(Math.min(Math.max(Math.trunc(n), 1), property.maxGuests));
+  })();
 
   const jsonLd = buildPropertyJsonLd(property, reviewTestimonials);
 
@@ -170,8 +199,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
       <Navbar />
       <main className="bg-offwhite min-h-screen">
 
-        {/* Hero banner */}
-        <div className="relative h-[55vh] min-h-[340px] overflow-hidden">
+        {/* Hero banner — shorter on mobile so the booking widget below it is
+            reachable in one short scroll rather than 19 sections down. */}
+        <div className="relative h-[40vh] min-h-[280px] lg:h-[55vh] lg:min-h-[340px] overflow-hidden">
           {coverImage ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -227,9 +257,11 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           </Link>
         </div>
 
-        {/* Gallery — only when multiple images */}
+        {/* Gallery — only when multiple images. Desktop keeps it above the fold-line
+            grid; mobile renders it below the booking widget instead (see below), so
+            the date picker isn't pushed off-screen by a full-width photo grid. */}
         {images.length > 1 && (
-          <div className="max-w-6xl mx-auto px-6 mt-5">
+          <div className="hidden lg:block max-w-6xl mx-auto px-6 mt-5">
             <PropertyGallery
               images={images}
               name={property.name}
@@ -242,8 +274,44 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
         {/* Main content */}
         <div className="max-w-6xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-10">
 
+          {/* Booking card — first in DOM so mobile gets it directly under the hero;
+              `lg:order-2` puts it back in the right rail on desktop. One instance,
+              so there is no duplicated date/availability state to keep in sync. */}
+          <div
+            id="book"
+            className="order-1 lg:order-2 scroll-mt-[90px] lg:sticky lg:top-[90px] self-start lg:max-h-[calc(100vh-110px)] lg:overflow-y-auto"
+          >
+            <BookingCard
+              slug={property.slug}
+              pricePerNight={Number(property.pricePerNight)}
+              maxGuests={property.maxGuests}
+              includedGuests={property.includedGuests}
+              extraGuestFeePerNight={Number(property.extraGuestFeePerNight)}
+              bedrooms={property.bedrooms}
+              bathrooms={property.bathrooms}
+              location={property.location}
+              type={property.type}
+              propertyRules={sanitizeChargeProse(property.propertyRules, occupancy)}
+              initialCheckIn={qCheckIn ?? ""}
+              initialCheckOut={qCheckOut ?? ""}
+              initialGuests={initialGuests}
+            />
+          </div>
+
           {/* Left — details */}
-          <div className="space-y-10">
+          <div className="order-2 lg:order-1 space-y-10">
+
+            {/* Gallery — mobile only; the desktop copy sits above this grid */}
+            {images.length > 1 && (
+              <div className="lg:hidden">
+                <PropertyGallery
+                  images={images}
+                  name={property.name}
+                  imageAlts={imageAlts}
+                  location={property.location}
+                />
+              </div>
+            )}
 
             {/* Stats bar */}
             <div className="flex flex-wrap gap-6 py-6 border-y border-black/[.08]">
@@ -447,7 +515,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                   )}
                   {property.propertyRules && (
                     <div className="mt-3 pt-3 border-t border-black/[.06] whitespace-pre-line">
-                      {property.propertyRules}
+                      {sanitizeChargeProse(property.propertyRules, occupancy)}
                     </div>
                   )}
                   <div className="text-[13px] text-charcoal/55 pt-2">
@@ -547,22 +615,19 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
             </div>
           </div>
 
-          {/* Right — booking card */}
-          <div className="lg:sticky lg:top-[90px] self-start">
-            <BookingCard
-              slug={property.slug}
-              pricePerNight={Number(property.pricePerNight)}
-              maxGuests={property.maxGuests}
-              bedrooms={property.bedrooms}
-              bathrooms={property.bathrooms}
-              location={property.location}
-              type={property.type}
-              propertyRules={property.propertyRules}
-            />
-          </div>
-
         </div>
       </main>
+
+      {/* Mobile-only persistent CTA. Desktop is covered by the sticky right rail. */}
+      {Number(property.pricePerNight) > 0 && (
+        <StickyBookingBar
+          slug={property.slug}
+          name={property.name}
+          pricePerNight={Number(property.pricePerNight)}
+          maxGuests={property.maxGuests}
+        />
+      )}
+
       <Footer />
     </>
   );

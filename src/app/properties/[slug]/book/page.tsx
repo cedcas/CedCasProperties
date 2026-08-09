@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BookingForm from "@/components/booking/BookingForm";
+import { sanitizeChargeProse } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
 
@@ -39,14 +40,22 @@ export default async function BookPage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ checkIn?: string; checkOut?: string }>;
+  searchParams: Promise<{ checkIn?: string; checkOut?: string; guests?: string }>;
 }) {
   const { slug } = await params;
-  const { checkIn, checkOut } = await searchParams;
+  const { checkIn, checkOut, guests } = await searchParams;
   const property = await prisma.property.findUnique({ where: { slug, isActive: true } });
   if (!property) notFound();
   // Pricing not configured yet — can't book. Send back to the property page.
   if (Number(property.pricePerNight) <= 0) redirect(`/properties/${slug}`);
+
+  // Carried forward from the booking card. Clamp to the property's real range so a
+  // hand-edited URL can't seed a guest count the extra-guest maths would price wrong.
+  const guestCount = (() => {
+    const n = Number(guests);
+    if (!Number.isFinite(n) || n < 1) return "1";
+    return String(Math.min(Math.trunc(n), property.maxGuests));
+  })();
 
   return (
     <>
@@ -75,7 +84,12 @@ export default async function BookPage({
             slug={slug}
             initialCheckIn={checkIn ?? ""}
             initialCheckOut={checkOut ?? ""}
-            propertyRules={property.propertyRules}
+            initialGuests={guestCount}
+            propertyRules={sanitizeChargeProse(property.propertyRules, {
+              maxGuests: property.maxGuests,
+              includedGuests: property.includedGuests,
+              extraGuestFeePerNight: Number(property.extraGuestFeePerNight),
+            })}
           />
         </div>
       </main>

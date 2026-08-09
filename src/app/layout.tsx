@@ -1,10 +1,11 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
 import { runQrIntegrityCheck } from "@/lib/qr-integrity-check";
 import ChatWidgetServer from "@/components/chat/ChatWidgetServer";
 import ChatWidgetGate from "@/components/chat/ChatWidgetGate";
+import AnalyticsClickTracker from "@/components/AnalyticsClickTracker";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -75,6 +76,14 @@ const openSans = Open_Sans({
   variable: "--font-opensans",
   display: "swap",
 });
+
+// viewport-fit=cover lets the sticky mobile booking bar extend into the iOS
+// home-indicator area, which it then pads back out with env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
@@ -153,6 +162,8 @@ export default function RootLayout({
             <ChatWidgetServer />
           </Suspense>
         </ChatWidgetGate>
+        {/* Turns [data-analytics] CTAs into GA4 events (book_click, check_availability) */}
+        <AnalyticsClickTracker />
         {/* Google Analytics — deferred until after window load */}
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-2SV2PXYB7T"

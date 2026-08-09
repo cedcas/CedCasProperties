@@ -28,13 +28,26 @@ const nextConfig: NextConfig = {
               "font-src 'self' https://cdnjs.cloudflare.com",
 
               // Connections: own origin + GA + Stripe + Vercel Blob.
+              // GA4 does NOT post hits to www.google-analytics.com only. It fans out
+              // across four hosts, and missing any one blocks collection at the
+              // network layer — gtag() runs without error and the beacon is silently
+              // refused, so GA4 reports "No stream data detected" for every event:
+              //   *.google-analytics.com   regional endpoints (region1, …)
+              //   analytics.google.com     BARE host — a CSP wildcard requires a
+              //                            leading label, so *.analytics.google.com
+              //                            does NOT match it; *.google.com does
+              //   www.google.com           second /g/collect endpoint + the
+              //                            /measurement/conversion linker ping
+              //   *.googletagmanager.com   gtag.js fetches its remote config here
+              // If Google Ads is ever wired up, country domains (google.com.ph, …)
+              // and *.g.doubleclick.net may need adding too.
               // Admin image upload is a CLIENT-SIDE upload — the browser PUTs the
               // file directly to the Vercel Blob API (vercel.com/api/blob, which
               // may redirect to *.public.blob.vercel-storage.com). Without these
               // in connect-src the browser blocks the fetch; Safari reports it as
               // "Load failed", the Blob SDK treats it as a network error and
               // retries 10× with exponential backoff (~10 min) → stuck "Uploading…".
-              "connect-src 'self' https://www.google-analytics.com https://api.stripe.com https://vercel.com https://*.public.blob.vercel-storage.com",
+              "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://*.google.com https://*.googletagmanager.com https://api.stripe.com https://m.stripe.com https://m.stripe.network https://vercel.com https://*.public.blob.vercel-storage.com",
 
               // Frames: Stripe for 3D-Secure + OpenStreetMap for the property map
               "frame-src https://js.stripe.com https://www.openstreetmap.org",

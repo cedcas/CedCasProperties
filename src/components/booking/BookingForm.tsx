@@ -1,5 +1,5 @@
 "use client";
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import {
   isValidPhoneNumber,
   parsePhoneNumberFromString,
@@ -12,6 +12,7 @@ import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-
 import { loadStripe } from "@stripe/stripe-js";
 import PaymentQR from "./PaymentQR";
 import { formatStayDate } from "@/lib/dates";
+import { track } from "@/lib/analytics";
 
 // Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
 // We also accept a runtime key returned from the payment-intent API as a fallback.
@@ -46,6 +47,8 @@ interface Props {
   slug: string;
   initialCheckIn?: string;
   initialCheckOut?: string;
+  /** Carried through from the booking card so the guest count survives the hop. */
+  initialGuests?: string;
   propertyRules?: string | null;
 }
 
@@ -91,6 +94,7 @@ function isValidPhone(raw: string, country: CountryCode): boolean {
 function StripePaymentForm({
   clientSecret,
   total,
+  slug,
   onSuccess,
   onError,
   submitting,
@@ -98,6 +102,8 @@ function StripePaymentForm({
 }: {
   clientSecret: string;
   total: number;
+  /** Only used to attribute the book_click analytics event to a property. */
+  slug: string;
   onSuccess: (paymentIntentId: string) => void;
   onError: (msg: string) => void;
   submitting: boolean;
@@ -133,6 +139,8 @@ function StripePaymentForm({
       <button
         type="submit"
         disabled={!stripe || !elements || submitting}
+        data-analytics="book_click"
+        data-property={slug}
         className="w-full mt-5 py-4 rounded-full text-[15px] font-semibold text-white disabled:opacity-60 hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2"
         style={{ background: "linear-gradient(135deg,#635BFF,#4B44D0)" }}
       >
@@ -146,14 +154,18 @@ function StripePaymentForm({
 
 export default function BookingForm({
   propertyId, propertyName, propertyType, pricePerNight, maxGuests, includedGuests, extraGuestFeePerNight, bedrooms, slug,
-  initialCheckIn = "", initialCheckOut = "", propertyRules,
+  initialCheckIn = "", initialCheckOut = "", initialGuests = "1", propertyRules,
 }: Props) {
   const [form, setForm] = useState({
     guestName: "", guestEmail: "", guestPhone: "",
-    checkIn: initialCheckIn, checkOut: initialCheckOut, guests: "1", notes: "",
+    checkIn: initialCheckIn, checkOut: initialCheckOut, guests: initialGuests || "1", notes: "",
   });
   const [paymentMethod, setPaymentMethod] = useState<"gcash" | "bpi" | "stripe">("gcash");
   const [step, setStep] = useState<"form" | "payment" | "done">("form");
+  // Server-authoritative booking result, kept for the GA4 conversion event.
+  const [confirmed, setConfirmed] = useState<{
+    bookingId: number; total: number; propertySlug: string;
+  } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
@@ -452,6 +464,11 @@ export default function BookingForm({
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? "Booking failed");
       }
+      // Never let a malformed body turn a successful booking into a visible error.
+      const data = await res.json().catch(() => null);
+      if (data?.bookingId) {
+        setConfirmed({ bookingId: data.bookingId, total: data.total, propertySlug: data.propertySlug });
+      }
       setStep("done");
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err: unknown) {
@@ -462,6 +479,24 @@ export default function BookingForm({
   };
 
   const handlePaid = () => submitBooking();
+
+  // ── GA4 conversion ──
+  // The "Booking Received!" screen is a client state on the same /book URL — no
+  // route change — so GA4 can't match it by URL; it has to be fired here.
+  // The payload arrives async (from the POST response), so the effect depends on
+  // `confirmed` rather than mounting once; the ref supplies the fire-once
+  // semantics and survives StrictMode's dev double-invoke.
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (step !== "done" || !confirmed || trackedRef.current) return;
+    trackedRef.current = true;
+    track("booking_confirmed", {
+      property: confirmed.propertySlug || slug,
+      value: Math.round(Number(confirmed.total)),
+      currency: "PHP",
+      transaction_id: `HIL-${confirmed.bookingId}`,
+    });
+  }, [step, confirmed, slug]);
 
   const inputCls = "w-full px-4 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
   const selectCls = "px-3 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
@@ -606,6 +641,7 @@ export default function BookingForm({
               <StripePaymentForm
                 clientSecret={stripeClientSecret}
                 total={total}
+                slug={slug}
                 submitting={submitting}
                 setSubmitting={setSubmitting}
                 onSuccess={(piId) => {
@@ -648,6 +684,8 @@ export default function BookingForm({
         {/* I Paid button — only for GCash/BPI */}
         {paymentMethod !== "stripe" && (
           <button onClick={handlePaid} disabled={submitting}
+            data-analytics="book_click"
+            data-property={slug}
             className="w-full py-4 rounded-full text-[15px] font-semibold text-white disabled:opacity-60 hover:-translate-y-0.5 transition-all duration-200 flex items-center justify-center gap-2"
             style={{ background: "linear-gradient(135deg,#335238,#1e3c25)" }}>
             {submitting
