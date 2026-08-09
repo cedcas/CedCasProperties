@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { track } from "@/lib/analytics";
 
 const SUBJECTS = [
   "Booking Inquiry",
@@ -26,7 +27,11 @@ export default function ContactForm() {
         body: JSON.stringify(form),
       });
       setStatus(res.ok ? "success" : "error");
-      if (res.ok) setForm({ name: "", email: "", phone: "", subject: "", message: "" });
+      if (res.ok) {
+        // Track before the reset below — it clears form.subject.
+        track("generate_lead", { form_subject: form.subject, form_location: "contact_section" });
+        setForm({ name: "", email: "", phone: "", subject: "", message: "" });
+      }
     } catch {
       setStatus("error");
     }
