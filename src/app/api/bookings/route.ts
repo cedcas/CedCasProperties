@@ -459,5 +459,12 @@ export async function POST(req: NextRequest) {
     metadata: { bookingId: booking.id, propertyId, checkIn, checkOut, paymentMethod },
   });
 
-  return NextResponse.json({ success: true, bookingId: booking.id });
+  // total/propertySlug are the server-authoritative values the guest was actually
+  // charged — the client uses them for the GA4 booking_confirmed conversion.
+  return NextResponse.json({
+    success: true,
+    bookingId: booking.id,
+    total: computedTotal,
+    propertySlug: booking.property.slug,
+  });
 }

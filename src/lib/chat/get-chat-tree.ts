@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { chatTree, type ChatNode } from "./chat-tree";
+import { buildOccupancyNote, sanitizeChargeProse } from "@/lib/occupancy";
 
 /**
  * Returns the chat tree with dynamic property nodes injected from the database.
@@ -17,6 +18,8 @@ export async function getChatTree(): Promise<Record<string, ChatNode>> {
       maxGuests: true,
       bedrooms: true,
       bathrooms: true,
+      includedGuests: true,
+      extraGuestFeePerNight: true,
       propertyRules: true,
     },
     orderBy: { name: "asc" },
@@ -37,6 +40,11 @@ export async function getChatTree(): Promise<Record<string, ChatNode>> {
   // Create a detail node per property
   for (const p of properties) {
     const price = Number(p.pricePerNight).toLocaleString();
+    const occupancy = {
+      maxGuests: p.maxGuests,
+      includedGuests: p.includedGuests,
+      extraGuestFeePerNight: Number(p.extraGuestFeePerNight),
+    };
     tree[`property-${p.slug}`] = {
       id: `property-${p.slug}`,
       message:
@@ -44,12 +52,13 @@ export async function getChatTree(): Promise<Record<string, ChatNode>> {
         `• ${p.bedrooms} bedroom${p.bedrooms !== 1 ? "s" : ""}, ` +
         `${p.bathrooms} bathroom${p.bathrooms !== 1 ? "s" : ""}\n` +
         `• Up to ${p.maxGuests} guest${p.maxGuests !== 1 ? "s" : ""}\n` +
-        `• Starting at ₱${price}/night`,
+        `• Starting at ₱${price}/night\n\n` +
+        buildOccupancyNote(occupancy),
       options: [
         { label: "Other properties", nodeId: "properties" },
         { label: "← Back to topics", nodeId: "root" },
       ],
-      link: { label: "View Property", href: `/properties/${p.slug}` },
+      link: { label: "Check Availability", href: `/properties/${p.slug}#book` },
     };
   }
 
@@ -78,12 +87,16 @@ export async function getChatTree(): Promise<Record<string, ChatNode>> {
   for (const p of propertiesWithRules) {
     tree[`booking-rules-${p.slug}`] = {
       id: `booking-rules-${p.slug}`,
-      message: `**House Rules — ${p.name}**\n\n${p.propertyRules}`,
+      message: `**House Rules — ${p.name}**\n\n${sanitizeChargeProse(p.propertyRules, {
+        maxGuests: p.maxGuests,
+        includedGuests: p.includedGuests,
+        extraGuestFeePerNight: Number(p.extraGuestFeePerNight),
+      })}`,
       options: [
         { label: "Other properties' rules", nodeId: "booking-rules" },
         { label: "← Back to topics", nodeId: "root" },
       ],
-      link: { label: "Book This Property", href: `/properties/${p.slug}` },
+      link: { label: "Check Availability", href: `/properties/${p.slug}#book` },
     };
   }
 

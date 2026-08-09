@@ -121,17 +121,20 @@ function StaticPropertyCards() {
 
             <div className="flex gap-3 mb-5">
               {c.amenities.map((icon) => (
-                <div key={icon} className="w-8 h-8 rounded-lg bg-[#F9F5EE] flex items-center justify-center">
-                  <i className={`fa-solid fa-${icon} text-[#3B5323] text-[12px]`} />
+                <div key={icon} className="w-8 h-8 rounded-lg bg-cream flex items-center justify-center">
+                  <i className={`fa-solid fa-${icon} text-forest text-[12px]`} />
                 </div>
               ))}
             </div>
 
+            {/* DB is down, so there are no real slugs to link to — the contact form is
+                the only working way to check availability in this degraded state. */}
             <a
               href="#contact"
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-full text-[13px] font-semibold border-2 border-[#3B5323] text-[#3B5323] hover:bg-[#3B5323] hover:text-white transition-all duration-250"
+              aria-label={`Ask about availability for ${c.name}`}
+              className="w-full flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-full text-[13px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
             >
-              View Details <i className="fa-solid fa-arrow-right text-[11px]" />
+              Check Availability <i className="fa-solid fa-arrow-right text-[11px]" />
             </a>
           </div>
         </div>

@@ -1,12 +1,15 @@
 import { prisma } from "@/lib/prisma";
+import type { DailyRateEntry } from "./pricing-core";
 
-export const STRIPE_FEE_RATE = 0.06; // 6%
-
-export interface DailyRateEntry {
-  date: string; // YYYY-MM-DD
-  rate: number;
-  note?: string | null;
-}
+// Pure math lives in `pricing-core` (Prisma-free, safe in client bundles).
+// Re-exported here so existing server-side importers keep working unchanged.
+export {
+  STRIPE_FEE_RATE,
+  sumDailyRates,
+  calcStripeFee,
+  calcExtraGuestFee,
+} from "./pricing-core";
+export type { DailyRateEntry } from "./pricing-core";
 
 /**
  * Compute the nightly rate for each date in a stay.
@@ -63,26 +66,4 @@ export function isPricingComplete(
   rates: { rateType: string }[]
 ): boolean {
   return pricePerNight > 0 && rates.some((r) => r.rateType === "weekend");
-}
-
-export function sumDailyRates(entries: DailyRateEntry[]): number {
-  return entries.reduce((sum, e) => sum + e.rate, 0);
-}
-
-export function calcStripeFee(nightlyTotal: number): number {
-  return Math.round(nightlyTotal * STRIPE_FEE_RATE * 100) / 100;
-}
-
-/**
- * Extra-guest fee for a stay: ₱fee × (guests − includedGuests) × nights.
- * Returns 0 when disabled (fee ≤ 0), within the included threshold, or for an empty stay.
- */
-export function calcExtraGuestFee(
-  guests: number,
-  includedGuests: number,
-  feePerNight: number,
-  nights: number
-): number {
-  if (feePerNight <= 0 || guests <= includedGuests || nights <= 0) return 0;
-  return Math.round((guests - includedGuests) * feePerNight * nights * 100) / 100;
 }

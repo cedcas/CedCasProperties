@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
 import Script from "next/script";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
@@ -75,6 +75,14 @@ const openSans = Open_Sans({
   variable: "--font-opensans",
   display: "swap",
 });
+
+// viewport-fit=cover lets the sticky mobile booking bar extend into the iOS
+// home-indicator area, which it then pads back out with env(safe-area-inset-bottom).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),

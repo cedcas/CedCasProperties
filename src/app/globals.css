@@ -94,3 +94,18 @@ html.js-loaded .reveal:not(.visible) {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.07); }
 }
+
+/* ── Sticky booking bar / chat FAB collision ──
+   The FAB sits at `fixed bottom-5 right-5`, directly on top of the mobile
+   sticky booking bar. StickyBookingBar stamps `data-sticky-cta` on <html>
+   while it is showing; the FAB lifts clear of it. Kept as CSS so the two
+   components need no shared state. `!important` beats the FAB's own
+   animated `transform` from haven-pulse. */
+html[data-sticky-cta] #chat-fab {
+  transform: translateY(-4.75rem) !important;
+  animation: none;
+}
+@media (min-width: 1024px) {
+  /* Bar is lg:hidden, so the FAB should never move on desktop. */
+  html[data-sticky-cta] #chat-fab { transform: none !important; }
+}
