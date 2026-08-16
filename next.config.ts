@@ -7,8 +7,62 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // Routing is owned here: `vercel.json` is an empty object and the middleware
+  // matcher is scoped to `/admin/:path*`, so this is the only layer that sees
+  // these paths.
+  async redirects() {
+    return [
+      {
+        // `/contact` was a hard 404 while looking like a real path. Five blog
+        // articles linked it until 2026-08-16 (since repointed to `/#contact`),
+        // but the GBP profile, old social posts and external sites still point
+        // at it and can't be edited.
+        //
+        // The contact form is a homepage section (id="contact" in
+        // src/components/sections/ContactForm.tsx) — there is no /contact page
+        // and this redirect is not a step toward one.
+        //
+        // `permanent: true` emits 308, which Google treats identically to 301
+        // for consolidation. The fragment survives in the Location header; the
+        // browser does the scroll, since fragments never reach the server.
+        source: "/contact",
+        destination: "/#contact",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
+      {
+        // The /properties inventory index is `force-dynamic` (it must not run
+        // its Prisma query at build time — see the note in
+        // src/app/properties/page.tsx), which otherwise means Next serves it
+        // with `no-store`. An App Router page can't set its own response
+        // headers, so the edge cache is declared here instead: same one-hour
+        // s-maxage as /api/properties.json, so the DB sees ~one hit an hour
+        // while a transient error costs one request rather than an hour of
+        // them. Listed before the catch-all so this Cache-Control is the one
+        // that lands on the route.
+        source: "/properties",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
+        // Same deal for /about: its homes section reads live inventory, so the
+        // page is `force-dynamic` and would otherwise be served `no-store`.
+        source: "/about",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
       {
         source: "/(.*)",
         headers: [

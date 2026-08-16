@@ -18,6 +18,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "daily",
       priority: 1.0,
     },
+    {
+      // The inventory index (src/app/properties/page.tsx). Ranks above the
+      // individual listings because it's the landing surface for plain lodging
+      // intent and the target of the external links that used to 404.
+      url: `${BASE_URL}/properties`,
+      lastModified: now,
+      changeFrequency: "weekly" as const,
+      priority: 0.9,
+    },
     ...properties.map((p) => ({
       url: `${BASE_URL}/properties/${p.slug}`,
       lastModified: p.updatedAt,
