@@ -7,10 +7,22 @@
  * Idempotent — safe to re-run. Updates by slug; does not create new properties.
  *
  * IMPORTANT — review before running on prod:
- *   - Review counts/ratings are intentionally OMITTED. These listings have zero
- *     testimonials in the DB, so no aggregateReviewCount/Rating is set (faking
- *     them is dishonest and violates Google review-snippet policy). Once real
- *     guest reviews exist, set the counts here or add testimonials in admin.
+ *   - Review counts/ratings are DERIVED from each property's active Testimonial
+ *     rows at run time (see reviewAggregate below), not hardcoded. They were
+ *     omitted entirely until Aug 2026 because these listings had no reviews and
+ *     faking review schema violates Google's policy; real guest reviews now
+ *     exist. A listing with no active testimonials still gets nulls, so the
+ *     aggregate can never describe reviews that don't exist.
+ *   - The extra-guest fee is described in words ("an extra per-guest fee"),
+ *     never as a literal amount. This is load-bearing, not styling:
+ *     `normalizePricingProse` rewrites the base rate and the "covers N guests"
+ *     count at render time, but deliberately does NOT touch the extra-guest fee
+ *     — see the note in src/lib/occupancy.ts, which relies on the prose already
+ *     being number-free. A hardcoded "₱400" here is therefore an unprotected
+ *     drift surface: change extraGuestFeePerNight in admin and the copy goes
+ *     silently stale on the live property page. This seed shipped with literal
+ *     ₱400s, they were stripped by hand in admin, and a later re-run reverted
+ *     that fix — hence this warning. Keep it number-free.
  *   - housePolicies, pricingNotes (deposit/cancellation/payment), and the
  *     neighborhood drive-times are MIRRORED from the established business policy
  *     of the original two listings. Verify they hold for the Mickey house in
@@ -75,9 +87,6 @@ type PropertySeoContent = {
   pricingNotes: PricingNotes;
   propertyFaqs: PropertyFaq[];
   imageAlts: string[];
-  // Omitted on purpose for Mickey listings until real reviews exist.
-  aggregateReviewCount?: number;
-  aggregateReviewRating?: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -157,7 +166,7 @@ const SHARED_FAQS_TAIL: PropertyFaq[] = [
   {
     question: "What is the extra-guest fee?",
     answer:
-      "The nightly rate covers a set number of guests; each guest beyond that is ₱400 per night, up to the maximum this configuration sleeps. The exact bands are listed under pricing above.",
+      "The nightly rate covers a set number of guests; each guest beyond that is charged an extra per-night fee, up to the maximum this configuration sleeps. The exact bands are listed under pricing above.",
   },
   {
     question: "Why book direct instead of through Airbnb?",
@@ -177,7 +186,7 @@ const SLEEPS_7: PropertySeoContent = {
     "Mickey-themed 1-bedroom staycation house in Bella Vita, Lipa City. Sleeps up to 7, full kitchen, 500+ Mbps fiber, garage parking. From ₱2,400/night. Book direct.",
   tagline: "Mickey-Themed • 500 Mbps Wi-Fi • Sleeps 7 • Garage",
   heroSummary:
-    "A private, Mickey-themed staycation house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole house is yours, not a room or a unit. Built for couples, small families, and groups of up to 7. Master bedroom with a queen bed, a day bed and floor mattresses for the kids, a full kitchen, dining area, living room, garage parking, and dedicated 500+ Mbps fiber internet. From ₱2,400 per night (covers 5 guests; ₱400 per extra guest for the 6th and 7th). One hour from Manila via SLEX/STAR Tollway.",
+    "A private, Mickey-themed staycation house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole house is yours, not a room or a unit. Built for couples, small families, and groups of up to 7. Master bedroom with a queen bed, a day bed and floor mattresses for the kids, a full kitchen, dining area, living room, garage parking, and dedicated 500+ Mbps fiber internet. From ₱2,400 per night (covers 5 guests; an extra per-guest fee for the 6th and 7th). One hour from Manila via SLEX/STAR Tollway.",
   description:
     "This is the smallest of the three Mickey in Lipa configurations — and the right size for a couple, a small family, or a barkada of up to seven who want a whole house instead of a hotel room.\n\nYou get exclusive access to the entire two-floor house: the master bedroom with a queen bed, a living room with a day bed, floor mattresses for the kids, a full kitchen, a dining area, and a garage. The Mickey-inspired décor and photo-worthy corners are a hit with kids (and the adults who pretend they aren't). The 500+ Mbps fiber means everyone streams and scrolls without the buffering arguments.\n\nIt sits in a quiet, family-friendly gated subdivision close to cafés, restaurants, and the SM Lipa area. For bigger groups, the same house is offered in larger configurations that open up the bunk rooms.",
   bestForSegments: [
@@ -197,7 +206,7 @@ const SLEEPS_7: PropertySeoContent = {
     },
     {
       title: "Groups of 6 to 7",
-      body: "The rate covers 5 guests and the house comfortably sleeps up to 7 with the day bed and floor mattresses (₱400 per extra guest for the 6th and 7th). For 8 or more, the larger Mickey configurations open up the themed bunk rooms.",
+      body: "The rate covers 5 guests and the house comfortably sleeps up to 7 with the day bed and floor mattresses (an extra per-guest fee for the 6th and 7th). For 8 or more, the larger Mickey configurations open up the themed bunk rooms.",
       internalLinkLabel: "See the Sleeps-11 family house",
       internalLinkUrl: "/properties/mickey-in-lipa--family-house--sleeps-11",
     },
@@ -258,7 +267,7 @@ const SLEEPS_7: PropertySeoContent = {
     ...SHARED_POLICY_BASE,
     maxGuests: 7,
     notes: [
-      "Rate covers 5 guests; ₱400 per extra guest for the 6th and 7th",
+      "Rate covers 5 guests; an extra per-guest fee for the 6th and 7th",
       "Maximum guests strictly enforced for safety",
     ],
   },
@@ -267,7 +276,7 @@ const SLEEPS_7: PropertySeoContent = {
     {
       question: "How many guests can stay?",
       answer:
-        "The rate covers 5 guests and the house sleeps up to 7 using the day bed and floor mattresses. Each guest beyond 5 is ₱400 per night (6th and 7th). We cap strictly at 7 for this configuration.",
+        "The rate covers 5 guests and the house sleeps up to 7 using the day bed and floor mattresses. Each guest beyond 5 is charged an extra per-night fee (6th and 7th). We cap strictly at 7 for this configuration.",
     },
     {
       question: "Is the whole house ours?",
@@ -297,7 +306,7 @@ const SLEEPS_11: PropertySeoContent = {
     "Mickey-themed 2-bedroom family house in Bella Vita, Lipa City. Sleeps up to 11, master bedroom plus a kids' bunk room, full kitchen, 500+ Mbps fiber, garage. From ₱4,200/night. Book direct.",
   tagline: "Mickey-Themed • Bunk Room • Sleeps 11 • Garage",
   heroSummary:
-    "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated 500+ Mbps fiber. From ₱4,200 per night (covers 9 guests; ₱400 per extra guest for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
+    "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated 500+ Mbps fiber. From ₱4,200 per night (covers 9 guests; an extra per-guest fee for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
   description:
     "Bring the whole family. This 2-bedroom configuration of Mickey in Lipa is designed around how families actually travel — the master bedroom plus a themed bunk room means parents enjoy privacy while the kids get a fun space of their own, all under one roof.\n\nThe entire two-floor house is yours: master bedroom with a queen bed, a themed bunk room for the kids, a living room with a day bed, a full kitchen, a large dining area, and a garage. Mickey-inspired décor throughout, dedicated 500+ Mbps fiber, and a quiet gated subdivision five to ten minutes from SM Lipa.\n\nWhether it's a family reunion, a birthday weekend, or a staycation away from Manila, this setup keeps everyone together for family meals, movie nights, and celebrations. For larger groups, the full-house configuration opens a second bunk room and sleeps up to 15.",
   bestForSegments: [
@@ -313,11 +322,11 @@ const SLEEPS_11: PropertySeoContent = {
       body: "Sleeping eleven is comfortable here, not crammed — master bedroom, bunk room, and living-room day bed. Cook as a group, celebrate in the dining area, and base your day trips to Mt. Maculot or Taal from a house that's all yours.",
       internalLinkLabel: "Mt. Maculot hiking guide",
       internalLinkUrl:
-        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-cuenca-rockies/",
+        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/",
     },
     {
       title: "Groups of 12 or more",
-      body: "The rate covers 9 guests and this configuration sleeps up to 11 (₱400 per extra guest for the 10th and 11th). For a bigger reunion or barkada, the full-house configuration opens a second bunk room and sleeps up to 15.",
+      body: "The rate covers 9 guests and this configuration sleeps up to 11 (an extra per-guest fee for the 10th and 11th). For a bigger reunion or barkada, the full-house configuration opens a second bunk room and sleeps up to 15.",
       internalLinkLabel: "See the Sleeps-15 full house",
       internalLinkUrl: "/properties/mickey-in-lipa--full-family-house--sleeps-15",
     },
@@ -379,7 +388,7 @@ const SLEEPS_11: PropertySeoContent = {
     ...SHARED_POLICY_BASE,
     maxGuests: 11,
     notes: [
-      "Rate covers 9 guests; ₱400 per extra guest for the 10th and 11th",
+      "Rate covers 9 guests; an extra per-guest fee for the 10th and 11th",
       "Maximum guests strictly enforced for safety",
     ],
   },
@@ -388,7 +397,7 @@ const SLEEPS_11: PropertySeoContent = {
     {
       question: "How many guests can stay?",
       answer:
-        "The rate covers 9 guests and this configuration sleeps up to 11 across the master bedroom, the bunk room, and the living-room day bed. Each guest beyond 9 is ₱400 per night (10th and 11th). We cap strictly at 11.",
+        "The rate covers 9 guests and this configuration sleeps up to 11 across the master bedroom, the bunk room, and the living-room day bed. Each guest beyond 9 is charged an extra per-night fee (10th and 11th). We cap strictly at 11.",
     },
     {
       question: "Do the kids get their own room?",
@@ -418,7 +427,7 @@ const SLEEPS_15: PropertySeoContent = {
     "Mickey-themed full house in Bella Vita, Lipa City for reunions and barkadas. Sleeps up to 15, master plus two bunk rooms, full kitchen, 500+ Mbps fiber, garage. From ₱7,000/night. Book direct.",
   tagline: "Whole House • Two Bunk Rooms • Sleeps 15 • Garage",
   heroSummary:
-    "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated 500+ Mbps fiber. From ₱7,000 per night (covers 13 guests; ₱400 per extra guest for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
+    "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated 500+ Mbps fiber. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
   description:
     "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated 500+ Mbps fiber, and secure garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, five to ten minutes from SM Lipa and a short drive from Mt. Maculot, Taal, and Tagaytay.",
   bestForSegments: [
@@ -434,11 +443,11 @@ const SLEEPS_15: PropertySeoContent = {
       body: "Sleeping fifteen here is comfortable, not crammed. Cook as a team, hit Mt. Maculot for sunrise, drive to Taal Heritage Town in the afternoon, and regroup for a karaoke-and-lechon dinner. The kitchen and dining area have the room to actually pull it off.",
       internalLinkLabel: "Mt. Maculot hiking guide",
       internalLinkUrl:
-        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-cuenca-rockies/",
+        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/",
     },
     {
       title: "Birthdays and celebrations",
-      body: "Themed décor, photo-worthy corners, and a layout built for a crowd make this the spot for a birthday weekend or special occasion. The rate covers 13 guests; the house sleeps up to 15 (₱400 per extra guest for the 14th and 15th). For a smaller group, the same house is offered in 11- and 7-guest configurations.",
+      body: "Themed décor, photo-worthy corners, and a layout built for a crowd make this the spot for a birthday weekend or special occasion. The rate covers 13 guests; the house sleeps up to 15 (an extra per-guest fee for the 14th and 15th). For a smaller group, the same house is offered in 11- and 7-guest configurations.",
       internalLinkLabel: "See the Sleeps-11 family house",
       internalLinkUrl: "/properties/mickey-in-lipa--family-house--sleeps-11",
     },
@@ -501,7 +510,7 @@ const SLEEPS_15: PropertySeoContent = {
     ...SHARED_POLICY_BASE,
     maxGuests: 15,
     notes: [
-      "Rate covers 13 guests; ₱400 per extra guest for the 14th and 15th",
+      "Rate covers 13 guests; an extra per-guest fee for the 14th and 15th",
       "Maximum guests strictly enforced for safety",
     ],
   },
@@ -510,7 +519,7 @@ const SLEEPS_15: PropertySeoContent = {
     {
       question: "How many guests can stay?",
       answer:
-        "The rate covers 13 guests and the full house sleeps up to 15: master bedroom (2), two bunk rooms (4 each), living-room day bed (3), and two floor mattresses (2). Each guest beyond 13 is ₱400 per night (14th and 15th). We cap strictly at 15.",
+        "The rate covers 13 guests and the full house sleeps up to 15: master bedroom (2), two bunk rooms (4 each), living-room day bed (3), and two floor mattresses (2). Each guest beyond 13 is charged an extra per-night fee (14th and 15th). We cap strictly at 15.",
     },
     {
       question: "Is this good for a reunion or birthday party?",
@@ -529,6 +538,39 @@ const SLEEPS_15: PropertySeoContent = {
   ],
 };
 
+/**
+ * Aggregate review count/rating, computed from the property's own active
+ * `Testimonial` rows rather than hardcoded.
+ *
+ * These listings had zero testimonials when this seed was written, so the
+ * aggregates were deliberately omitted — fabricating review schema violates
+ * Google's policy. Real guest reviews now exist, so the aggregates can be set.
+ *
+ * Derived, not literal, on purpose: a hardcoded count is stale the moment the
+ * next guest review is added, and `aggregateRating` that disagrees with the
+ * reviews rendered on the page is the exact drift the rest of this codebase
+ * (normalizePricingProse, the properties feed) exists to prevent. Deriving also
+ * means it can only ever describe rows that genuinely exist.
+ *
+ * Returns nulls when there are no active testimonials, which leaves
+ * `aggregateRating` out of the JSON-LD entirely (see src/lib/property-schema.ts).
+ */
+async function reviewAggregate(propertyId: number) {
+  const testimonials = await prisma.testimonial.findMany({
+    where: { propertyId, isActive: true },
+    select: { rating: true },
+  });
+  if (testimonials.length === 0) {
+    return { aggregateReviewCount: null, aggregateReviewRating: null };
+  }
+  const sum = testimonials.reduce((total, t) => total + t.rating, 0);
+  return {
+    aggregateReviewCount: testimonials.length,
+    // One decimal — matches how property-schema.ts serialises ratingValue.
+    aggregateReviewRating: Math.round((sum / testimonials.length) * 10) / 10,
+  };
+}
+
 async function applySeo(content: PropertySeoContent) {
   const existing = await prisma.property.findUnique({
     where: { slug: content.slug },
@@ -538,6 +580,7 @@ async function applySeo(content: PropertySeoContent) {
     console.warn(`! Skipping ${content.slug} — no Property row found.`);
     return;
   }
+  const aggregate = await reviewAggregate(existing.id);
   await prisma.property.update({
     where: { slug: content.slug },
     data: {
@@ -553,11 +596,14 @@ async function applySeo(content: PropertySeoContent) {
       pricingNotes: JSON.stringify(content.pricingNotes),
       propertyFaqs: JSON.stringify(content.propertyFaqs),
       imageAlts: JSON.stringify(content.imageAlts),
-      // aggregateReviewCount / aggregateReviewRating intentionally left as-is
-      // (no real reviews yet — do not fabricate review schema).
+      ...aggregate,
     },
   });
-  console.log(`✓ Updated ${content.slug} (${existing.name})`);
+  const reviewNote =
+    aggregate.aggregateReviewCount === null
+      ? "no active testimonials — aggregateRating left off"
+      : `${aggregate.aggregateReviewCount} reviews, ${aggregate.aggregateReviewRating?.toFixed(1)} avg`;
+  console.log(`✓ Updated ${content.slug} (${existing.name}) — ${reviewNote}`);
 }
 
 async function main() {

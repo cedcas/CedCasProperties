@@ -92,7 +92,7 @@ const TWO_BR: PropertySeoContent = {
       body: "Sleeping nine in this unit is comfortable, not crammed. The configuration handles a group split across the two bedrooms plus the living room (sofa bed). Cook breakfast as a team, hit Mt. Maculot for sunrise, drive to Taal Heritage Town in the afternoon, regroup at the unit for a karaoke-and-lechon dinner. The kitchen has the cookware to actually pull this off.",
       internalLinkLabel: "Mt. Maculot hiking guide",
       internalLinkUrl:
-        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-cuenca-rockies/",
+        "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/",
     },
     {
       title: "Work trips with extended family",
