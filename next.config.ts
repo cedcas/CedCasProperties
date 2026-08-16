@@ -7,6 +7,31 @@ const nextConfig: NextConfig = {
     ],
   },
 
+  // Routing is owned here: `vercel.json` is an empty object and the middleware
+  // matcher is scoped to `/admin/:path*`, so this is the only layer that sees
+  // these paths.
+  async redirects() {
+    return [
+      {
+        // `/contact` was a hard 404 while looking like a real path. Five blog
+        // articles linked it until 2026-08-16 (since repointed to `/#contact`),
+        // but the GBP profile, old social posts and external sites still point
+        // at it and can't be edited.
+        //
+        // The contact form is a homepage section (id="contact" in
+        // src/components/sections/ContactForm.tsx) — there is no /contact page
+        // and this redirect is not a step toward one.
+        //
+        // `permanent: true` emits 308, which Google treats identically to 301
+        // for consolidation. The fragment survives in the Location header; the
+        // browser does the scroll, since fragments never reach the server.
+        source: "/contact",
+        destination: "/#contact",
+        permanent: true,
+      },
+    ];
+  },
+
   async headers() {
     return [
       {
