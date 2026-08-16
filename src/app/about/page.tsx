@@ -2,17 +2,16 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
-import { prisma } from "@/lib/prisma";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
-import { PUBLIC_LISTING_GATE, PUBLIC_LISTING_ORDER, buildShortNames, numberWord, plural } from "@/lib/listings";
+import { buildShortNames, getPublicListingCount, getPublicListings, numberWord, plural } from "@/lib/listings";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
 
 // The homes section reads live inventory, so this page can no longer be
 // prerendered: `revalidate` would run the Prisma query at build time, which
 // fails CI (no database in the lint/build workflow). Same precedent as
-// /api/properties.json (2dc488b) and /properties — dynamic, with an explicit
-// one-hour edge cache declared in next.config.ts.
+// /api/properties.json (2dc488b) and /properties — dynamic, with the query
+// itself cached for an hour (see getPublicListings in src/lib/listings.ts).
 export const dynamic = "force-dynamic";
 
 type BestForSegment = { title: string; body: string };
@@ -32,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // cannot go stale again the next time inventory changes.
   let count = 0;
   try {
-    count = await prisma.property.count({ where: PUBLIC_LISTING_GATE });
+    count = await getPublicListingCount();
   } catch {
     // DB unreachable — fall back to count-free copy rather than 500 the <head>.
   }
@@ -98,12 +97,9 @@ const personJsonLd = {
 export default async function AboutPage() {
   // Same source of truth and same gate as /properties — this section going
   // stale is the defect being fixed, and hardcoding guarantees it recurs.
-  let properties: Awaited<ReturnType<typeof prisma.property.findMany>> = [];
+  let properties: Awaited<ReturnType<typeof getPublicListings>> = [];
   try {
-    properties = await prisma.property.findMany({
-      where: PUBLIC_LISTING_GATE,
-      orderBy: PUBLIC_LISTING_ORDER,
-    });
+    properties = await getPublicListings();
   } catch {
     // DB unreachable — the homes section falls back to a pointer at
     // /properties below. Melody's story doesn't need a database.
