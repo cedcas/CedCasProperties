@@ -14,10 +14,19 @@ import { extraGuestFeeApplies, normalizePricingProse } from "@/lib/occupancy";
 // guest, revenue, or availability data — availability stays on
 // /api/availability/[slug], which is the surface built to answer it.
 //
-// Statically rendered + revalidated hourly, mirroring the Footer's ISR cadence
-// (src/components/layout/Footer.tsx). The handler deliberately takes no request
-// argument so Next can render it statically.
-export const revalidate = 3600;
+// Cached at the CDN for an hour, mirroring the Footer's ISR cadence
+// (src/components/layout/Footer.tsx) — see the Cache-Control header below.
+//
+// Deliberately NOT `export const revalidate` / statically prerendered. That
+// form runs this query at BUILD time, which (a) fails CI outright, since the
+// lint/build workflow has no database and Prisma resolves DATABASE_URL to
+// localhost:3306, and (b) would let a transient DB error during a production
+// build get baked into a static asset and served for a full hour. Going
+// dynamic with an explicit s-maxage keeps the same one-hour edge cache and the
+// same ~1-origin-hit-per-hour DB load, but a bad moment costs one request
+// instead of an hour of them.
+export const dynamic = "force-dynamic";
+const CACHE_SECONDS = 3600;
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 const BLOG_ORIGIN = "https://blog.haveninlipa.com";
@@ -146,7 +155,7 @@ export async function GET() {
         // "*" — this feed has one known consumer.
         "Access-Control-Allow-Origin": BLOG_ORIGIN,
         "Vary": "Origin",
-        "Cache-Control": `public, s-maxage=${revalidate}, stale-while-revalidate=86400`,
+        "Cache-Control": `public, s-maxage=${CACHE_SECONDS}, stale-while-revalidate=86400`,
       },
     },
   );
