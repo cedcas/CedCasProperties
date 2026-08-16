@@ -7,7 +7,7 @@ import { REWARD_TIERS, HOW_TO_JOIN, WHY_JOIN } from "@/lib/ambassador";
 export const metadata: Metadata = {
   title: "Become a Haven in Lipa Ambassador — Share Lipa, Earn Rewards",
   description:
-    "Join the Haven in Lipa Ambassador Program. Share your exclusive promo code, give your audience 5% off direct bookings, and earn ₱200–₱800 cash rewards on every completed stay.",
+    "Join the Haven in Lipa Ambassador Program. Share your exclusive promo code, give your audience 5% off direct bookings, and earn ₱200–₱500 cash rewards on every completed stay.",
   alternates: {
     canonical: "/ambassadors",
   },
@@ -88,7 +88,10 @@ export default function AmbassadorsPage() {
               <thead>
                 <tr className="bg-forest text-cream">
                   <th className="px-6 py-4 text-[12px] font-semibold uppercase tracking-wide">Level</th>
-                  <th className="px-6 py-4 text-[12px] font-semibold uppercase tracking-wide">Completed Bookings</th>
+                  <th className="px-6 py-4 text-[12px] font-semibold uppercase tracking-wide">
+                    Annual Completed Bookings
+                    <span className="block text-[10px] font-normal normal-case tracking-normal text-cream/70 mt-0.5">(January 1 – December 31)</span>
+                  </th>
                   <th className="px-6 py-4 text-[12px] font-semibold uppercase tracking-wide text-right">Reward / Booking</th>
                 </tr>
               </thead>
@@ -111,7 +114,7 @@ export default function AmbassadorsPage() {
           <div className="bg-gold/10 border border-gold/30 rounded-[14px] p-5 mt-6 flex items-start gap-3">
             <i className="fa-solid fa-star text-gold text-[16px] mt-0.5 flex-shrink-0" />
             <p className="text-charcoal/70 text-[13.5px] leading-[1.65]">
-              <strong>Example:</strong> Refer 12 completed bookings and you&apos;ll earn ₱2,400 (12 × ₱200). Once you reach Silver, your future completed bookings earn ₱400 each!
+              <strong>Example:</strong> Refer 12 completed bookings and you&apos;ll earn ₱3,300. Once you reach Gold, your future completed bookings earn ₱400 each!
             </p>
           </div>
         </section>

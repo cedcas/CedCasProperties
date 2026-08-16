@@ -5,6 +5,7 @@
 export const AMBASSADOR_GUIDELINES: string[] = [
   "Rewards are paid only for completed direct bookings made using your Ambassador Promo Code or referral link.",
   "Cancelled or refunded bookings do not qualify for rewards.",
+  "Ambassador levels are based on completed bookings within a calendar year (January 1 – December 31) and reset at the start of each new year.",
   "Self-bookings are not eligible.",
   "Please represent Haven in Lipa honestly and professionally.",
   "Haven in Lipa reserves the right to modify or discontinue the Ambassador Program at any time.",
@@ -19,10 +20,10 @@ export interface RewardTier {
 }
 
 export const REWARD_TIERS: RewardTier[] = [
-  { level: "Bronze",   bookings: "1 – 10",  reward: "₱200", icon: "fa-medal",    color: "#CD7F32" },
-  { level: "Silver",   bookings: "11 – 20", reward: "₱400", icon: "fa-medal",    color: "#9CA3AF" },
-  { level: "Gold",     bookings: "21 – 30", reward: "₱600", icon: "fa-medal",    color: "#C4A862" },
-  { level: "Platinum", bookings: "31+",     reward: "₱800", icon: "fa-gem",      color: "#3B5323" },
+  { level: "Bronze",   bookings: "1 – 5",   reward: "₱200", icon: "fa-medal",    color: "#CD7F32" },
+  { level: "Silver",   bookings: "6 – 10",  reward: "₱300", icon: "fa-medal",    color: "#9CA3AF" },
+  { level: "Gold",     bookings: "11 – 15", reward: "₱400", icon: "fa-medal",    color: "#C4A862" },
+  { level: "Platinum", bookings: "16+",     reward: "₱500", icon: "fa-gem",      color: "#3B5323" },
 ];
 
 export const HOW_TO_JOIN: { title: string; body: string }[] = [
