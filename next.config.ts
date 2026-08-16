@@ -10,6 +10,24 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // The /properties inventory index is `force-dynamic` (it must not run
+        // its Prisma query at build time — see the note in
+        // src/app/properties/page.tsx), which otherwise means Next serves it
+        // with `no-store`. An App Router page can't set its own response
+        // headers, so the edge cache is declared here instead: same one-hour
+        // s-maxage as /api/properties.json, so the DB sees ~one hit an hour
+        // while a transient error costs one request rather than an hour of
+        // them. Listed before the catch-all so this Cache-Control is the one
+        // that lands on the route.
+        source: "/properties",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           {
