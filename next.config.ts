@@ -53,6 +53,17 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Same deal for /about: its homes section reads live inventory, so the
+        // page is `force-dynamic` and would otherwise be served `no-store`.
+        source: "/about",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, s-maxage=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
+      {
         source: "/(.*)",
         headers: [
           {
