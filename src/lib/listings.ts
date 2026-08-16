@@ -1,10 +1,10 @@
 /**
- * Shared definition of "a listing the public can see", plus the display helpers
- * that go with it.
- *
- * Prisma-free on purpose (the gate is a plain `where` object) so this can be
- * imported anywhere without pulling a client in.
+ * Shared definition of "a listing the public can see", plus the cached loaders
+ * and display helpers that go with it.
  */
+
+import { unstable_cache } from "next/cache";
+import { prisma } from "./prisma";
 
 /**
  * The public gate: active AND priced.
@@ -63,3 +63,59 @@ export const numberWord = (n: number) => NUMBER_WORDS[n] ?? String(n);
 
 /** `plural(1, "bedroom")` → "bedroom"; `plural(2, "bedroom")` → "bedrooms". */
 export const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Cached loaders
+   ──────────────────────────────────────────────────────────────────────────── */
+
+const CACHE_SECONDS = 3600;
+
+/**
+ * Why the data is cached rather than the response.
+ *
+ * `/properties` and `/about` are `force-dynamic` — they must not run Prisma at
+ * build time, which would fail CI (no database in the lint/build workflow) and
+ * could bake a transient DB error into a static asset. The original plan was
+ * `force-dynamic` + an `s-maxage` header declared in `next.config.ts`, mirroring
+ * what `/api/properties.json` does.
+ *
+ * **That does not work for a page on Vercel.** A Route Handler sets its own
+ * response headers and they survive; a *page* cannot, and the `next.config.ts`
+ * header loses to the framework's own `Cache-Control: private, no-cache,
+ * no-store` for a dynamic route. Confirmed against production on 2026-08-16:
+ * every request came back `x-vercel-cache: MISS` with the no-store header, so
+ * each page view ran the query. `next start` locally served the configured
+ * header, which made this a false positive in pre-deploy testing.
+ *
+ * Caching the query result instead gets the thing actually worth having — about
+ * one DB round trip an hour per page instead of one per request — without any
+ * build-time execution.
+ *
+ * ⚠️ Values round-trip through the cache as JSON: Prisma `Decimal` comes back a
+ * string and `DateTime` an ISO string, while the TypeScript types still claim
+ * `Decimal`/`Date`. Every consumer already goes through `Number(...)` or
+ * `JSON.parse(...)`, which is why this is safe today — but read a new field
+ * through one of those, not off the raw value, and never do date arithmetic on
+ * the result without re-parsing.
+ *
+ * Staleness: an admin edit takes up to an hour to reach these two pages, the
+ * same trade `/api/properties.json` already makes. The `public-listings` tag is
+ * declared so a future `revalidateTag()` in the admin property routes can make
+ * that instant.
+ */
+export const getPublicListings = unstable_cache(
+  async () =>
+    prisma.property.findMany({
+      where: PUBLIC_LISTING_GATE,
+      orderBy: PUBLIC_LISTING_ORDER,
+    }),
+  ["public-listings"],
+  { revalidate: CACHE_SECONDS, tags: ["public-listings"] },
+);
+
+/** Count behind the same gate and the same cache window, for `generateMetadata`. */
+export const getPublicListingCount = unstable_cache(
+  async () => prisma.property.count({ where: PUBLIC_LISTING_GATE }),
+  ["public-listing-count"],
+  { revalidate: CACHE_SECONDS, tags: ["public-listings"] },
+);

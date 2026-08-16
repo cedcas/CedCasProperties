@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { prisma } from "@/lib/prisma";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import ScrollReveal from "@/components/ui/ScrollReveal";
 import PropertyCard from "@/components/ui/PropertyCard";
 import { normalizePricingProse } from "@/lib/occupancy";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
-import { PUBLIC_LISTING_GATE, PUBLIC_LISTING_ORDER, buildShortNames, numberWord } from "@/lib/listings";
+import { buildShortNames, getPublicListingCount, getPublicListings, numberWord } from "@/lib/listings";
 
 // The inventory index. `/properties` was a 404 until now even though it looks
 // like a real path: it was linked from the five biggest blog evergreens until
@@ -24,9 +23,9 @@ import { PUBLIC_LISTING_GATE, PUBLIC_LISTING_ORDER, buildShortNames, numberWord 
 // same reason as /api/properties.json (2dc488b): that form runs the Prisma
 // query at BUILD time, which fails CI outright (the lint/build workflow has no
 // database) and would let a transient DB error get baked into a static asset.
-// Dynamic + an explicit s-maxage keeps the same edge cache with none of that;
-// the header is set in next.config.ts, since an App Router page can't set
-// response headers itself.
+// The query is cached instead of the response — an App Router page can't set
+// its own response headers, and a next.config.ts Cache-Control loses to the
+// framework's no-store on Vercel. See getPublicListings() in src/lib/listings.ts.
 export const dynamic = "force-dynamic";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
@@ -52,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
   // the day a sixth is published or one is deactivated.
   let count = 0;
   try {
-    count = await prisma.property.count({ where: PUBLIC_LISTING_GATE });
+    count = await getPublicListingCount();
   } catch {
     // DB unreachable — fall through to the count-free copy rather than 500-ing
     // the page's <head>.
@@ -89,12 +88,9 @@ export default async function PropertiesIndexPage() {
   // Query Prisma directly. /api/properties.json exists so WordPress can read
   // live data across an origin boundary; the app self-fetching its own route
   // would add a network hop and a failure mode for nothing.
-  let properties: Awaited<ReturnType<typeof prisma.property.findMany>> = [];
+  let properties: Awaited<ReturnType<typeof getPublicListings>> = [];
   try {
-    properties = await prisma.property.findMany({
-      where: PUBLIC_LISTING_GATE,
-      orderBy: PUBLIC_LISTING_ORDER,
-    });
+    properties = await getPublicListings();
   } catch {
     // DB unreachable — render the page copy and the contact prompt below.
     // Never an empty grid, never a throw: this URL is linked from places we
