@@ -119,3 +119,92 @@ export const getPublicListingCount = unstable_cache(
   ["public-listing-count"],
   { revalidate: CACHE_SECONDS, tags: ["public-listings"] },
 );
+
+/**
+ * Which listings are configurations of the same physical property.
+ *
+ * Same cache window and tag as the listings themselves, so a page can read both
+ * without a second staleness story. Ungated on purpose — membership is keyed by
+ * `propertyId` and joined in memory against whatever the gate returned, so a
+ * deactivated listing simply has no row to match.
+ */
+export const getPublicListingGroups = unstable_cache(
+  async () =>
+    prisma.inventoryGroupMember.findMany({
+      select: { propertyId: true, inventoryGroupId: true },
+    }),
+  ["public-listing-groups"],
+  { revalidate: CACHE_SECONDS, tags: ["public-listings"] },
+);
+
+/* ────────────────────────────────────────────────────────────────────────────
+   Physical houses, derived from shared inventory
+   ──────────────────────────────────────────────────────────────────────────── */
+
+export interface House<T> {
+  /** Stable key: the inventory group id, or the slug for an ungrouped listing. */
+  key: string;
+  /** Every listing that is a configuration of this house, smallest party first. */
+  configurations: T[];
+  /** The configuration with the highest occupancy — the house at its fullest. */
+  largest: T;
+  /** How many people the house sleeps when booked at its largest configuration. */
+  maxGuests: number;
+}
+
+/**
+ * Collapse listings into the physical properties behind them.
+ *
+ * Five listings are two houses: `cozy-1-bedroom`/`spacious-2-bedroom` are Block 34
+ * and the three Mickey configurations are Block 38 (see Shared Inventory Groups in
+ * the Website spec). Each house takes **one booking at a time**, so any public claim
+ * about how many people we can host simultaneously has to be summed per house, not
+ * per listing — summing listings would advertise 47 beds' worth of capacity we
+ * cannot actually sell on one date.
+ *
+ * Membership, **not** `InventoryGroup.isActive`, is what identifies a house here.
+ * `isActive` gates whether sibling *blocks* propagate; it says nothing about the
+ * building. A group switched off is an availability bug, not five separate houses.
+ *
+ * A listing in no group is its own house, which is the correct reading: nothing
+ * shares its inventory.
+ *
+ * Ordered largest house first, tie-broken by slug so the render is deterministic.
+ * Pure — no Prisma, no clock — so the capacity arithmetic this page's headline
+ * claim rests on is testable without a database.
+ */
+export function deriveHouses<T extends { id: number; slug: string; maxGuests: number }>(
+  listings: T[],
+  memberships: { propertyId: number; inventoryGroupId: number }[],
+): House<T>[] {
+  const groupOf = new Map(memberships.map((m) => [m.propertyId, m.inventoryGroupId]));
+  const buckets = new Map<string, T[]>();
+
+  for (const listing of listings) {
+    const groupId = groupOf.get(listing.id);
+    const key = groupId === undefined ? `listing-${listing.slug}` : `group-${groupId}`;
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(listing);
+    else buckets.set(key, [listing]);
+  }
+
+  return [...buckets.entries()]
+    .map(([key, configurations]) => {
+      const sorted = [...configurations].sort(
+        (a, b) => a.maxGuests - b.maxGuests || a.slug.localeCompare(b.slug),
+      );
+      const largest = sorted[sorted.length - 1];
+      return { key, configurations: sorted, largest, maxGuests: largest.maxGuests };
+    })
+    .sort((a, b) => b.maxGuests - a.maxGuests || a.largest.slug.localeCompare(b.largest.slug));
+}
+
+/**
+ * Total people we can host on one date: the sum of each house at its largest
+ * configuration. Always "sleeps up to N people", never "N beds" — the capacity
+ * comes from mixed sleeping arrangements (a queen sleeps two, a daybed three), so
+ * bed count and guest count are different numbers and quoting beds both understates
+ * the house and invites a complaint on arrival.
+ */
+export const totalHouseCapacity = <T>(houses: House<T>[]) =>
+  houses.reduce((sum, house) => sum + house.maxGuests, 0);

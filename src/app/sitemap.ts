@@ -34,6 +34,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     })),
     {
+      // Wedding-party accommodation (src/app/weddings-accommodation/page.tsx).
+      // Ranks with the listings rather than below them: it is a money page for a
+      // multi-night, full-house booking, and the only content in this market
+      // answering "where does the entourage sleep".
+      url: `${BASE_URL}/weddings-accommodation`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.8,
+    },
+    {
       url: `${BASE_URL}/faq`,
       lastModified: now,
       changeFrequency: "monthly" as const,
