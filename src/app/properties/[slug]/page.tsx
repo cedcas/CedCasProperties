@@ -14,6 +14,16 @@ import { buildOccupancyNote, normalizePricingProse, sanitizeChargeProse } from "
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Listings that get the `/weddings-accommodation` cross-link. Entourage-sized
+ * configurations only — the wedding pitch is "the whole party under one roof",
+ * which the sleeps-7 configuration doesn't answer.
+ */
+const WEDDING_PAGE_SLUGS = [
+  "mickey-in-lipa--full-family-house--sleeps-15",
+  "mickey-in-lipa--family-house--sleeps-11",
+];
+
 const AMENITY_ICONS: Record<string, string> = {
   WiFi: "wifi",
   AC: "snowflake",
@@ -572,6 +582,26 @@ export default async function PropertyDetailPage({
                 <div className="mt-4 text-[13px] text-charcoal/55">
                   More common questions on our <Link href="/faq" className="text-forest hover:underline">FAQ page</Link>.
                 </div>
+              </div>
+            )}
+
+            {/* Wedding cross-link. Only the two configurations a wedding party
+                realistically books — the entourage-sized ones. Not on the
+                sleeps-7 configuration, where the pitch doesn't hold. */}
+            {WEDDING_PAGE_SLUGS.includes(property.slug) && (
+              <div
+                className="rounded-[14px] p-6 border-l-[3px]"
+                style={{ borderLeftColor: "#C4A862", background: "rgba(196,168,98,0.06)" }}
+              >
+                <h2 className="font-semibold text-charcoal text-[15px] mb-2">Booking for a wedding?</h2>
+                <p className="text-charcoal/70 text-[14.5px] leading-[1.75]">
+                  We wrote a page on{" "}
+                  <Link href="/weddings-accommodation" className="text-forest hover:underline font-medium">
+                    where your wedding party stays in Lipa
+                  </Link>{" "}
+                  — drive times to the churches, what a whole house changes on the morning of, and
+                  how many people we can sleep across both houses.
+                </p>
               </div>
             )}
 

@@ -329,7 +329,10 @@ export default async function PropertiesIndexPage() {
                         <strong className="text-charcoal">A wedding party</strong> &rarr;{" "}
                         {homeLink("mickey-in-lipa--family-house--sleeps-11")}
                         {bySlug.has("mickey-in-lipa--family-house--sleeps-11") && bySlug.has("mickey-in-lipa--full-family-house--sleeps-15") ? " or " : ""}
-                        {homeLink("mickey-in-lipa--full-family-house--sleeps-15")}.
+                        {homeLink("mickey-in-lipa--full-family-house--sleeps-15")}. We wrote{" "}
+                        <Link href="/weddings-accommodation" className="text-forest hover:underline font-medium">
+                          a whole page on where the entourage sleeps
+                        </Link>.
                       </li>
                     )}
                     {bySlug.has("mickey-in-lipa--full-family-house--sleeps-15") && (
