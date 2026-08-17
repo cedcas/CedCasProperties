@@ -215,17 +215,18 @@ Sends from `customerservice@haveninlipa.com` using Nodemailer + Hostinger SMTP.
 
 **Trigger phrase:** when the user says **"We're done for today"** (or a close variant), run these two actions — no other input needed:
 
-1. **Update [About HIL/HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md)**
-   - This file is the durable technical record of the system. Keep it in sync with the code.
-   - **Always place the last 5 commits/pushed on `main` at the very top of the file** (above the title), under a `## Recent Commits` heading — as a table of `commit | date | message`. Refresh this block every time the spec gets updated so it reflects the latest 5 commits. Get them with `git log -5 --pretty=format:"%h%x09%ad%x09%s" --date=short`.
-   - Add/update sections that cover what changed this session: new models, new routes, new admin pages, new env vars, new crons, new libs, retired code, migration steps.
-   - Don't rewrite the whole file — surgically update the affected sections. Include file paths (`src/...`) so future devs can jump to code.
-   - If the file doesn't exist yet, create it with a full technical snapshot of the current codebase state.
+1. **Update the docs in `About HIL/`** — these are the durable technical record; keep them in sync with the code. The SEO developer has **live read access to `About HIL/*`**, so an update here reaches them without any extra sharing step. Note the folder is **gitignored** (`.gitignore:47`) — it is intentionally not versioned, so nothing here appears in a commit or PR.
+
+   The record is **four focused documents, not one**. [HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md) was split into a pure **index** on 2026-06-26 and normally needs no change — only touch it if a whole new spec document is added or one is retired. ⛔ **Do not add a `## Recent Commits` block to it.** That block was deliberately retired; commit history lives in `HIL Commits.md` and duplicating it there reverses a documented decision.
+
+   - **[HIL Commits.md](About%20HIL/HIL%20Commits.md)** — append **every commit pushed to `main` since the last logged hash**, newest at the top, with its **Type** (`HIL Website` / `HIL Blog` / `HIL SEO`, or a combination). Get them with `git log --oneline <last-logged-hash>..main`. Include the *why* in parentheses, not just the subject line — this table is the change history people actually read. Flag merge commits with their `git revert -m 1 <hash>` rollback.
+   - **The relevant focused spec** — [Website](About%20HIL/HIL%20Website%20Technical%20Specification.md) (infrastructure, DB schema, public site, admin, pricing, security, file structure), [SEO](About%20HIL/HIL%20SEO%20Technical%20Specification.md) (sitemap, canonicals, JSON-LD, conversion measurement), or [Blog](About%20HIL/HIL%20Blog%20Technical%20Specification.md) (WordPress at `blog.haveninlipa.com`). Add/update only the sections this session touched: new models, routes, admin pages, env vars, crons, libs, retired code, migration steps. Refresh that document's `> **Last updated:**` stamp.
+   - Don't rewrite a whole file — surgically update the affected sections, and include `src/...` paths so future devs can jump to code. Record **gotchas and false positives** too, not just what shipped; a spec that only lists successes loses the expensive lessons.
 
 2. **Save a "session handoff" memory**
    - Write a `project`-type memory named `session-handoff.md` (overwrite any previous one — only the latest matters).
    - Body should answer: *what did we ship, what's half-done, what's queued next, any gotchas in the working tree* (uncommitted changes, migrations not yet run on prod, etc.).
-   - Also note the deploy state: whether the session's work has been committed/pushed, and what manual steps (e.g. seed scripts) still need to run on prod.
+   - Also note the deploy state: whether the session's work has been committed/pushed, **whether it is actually live on production** (a merge to `main` is not a deploy), and what manual steps still need doing — seed scripts, GSC indexing requests, WordPress-side edits, owner fact-checks.
 
 Both actions are part of the same "end of session" commit — don't ask for confirmation, just do them when the trigger phrase appears.
 
