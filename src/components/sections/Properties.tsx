@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import PropertyCard from "@/components/ui/PropertyCard";
 
@@ -53,6 +54,18 @@ export default async function Properties() {
             </div>
           );
         })()}
+
+        {/* Entry point into the staycation money page (cluster C1). The grid
+            above answers "which home"; this answers "what does a Lipa
+            staycation actually cost". */}
+        <div className="flex justify-center mt-12">
+          <Link
+            href="/staycation"
+            className="inline-flex items-center justify-center gap-2 px-7 py-3 min-h-[44px] rounded-full text-[13.5px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
+          >
+            See staycation options <i className="fa-solid fa-arrow-right text-[11px]" />
+          </Link>
+        </div>
 
       </div>
     </section>

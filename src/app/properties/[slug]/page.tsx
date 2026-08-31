@@ -629,10 +629,11 @@ export default async function PropertyDetailPage({
                 >
                   <i className="fa-solid fa-envelope" /> Message us
                 </Link>
-                <a
-                  href="https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                {/* Was blog article #6, retired and 301'd to /staycation. The
+                    book-direct argument now lives in that page's "The 14-20%
+                    you don't pay" section. */}
+                <Link
+                  href="/staycation"
                   className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-[13.5px] font-semibold transition-all duration-300 hover:bg-black/5"
                   style={{
                     color: "#2C2C2C",
@@ -640,7 +641,7 @@ export default async function PropertyDetailPage({
                   }}
                 >
                   <i className="fa-solid fa-circle-info" /> Why book direct
-                </a>
+                </Link>
               </div>
             </div>
           </div>

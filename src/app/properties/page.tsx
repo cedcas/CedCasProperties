@@ -295,6 +295,15 @@ export default async function PropertiesIndexPage() {
                   </div>
                 )}
 
+                <p className={`${prose} mb-8 max-w-3xl`}>
+                  <strong className="text-charcoal">Planning a staycation?</strong>{" "}
+                  <Link href="/staycation" className="text-forest hover:underline font-medium">
+                    What a Lipa staycation actually costs
+                  </Link>{" "}
+                  lays out every rate side by side, who each home suits, and what a weekend here
+                  looks like.
+                </p>
+
                 <div>
                   <h3 className={h3}>By occasion</h3>
                   <ul className={`${prose} space-y-3 max-w-3xl`}>

@@ -254,14 +254,13 @@ export default async function AboutPage() {
                   &mdash; honest local guides for things to do, eat, and see while you stay
                 </li>
                 <li>
-                  <a
-                    href="https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-forest hover:underline"
-                  >
-                    Why book direct vs. Airbnb
-                  </a>
+                  {/* Was blog article #6, retired and 301'd to /staycation.
+                      Repointed at the destination rather than left to travel
+                      through the redirect. Anchor reworded because "Why book
+                      direct vs. Airbnb" reads oddly on a staycation page. */}
+                  <Link href="/staycation" className="text-forest hover:underline">
+                    Staycation in Lipa &mdash; what it costs, booked direct
+                  </Link>
                 </li>
               </ul>
             </section>
