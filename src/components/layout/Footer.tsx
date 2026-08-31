@@ -15,7 +15,11 @@ const STATIC_BLOG_LINKS: BlogLink[] = [
   { label: "Best Restaurants in Lipa",   href: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/" },
   { label: "Mt. Maculot Hiking Guide",   href: "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/" },
   { label: "Taal Volcano Day Trip",      href: "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/" },
-  { label: "Why Book Direct vs. Airbnb", href: "https://blog.haveninlipa.com/why-book-direct-instead-of-airbnb-a-philippines-hosts-honest-take/" },
+  // Article #6 ("Why Book Direct vs. Airbnb") was retired and 301'd to
+  // /staycation, so it is deliberately absent here — this list is the fallback
+  // when the WP API is unreachable, and a fallback pointing through a redirect
+  // is worse than one pointing at a live post.
+  { label: "Lipa vs Tagaytay",           href: "https://blog.haveninlipa.com/lipa-vs-tagaytay-an-honest-comparison-from-a-host-who-lives-in-lipa/" },
 ];
 
 const TITLE_CASE_SMALL_WORDS = new Set([
@@ -101,6 +105,7 @@ export default async function Footer() {
             <ul className="flex flex-col gap-3">
               {[
                 ["Our Properties", "/#properties", false],
+                ["Staycation in Lipa", "/staycation", false],
                 ["About Us",       "/about",       false],
                 ["Location",       "/#location",   false],
                 ["Guest Reviews",  "/#testimonials", false],

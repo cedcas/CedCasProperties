@@ -659,9 +659,17 @@ export default async function WeddingsAccommodationPage() {
           {/* ── CTA ───────────────────────────────────────────────────────── */}
           <section>
             <h2 className={h2}>Check your dates</h2>
-            <p className={`${prose} mb-6`}>
+            <p className={`${prose} mb-4`}>
               Tell us your wedding date and how many people need a bed. We&rsquo;ll tell you honestly
               whether we can fit you and what it costs.
+            </p>
+            {/* Deliberately omitted at launch (7fa3421) while /staycation was a
+                404; added now that the page exists. */}
+            <p className={`${prose} mb-6`}>
+              Not a wedding, just a weekend? Every rate and who each home suits is on the{" "}
+              <Link href="/staycation" className="text-forest hover:underline font-medium">
+                Lipa staycation page
+              </Link>.
             </p>
             <div className="flex flex-wrap gap-3">
               <Link

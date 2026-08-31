@@ -34,6 +34,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.8,
     })),
     {
+      // The staycation money page (src/app/staycation/page.tsx). Priority 0.9,
+      // level with /properties: it is cluster C1's landing surface and the
+      // consolidation target for the retired blog article #6.
+      url: `${BASE_URL}/staycation`,
+      lastModified: now,
+      changeFrequency: "monthly" as const,
+      priority: 0.9,
+    },
+    {
       // Wedding-party accommodation (src/app/weddings-accommodation/page.tsx).
       // Ranks with the listings rather than below them: it is a money page for a
       // multi-night, full-house booking, and the only content in this market
