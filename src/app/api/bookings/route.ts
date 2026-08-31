@@ -9,6 +9,7 @@ import { codeAppliesToProperty } from "@/lib/promo";
 import { formatStayDate, toUtcMidnight } from "@/lib/dates";
 import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
+import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
 
 export async function POST(req: NextRequest) {
   const {
@@ -217,6 +218,18 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[bookings] promoteContactMessagesForEmail failed:", err);
+  }
+
+  // Guest Messaging: Stripe bookings are created already-confirmed, so they never pass
+  // through the admin PUT route's pending→confirmed transition that normally materializes
+  // auto QuickReplies. Do it here instead (mirrors src/app/api/admin/bookings/[id]/route.ts).
+  if (isStripeConfirmed) {
+    try {
+      await materializeScheduledMessagesForBooking(booking.id);
+      await flushDueScheduledMessages({ bookingId: booking.id });
+    } catch (err) {
+      console.error("[bookings] Scheduled message materialize/flush failed:", err);
+    }
   }
 
   const nights = dailyRates.length;
