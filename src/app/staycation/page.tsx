@@ -350,7 +350,9 @@ export default async function StaycationPage() {
       <ScrollReveal />
       <Navbar />
 
-      <main className="bg-cream min-h-screen pt-28 pb-20">
+      {/* bg-offwhite (#FFF8FA), matching the homepage body — NOT bg-cream, whose
+          token is #F5BECA, a saturated pink despite the name. */}
+      <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-4xl mx-auto px-6">
 
           {/* Visible breadcrumb only — the schema on this page is FAQPage and
