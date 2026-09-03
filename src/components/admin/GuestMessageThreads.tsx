@@ -53,21 +53,33 @@ export default function GuestMessageThreads() {
   const [hasMore, setHasMore] = useState(false);
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
+    setError(null);
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (q) params.set("q", q);
     fetch(`/api/admin/guest-messages/threads?${params.toString()}`, { signal: controller.signal })
-      .then((r) => r.json())
-      .then((data: ThreadsResponse) => {
+      .then(async (r) => {
+        if (!r.ok) {
+          const body = await r.json().catch(() => null);
+          throw new Error(body?.error || `Request failed (${r.status})`);
+        }
+        return r.json() as Promise<ThreadsResponse>;
+      })
+      .then((data) => {
         setThreads(data.threads);
         setTotal(data.total);
         setHasMore(data.hasMore);
       })
-      .catch(() => { /* abort */ });
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        setError(err?.message || "Failed to load messages.");
+      });
     return () => controller.abort();
-  }, [q, page]);
+  }, [q, page, reloadKey]);
 
   // Reset to page 1 whenever search query changes
   useEffect(() => {
@@ -80,7 +92,7 @@ export default function GuestMessageThreads() {
         <div>
           <h2 className="font-serif font-semibold text-charcoal text-[1.4rem]">Guest Messages</h2>
           <p className="text-charcoal/45 text-[13px] mt-0.5">
-            {threads === null ? "Loading…" : `${total} thread${total === 1 ? "" : "s"}${threads.length < total ? ` · showing ${threads.length}` : ""}`}
+            {error ? "Couldn't load messages" : threads === null ? "Loading…" : `${total} thread${total === 1 ? "" : "s"}${threads.length < total ? ` · showing ${threads.length}` : ""}`}
           </p>
         </div>
         <Link
@@ -102,7 +114,19 @@ export default function GuestMessageThreads() {
       </div>
 
       <div className="flex flex-col gap-2">
-        {threads === null ? (
+        {error ? (
+          <div className="bg-white rounded-[14px] py-12 text-center border border-black/[.04]">
+            <i className="fa-solid fa-triangle-exclamation text-amber-500/70 text-[2rem] mb-3 block" />
+            <p className="text-charcoal/50 text-[13.5px] mb-3">{error}</p>
+            <button
+              type="button"
+              onClick={() => setReloadKey((k) => k + 1)}
+              className="text-[12.5px] font-semibold text-forest hover:underline px-4 py-1.5 rounded-[8px] hover:bg-forest/5"
+            >
+              Try again
+            </button>
+          </div>
+        ) : threads === null ? (
           <div className="bg-white rounded-[14px] py-12 text-center border border-black/[.04]">
             <div className="text-charcoal/40 text-[13px]">Loading threads…</div>
           </div>
