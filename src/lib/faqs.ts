@@ -30,7 +30,13 @@ export const faqs: Faq[] = [
   {
     q: "How many guests can each unit accommodate?",
     a: "The Cozy 1-Bedroom (B34) sleeps up to 5, the Spacious 2-Bedroom (B34) sleeps up to 9, Mickey in Lipa Sleeps 7 (B38) sleeps up to 7, Mickey in Lipa Sleeps 11 (B38) sleeps up to 11, and the Mickey in Lipa Full House (B38) sleeps up to 15. These caps are strictly enforced for safety. B34 and B38 are two separate houses, so capacities don't combine within a house — but you can book both houses on the same dates for a larger group, up to 24 guests total across both.",
-    links: [{ phrase: "Cozy 1-Bedroom (B34)", href: "/#properties" }],
+    links: [
+      { phrase: "Cozy 1-Bedroom (B34)", href: "/properties/cozy-1-bedroom#book" },
+      { phrase: "Spacious 2-Bedroom (B34)", href: "/properties/spacious-2-bedroom#book" },
+      { phrase: "Mickey in Lipa Sleeps 7 (B38)", href: "/properties/mickey-in-lipa--family-staycation--sleeps-7#book" },
+      { phrase: "Mickey in Lipa Sleeps 11 (B38)", href: "/properties/mickey-in-lipa--family-house--sleeps-11#book" },
+      { phrase: "Mickey in Lipa Full House (B38)", href: "/properties/mickey-in-lipa--full-family-house--sleeps-15#book" },
+    ],
   },
   {
     q: "Which unit should I book for my group size?",
@@ -82,11 +88,7 @@ export const faqs: Faq[] = [
   // ── Check-In and Checkout ────────────────────────────────────────────
   {
     q: "What are the check-in and checkout times?",
-    a: "Checkout is 12:00 PM (noon) at both properties. Check-in time depends on which house you're staying at — see the next question for the exact times.",
-  },
-  {
-    q: "Are check-in times different for B34 and B38?",
-    a: "Yes — check-in for B34 (Cozy 1-Bedroom, Spacious 2-Bedroom) is from 2:00 PM, and check-in for B38, \"Mickey in Lipa\" (Sleeps 7 / 11 / 15), is from 3:00 PM. Checkout is 12:00 PM (noon) at both houses.",
+    a: "Check-in for B34 properties—Cozy 1-Bedroom and Spacious 2-Bedroom—is from 2:00 PM. Check-in for B38 \"Mickey in Lipa\" properties—Sleeps 7, Sleeps 11, and Sleeps 15—is from 3:00 PM. Checkout is at 12:00 PM (noon) for all properties.",
   },
   {
     q: "Can I check in early or check out late?",
@@ -110,7 +112,6 @@ export const faqs: Faq[] = [
   {
     q: "Is the WiFi fast enough for remote work?",
     a: "B34 has fiber internet with speeds up to 340 Mbps, while B38 has fiber internet with speeds up to 520 Mbps. Both locations also have a backup internet connection. Multiple video calls, streaming, and devices at once are no problem at any of our properties.",
-    links: [{ phrase: "Spacious 2-Bedroom", href: "/properties/spacious-2-bedroom" }],
   },
   {
     q: "Are pets allowed?",
