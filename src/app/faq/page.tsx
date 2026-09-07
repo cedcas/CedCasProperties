@@ -8,7 +8,7 @@ import { faqs } from "@/lib/faqs";
 export const metadata: Metadata = {
   title: "FAQ — Booking, Payments & Stays in Lipa City",
   description:
-    "Answers to common questions about booking direct with Haven in Lipa: payments (GCash, BPI, credit card), cancellation, WiFi, parking, families, pets, check-in, and more.",
+    "Answers to common questions about booking direct with Haven in Lipa: payments (GCash, BPI, credit card), cancellation, WiFi, parking, families, pets, check-in, and choosing between our two Lipa City properties.",
   alternates: {
     canonical: "/faq",
   },
