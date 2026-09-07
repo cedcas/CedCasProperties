@@ -56,7 +56,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "How far is Haven in Lipa from Manila and nearby landmarks?",
-    a: "About one hour from Manila via SLEX and the STAR Tollway. From the property, it's roughly 5–10 minutes to SM Lipa for groceries and shopping, and under 10 minutes to major hospitals (Mary Mediatrix, Lipa Medix). The Mt. Maculot trailhead and Casa Marikit are a short drive away.",
+    a: "About one hour from Manila via SLEX and the STAR Tollway. From the property, it's roughly 5–10 minutes to SM Lipa for groceries and shopping, and under 10 minutes to major hospitals (Mary Mediatrix, Lipa Medix). Casa Marikit is a short drive away.",
   },
 
   // ── Booking and Payment ──────────────────────────────────────────────
@@ -71,7 +71,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "How do I know my reservation is confirmed?",
-    a: "If you pay by GCash or BPI, your booking is pending until we manually verify the payment — you'll get a confirmation email once that's done, usually within a few hours. If you pay by Credit/Debit Card, your booking is confirmed immediately.",
+    a: "If you pay by GCash or BPI, your booking is pending until we manually verify the payment. You'll get a confirmation email once that's done, usually within a few minutes. If you pay by Credit/Debit Card, your booking is confirmed immediately.",
   },
   {
     q: "Is it safe to book directly on your website?",
@@ -94,22 +94,22 @@ export const faqs: Faq[] = [
   },
   {
     q: "How and when will I get my check-in instructions?",
-    a: "We'll send everything you need for your arrival by email and SMS as your check-in date gets closer. You don't need to request it — it's sent automatically once your booking is confirmed.",
+    a: "We'll send everything you need for your arrival by email and/or FB Messenger. Email arrival details go out automatically as your check-in date gets closer; we may also follow up on Messenger.",
   },
 
   // ── Amenities and House Rules ────────────────────────────────────────
   {
     q: "What amenities are included?",
-    a: "Every property includes a full kitchen, fast WiFi, air conditioning, and parking inside the gated village. B34 units add Netflix and dedicated fiber (400 Mbps on the 2-Bedroom); B38 (\"Mickey in Lipa\") adds 500+ Mbps fiber and garage parking. Full amenity lists are on each property page.",
+    a: "Every property includes a full kitchen, fast WiFi, air conditioning, and parking inside the gated village. B34 units add Netflix and dedicated fiber (up to 340 Mbps); B38 (\"Mickey in Lipa\") adds fiber up to 520 Mbps and garage parking. Full amenity lists are on each property page.",
     links: [{ phrase: "each property page", href: "/#properties" }],
   },
   {
     q: "Is parking available and safe?",
-    a: "Yes, at both houses, inside the gated village with 24-hour security — we've never had a parking incident. B34 has an open parking slot; B38 (\"Mickey in Lipa\") has a garage that fits one small/compact car, with additional parking for larger vehicles available nearby inside the village.",
+    a: "B34 has a garage that can accommodate a full-size SUV, such as a Toyota Fortuner. B38 has a garage suited for a small car, such as a Toyota Vios. Both locations also have ample street parking directly in front of the properties.",
   },
   {
     q: "Is the WiFi fast enough for remote work?",
-    a: "Yes. The Spacious 2-Bedroom runs on 400 Mbps fiber, the Cozy 1-Bedroom on a dedicated business-grade fiber line, and Mickey in Lipa (all three configurations) on 500+ Mbps fiber. Multiple video calls, streaming, and devices at once are no problem at any of our properties.",
+    a: "B34 has fiber internet with speeds up to 340 Mbps, while B38 has fiber internet with speeds up to 520 Mbps. Both locations also have a backup internet connection. Multiple video calls, streaming, and devices at once are no problem at any of our properties.",
     links: [{ phrase: "Spacious 2-Bedroom", href: "/properties/spacious-2-bedroom" }],
   },
   {

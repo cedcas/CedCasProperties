@@ -34,7 +34,7 @@ export default function DiscoverLipa() {
                 },
                 {
                   icon: "fa-mountain",
-                  title: "Near Mt. Maculot & Taal",
+                  title: "Near Taal Volcano",
                   desc: "Gateway to hiking trails, the Taal Volcano, and stunning panoramic views of Batangas landscape.",
                 },
                 {

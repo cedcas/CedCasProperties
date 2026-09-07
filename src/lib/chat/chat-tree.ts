@@ -82,7 +82,7 @@ export const chatTree: Record<string, ChatNode> = {
       "2. Fill in your guest details\n" +
       "3. Choose a payment method — GCash, BPI, or card\n" +
       "4. For QR payments, scan and pay, then tap \"I Paid\"\n" +
-      "5. We'll confirm your booking within a few hours!\n\n" +
+      "5. We'll confirm your booking within a few minutes!\n\n" +
       "Card payments are confirmed instantly.",
     options: [
       { label: "Payment methods",  nodeId: "booking-payment" },
@@ -287,7 +287,6 @@ export const chatTree: Record<string, ChatNode> = {
     id: "lipa-attractions",
     message:
       "There's plenty to explore near our properties:\n\n" +
-      "• **Mt. Maculot** — A popular hiking trail with stunning views\n" +
       "• **Taal Volcano & Lake** — An iconic Philippine landmark just a short drive away\n" +
       "• **The Farm at San Benito** — A luxury wellness resort\n" +
       "• **Coffee farms & plantations** — Batangas is known for its barako coffee\n" +

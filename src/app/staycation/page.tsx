@@ -57,7 +57,7 @@ const FIT_BLOCKS: { heading: string; slugs: string[]; body: string }[] = [
   {
     heading: "Two of you, and one of you has to work",
     slugs: ["cozy-1-bedroom"],
-    body: "400 Mbps fibre, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
+    body: "Fibre up to 340 Mbps, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
   },
   {
     heading: "A family with kids",
@@ -80,7 +80,6 @@ const FIT_BLOCKS: { heading: string; slugs: string[]; body: string }[] = [
 const WEEKEND_LINKS = {
   lomi: "https://blog.haveninlipa.com/best-lomi-lipa-city/",
   food: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/",
-  maculot: "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/",
   taal: "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/",
   casa: "https://blog.haveninlipa.com/casa-de-segunda-lipa-city/",
   barako: "https://blog.haveninlipa.com/lipa-barako-coffee-heritage/",
@@ -564,9 +563,8 @@ export default async function StaycationPage() {
                 long.
               </p>
               <p>
-                {lead("Saturday.")} Pick one: {blogLink(WEEKEND_LINKS.maculot, "Mt. Maculot")} if there are
-                hikers in the group, {blogLink(WEEKEND_LINKS.taal, "Taal Heritage Town")} if there
-                aren&rsquo;t, or {blogLink(WEEKEND_LINKS.casa, "Casa de Segunda and the cathedral")} if the
+                {lead("Saturday.")} Pick one: {blogLink(WEEKEND_LINKS.taal, "Taal Heritage Town")}, or{" "}
+                {blogLink(WEEKEND_LINKS.casa, "Casa de Segunda and the cathedral")} if the
                 weather&rsquo;s against you. Back for the afternoon, out again for{" "}
                 {blogLink(WEEKEND_LINKS.barako, "barako coffee")}.
               </p>
@@ -603,7 +601,7 @@ export default async function StaycationPage() {
                 </p>
               )}
               <p>
-                {lead("The WiFi is real.")} 400 Mbps fibre in the{" "}
+                {lead("The WiFi is real.")} Fibre up to 340 Mbps in the{" "}
                 {homeLink("cozy-1-bedroom") ?? "1BR"}, speed-tested. If you&rsquo;re taking calls, ask us
                 and we&rsquo;ll tell you honestly whether the home you&rsquo;re looking at will hold up.
               </p>

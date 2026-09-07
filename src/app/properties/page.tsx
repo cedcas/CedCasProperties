@@ -330,7 +330,7 @@ export default async function PropertiesIndexPage() {
                     {bySlug.has("cozy-1-bedroom") && (
                       <li>
                         <strong className="text-charcoal">Working remotely</strong> &rarr;{" "}
-                        {homeLink("cozy-1-bedroom")}. 400 Mbps fibre, speed-tested, solar backup.
+                        {homeLink("cozy-1-bedroom")}. Fibre up to 340 Mbps, speed-tested, solar backup.
                       </li>
                     )}
                     {(bySlug.has("mickey-in-lipa--family-house--sleeps-11") || bySlug.has("mickey-in-lipa--full-family-house--sleeps-15")) && (
@@ -381,7 +381,7 @@ export default async function PropertiesIndexPage() {
                 <p className={`${prose} mb-6 max-w-3xl`}>
                   All {numberWord(count)} are in Lipa City, roughly an hour from Manila via SLEX and
                   the STAR Tollway. Nearby: SM Lipa, the Metropolitan Cathedral of Saint Sebastian,
-                  Casa de Segunda, the Mt. Maculot trailhead, and Taal Heritage Town.
+                  Casa de Segunda, and Taal Heritage Town.
                 </p>
 
                 {/* Same area-level embed as the property pages — the bbox shows the
