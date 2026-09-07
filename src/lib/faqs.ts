@@ -41,7 +41,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "What is your cancellation policy?",
-    a: "100% refund for cancellations 7 or more days before check-in. 50% refund 3–7 days out. No refund inside 3 days. We also offer one free rebooking when requested at least 14 days before your original check-in date.",
+    a: "100% refund for cancellations 7 or more days before check-in. 50% refund 3–7 days out. No refund inside 3 days.",
   },
   {
     q: "Can I book for just one night?",

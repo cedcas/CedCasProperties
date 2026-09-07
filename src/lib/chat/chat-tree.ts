@@ -126,7 +126,6 @@ export const chatTree: Record<string, ChatNode> = {
     message:
       "Our cancellation policy:\n\n" +
       "• **7+ days before check-in** — Partial refund available\n" +
-      "• **Free rebooking** if requested at least 14 days before your original check-in date\n" +
       "• Late cancellations may not be eligible for a refund\n\n" +
       "For full details, see our Terms of Service.",
     options: [
