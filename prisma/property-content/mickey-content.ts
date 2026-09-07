@@ -125,7 +125,7 @@ const SHARED_FAQS_TAIL: PropertyFaq[] = [
   {
     question: "Is there parking?",
     answer:
-      "Yes — secure garage parking inside the gated Bella Vita subdivision, suited for a small car such as a Toyota Vios. There's also ample street parking directly in front of the property for larger vehicles.",
+      "Yes — garage parking inside the gated Bella Vita subdivision, suited for a small car such as a Toyota Vios. There's also ample street parking directly in front of the property for larger vehicles.",
   },
   {
     question: "Can we cook in the house?",
@@ -396,7 +396,7 @@ export const SLEEPS_15: PropertySeoContent = {
   heroSummary:
     "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber up to 520 Mbps, and secure garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, five to ten minutes from SM Lipa and a short drive from Taal and Tagaytay.",
+    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber up to 520 Mbps, and garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, five to ten minutes from SM Lipa and a short drive from Taal and Tagaytay.",
   bestForSegments: [
     {
       title: "Reunions and multi-generation trips",
