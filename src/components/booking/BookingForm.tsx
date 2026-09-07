@@ -519,7 +519,7 @@ export default function BookingForm({
           {paymentMethod === "stripe"
             ? <>Your card payment went through and your booking is confirmed! A confirmation email has been sent to <strong>{form.guestEmail}</strong>.</>
             : <>A confirmation will be sent to <strong>{form.guestEmail}</strong> once we verify your{" "}
-              {paymentMethod === "gcash" ? "GCash" : "BPI"} payment — usually within a few hours.</>
+              {paymentMethod === "gcash" ? "GCash" : "BPI"} payment — usually within a few minutes.</>
           }
         </p>
         <Link href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
@@ -695,7 +695,7 @@ export default function BookingForm({
         )}
         {paymentMethod !== "stripe" && (
           <p className="text-center text-[11px] text-charcoal/35 mt-3">
-            We&apos;ll confirm your booking once we&apos;ve verified your payment — usually within a few hours.
+            We&apos;ll confirm your booking once we&apos;ve verified your payment — usually within a few minutes.
           </p>
         )}
       </div>

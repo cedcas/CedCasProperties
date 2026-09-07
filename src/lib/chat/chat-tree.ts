@@ -82,7 +82,7 @@ export const chatTree: Record<string, ChatNode> = {
       "2. Fill in your guest details\n" +
       "3. Choose a payment method — GCash, BPI, or card\n" +
       "4. For QR payments, scan and pay, then tap \"I Paid\"\n" +
-      "5. We'll confirm your booking within a few hours!\n\n" +
+      "5. We'll confirm your booking within a few minutes!\n\n" +
       "Card payments are confirmed instantly.",
     options: [
       { label: "Payment methods",  nodeId: "booking-payment" },
@@ -263,7 +263,7 @@ export const chatTree: Record<string, ChatNode> = {
   lipa: {
     id: "lipa",
     message:
-      "Lipa City is one of Batangas' most vibrant cities — just about 1.5 hours from Metro Manila via SLEX and STAR Tollway. What would you like to know?",
+      "Lipa City is one of Batangas' most vibrant cities — about one hour from Metro Manila via SLEX and STAR Tollway. What would you like to know?",
     options: [
       { label: "How to get there",    nodeId: "lipa-directions" },
       { label: "Nearby attractions",  nodeId: "lipa-attractions" },
@@ -275,7 +275,7 @@ export const chatTree: Record<string, ChatNode> = {
     id: "lipa-directions",
     message:
       "**From Metro Manila:**\n" +
-      "Take SLEX → STAR Tollway → Lipa exit. The drive is approximately 84 km and takes about 1 hour 35 minutes in normal traffic.\n\n" +
+      "Take SLEX → STAR Tollway → Lipa exit. The drive is approximately 84 km and takes about one hour in normal traffic.\n\n" +
       "**By bus:**\n" +
       "DLTB and Jam Liner have regular trips from Manila to Lipa via the Batangas route. Look for buses headed to Lipa or Batangas City.",
     options: [
@@ -287,7 +287,6 @@ export const chatTree: Record<string, ChatNode> = {
     id: "lipa-attractions",
     message:
       "There's plenty to explore near our properties:\n\n" +
-      "• **Mt. Maculot** — A popular hiking trail with stunning views\n" +
       "• **Taal Volcano & Lake** — An iconic Philippine landmark just a short drive away\n" +
       "• **The Farm at San Benito** — A luxury wellness resort\n" +
       "• **Coffee farms & plantations** — Batangas is known for its barako coffee\n" +

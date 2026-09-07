@@ -624,7 +624,7 @@ export default async function WeddingsAccommodationPage() {
                 locked. We&rsquo;d rather hold a conversation than take a booking you have to move.
               </p>
               <p>
-                {lead("Payment.")} GCash, BPI InstaPay (no fees), or credit card via Stripe
+                {lead("Payment.")} GCash, BPI InstaPay (no fees), or Credit/Debit Card
                 ({stripePct}% processing). Full cancellation terms on the{" "}
                 <Link href="/faq" className="text-forest hover:underline">FAQ page</Link>.
               </p>

@@ -350,7 +350,7 @@ export async function POST(req: NextRequest) {
                 <tr><td style="padding:7px 0;color:#666">Check-out</td><td>${fmtDate(checkOut)}</td></tr>
                 <tr><td style="padding:7px 0;color:#666">Duration</td><td>${nights} night${nights !== 1 ? "s" : ""}</td></tr>
                 <tr><td style="padding:7px 0;color:#666">Guests</td><td>${guests}</td></tr>
-                <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">Stripe (Card)</td></tr>
+                <tr><td style="padding:7px 0;color:#666">Payment via</td><td style="font-weight:bold">Credit/Debit Card</td></tr>
                 ${notes ? `<tr><td style="padding:7px 0;color:#666;vertical-align:top">Notes</td><td>${notes}</td></tr>` : ""}
               </table>
               <div style="margin-top:16px;padding:14px;background:#F8FAF8;border-radius:6px;border:1px solid #e5e5e5">

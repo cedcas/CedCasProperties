@@ -57,7 +57,7 @@ const FIT_BLOCKS: { heading: string; slugs: string[]; body: string }[] = [
   {
     heading: "Two of you, and one of you has to work",
     slugs: ["cozy-1-bedroom"],
-    body: "400 Mbps fibre, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
+    body: "Fibre up to 340 Mbps, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
   },
   {
     heading: "A family with kids",
@@ -80,7 +80,6 @@ const FIT_BLOCKS: { heading: string; slugs: string[]; body: string }[] = [
 const WEEKEND_LINKS = {
   lomi: "https://blog.haveninlipa.com/best-lomi-lipa-city/",
   food: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/",
-  maculot: "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/",
   taal: "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/",
   casa: "https://blog.haveninlipa.com/casa-de-segunda-lipa-city/",
   barako: "https://blog.haveninlipa.com/lipa-barako-coffee-heritage/",
@@ -283,11 +282,11 @@ export default async function StaycationPage() {
   faqs.push(
     {
       q: "How do I pay?",
-      a: `GCash, BPI InstaPay (no fees), or credit card via Stripe (${stripePct}% processing fee).`,
+      a: `GCash, BPI InstaPay (no fees), or Credit/Debit Card (${stripePct}% processing fee).`,
     },
     {
       q: "Is it safe to book directly?",
-      a: "Payment goes through Stripe or a named BPI account, you get written confirmation, and you're dealing with Melody and Wilma directly. Full detail on the FAQ page.",
+      a: "Payment goes through a secure card payment or a named BPI account, you get written confirmation, and you're dealing with Melody and Wilma directly. Full detail on the FAQ page.",
       links: [{ phrase: "FAQ page", href: "/faq" }],
     },
     {
@@ -386,7 +385,7 @@ export default async function StaycationPage() {
             <div className={`${prose} space-y-4`}>
               <p>
                 Lipa is about {lead("an hour from Alabang")} on SLEX and the STAR Tollway — call it{" "}
-                {lead("an hour and three quarters from central Manila")} once traffic has its say. It
+                {lead("about one hour from central Manila")} once traffic has its say. It
                 sits high enough to be genuinely cooler than the lowlands, and it doesn&rsquo;t fill up
                 the way Tagaytay does on a long weekend. It&rsquo;s where we live, and it&rsquo;s where
                 we run {hasInventory ? `${numberWord(count)} private ${plural(count, "home")}` : "private homes"}{" "}
@@ -471,7 +470,7 @@ export default async function StaycationPage() {
               </p>
               <p>
                 Booking here, you pay the rate and the extra-guest fee, and that&rsquo;s the total. We take{" "}
-                {lead("GCash")}, {lead("BPI InstaPay")} (no fees), and {lead("credit card via Stripe")} (
+                {lead("GCash")}, {lead("BPI InstaPay")} (no fees), and {lead("Credit/Debit Card")} (
                 {stripePct}% processing). You&rsquo;re also messaging the people who own the homes rather
                 than a support queue — which matters more than it sounds when you&rsquo;re arriving at
                 11pm and the gate is closed.
@@ -564,9 +563,8 @@ export default async function StaycationPage() {
                 long.
               </p>
               <p>
-                {lead("Saturday.")} Pick one: {blogLink(WEEKEND_LINKS.maculot, "Mt. Maculot")} if there are
-                hikers in the group, {blogLink(WEEKEND_LINKS.taal, "Taal Heritage Town")} if there
-                aren&rsquo;t, or {blogLink(WEEKEND_LINKS.casa, "Casa de Segunda and the cathedral")} if the
+                {lead("Saturday.")} Pick one: {blogLink(WEEKEND_LINKS.taal, "Taal Heritage Town")}, or{" "}
+                {blogLink(WEEKEND_LINKS.casa, "Casa de Segunda and the cathedral")} if the
                 weather&rsquo;s against you. Back for the afternoon, out again for{" "}
                 {blogLink(WEEKEND_LINKS.barako, "barako coffee")}.
               </p>
@@ -603,7 +601,7 @@ export default async function StaycationPage() {
                 </p>
               )}
               <p>
-                {lead("The WiFi is real.")} 400 Mbps fibre in the{" "}
+                {lead("The WiFi is real.")} Fibre up to 340 Mbps in the{" "}
                 {homeLink("cozy-1-bedroom") ?? "1BR"}, speed-tested. If you&rsquo;re taking calls, ask us
                 and we&rsquo;ll tell you honestly whether the home you&rsquo;re looking at will hold up.
               </p>

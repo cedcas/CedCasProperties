@@ -13,7 +13,6 @@ type BlogLink = { label: string; href: string };
 const STATIC_BLOG_LINKS: BlogLink[] = [
   { label: "15 Things to Do in Lipa",    href: "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/" },
   { label: "Best Restaurants in Lipa",   href: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/" },
-  { label: "Mt. Maculot Hiking Guide",   href: "https://blog.haveninlipa.com/mt-maculot-hiking-guide-2026-trail-tips-routes-where-to-stay-in-lipa/" },
   { label: "Taal Volcano Day Trip",      href: "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/" },
   // Article #6 ("Why Book Direct vs. Airbnb") was retired and 301'd to
   // /staycation, so it is deliberately absent here — this list is the fallback

@@ -181,7 +181,7 @@ export default async function AboutPage() {
                 Why Lipa, why these homes
               </h2>
               <p>
-                Lipa is one hour from Manila via SLEX/STAR Tollway, sits at about 300 meters of elevation, and runs cooler than the city. It&rsquo;s a short drive to Tagaytay, Mt. Maculot, and Taal Heritage Town. For me it&rsquo;s also home — the kind of place I want my own family to stay in when we&rsquo;re back, which is exactly the standard I hold the units to. &ldquo;New, modern, and always improving&rdquo; is how I&rsquo;d describe them, and the &ldquo;always improving&rdquo; part is on purpose: when guests tell us something would help, we add it.
+                Lipa is one hour from Manila via SLEX/STAR Tollway, sits at about 300 meters of elevation, and runs cooler than the city. It&rsquo;s a short drive to Tagaytay and Taal Heritage Town. For me it&rsquo;s also home — the kind of place I want my own family to stay in when we&rsquo;re back, which is exactly the standard I hold the units to. &ldquo;New, modern, and always improving&rdquo; is how I&rsquo;d describe them, and the &ldquo;always improving&rdquo; part is on purpose: when guests tell us something would help, we add it.
               </p>
             </section>
 
@@ -206,8 +206,8 @@ export default async function AboutPage() {
                   ))}
                   <li>
                     Every one of them has a full kitchen, fast WiFi, Netflix, and parking inside the
-                    village gates. All of them take GCash, BPI InstaPay (no fees), and credit card
-                    via Stripe ({stripePct}% processing fee). Booking direct here saves you the
+                    village gates. All of them take GCash, BPI InstaPay (no fees), and Credit/Debit
+                    Card ({stripePct}% processing fee). Booking direct here saves you the
                     14&ndash;20% Airbnb service fee.
                   </li>
                   <li>
@@ -224,7 +224,7 @@ export default async function AboutPage() {
                   <Link href="/properties" className="text-forest hover:underline">
                     our homes page
                   </Link>
-                  . All of them take GCash, BPI InstaPay (no fees), and credit card via Stripe (
+                  . All of them take GCash, BPI InstaPay (no fees), and Credit/Debit Card (
                   {stripePct}% processing fee). Booking direct here saves you the 14&ndash;20%
                   Airbnb service fee.
                 </p>

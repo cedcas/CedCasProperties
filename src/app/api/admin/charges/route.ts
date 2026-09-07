@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sendGuestMessage } from "@/lib/guestMessages";
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { chargeUrl, buildChargeSms, buildChargeEmail } from "@/lib/charge-message";
+import { HOURLY_FEE_RATE, buildHourlyFeeDescription, isHourlyFeeType, isValidHours } from "@/lib/hourly-fee";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -11,17 +12,37 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const bookingId = Number(body.bookingId);
-  const description = typeof body.description === "string" ? body.description.trim() : "";
-  const amount = Number(body.amount);
-
   if (!bookingId || Number.isNaN(bookingId)) {
     return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
   }
-  if (!description) {
-    return NextResponse.json({ error: "Description is required" }, { status: 400 });
-  }
-  if (!amount || Number.isNaN(amount) || amount <= 0) {
-    return NextResponse.json({ error: "Amount must be greater than 0" }, { status: 400 });
+
+  // Early Check-In / Late Checkout: a specialized creation mode of the same
+  // AdditionalCharge flow. The rate and total are always computed here on the
+  // server — an hours count from the client is trusted, a total never is.
+  let description: string;
+  let amount: number;
+  if (body.feeType !== undefined) {
+    if (!isHourlyFeeType(body.feeType)) {
+      return NextResponse.json({ error: "Unsupported fee type" }, { status: 400 });
+    }
+    const hours = Number(body.hours);
+    if (!isValidHours(hours)) {
+      return NextResponse.json(
+        { error: "Hours must be a whole number greater than 0" },
+        { status: 400 }
+      );
+    }
+    description = buildHourlyFeeDescription(body.feeType, hours);
+    amount = hours * HOURLY_FEE_RATE;
+  } else {
+    description = typeof body.description === "string" ? body.description.trim() : "";
+    amount = Number(body.amount);
+    if (!description) {
+      return NextResponse.json({ error: "Description is required" }, { status: 400 });
+    }
+    if (!amount || Number.isNaN(amount) || amount <= 0) {
+      return NextResponse.json({ error: "Amount must be greater than 0" }, { status: 400 });
+    }
   }
 
   const booking = await prisma.booking.findUnique({

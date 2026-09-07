@@ -2,8 +2,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildChargeSms } from "@/lib/charge-message";
+import { HOURLY_FEE_RATE, HOURLY_FEE_LABELS, type HourlyFeeType } from "@/lib/hourly-fee";
 
 const CARD_MULTIPLIER = 1.06; // base + 6% card fee
+type ChargeMode = "custom" | HourlyFeeType;
 
 export interface ChargeView {
   id: number;
@@ -41,8 +43,10 @@ const STATUS_LABEL: Record<string, string> = {
 export default function AdditionalChargesManager({ bookingId, guestName, initialCharges }: Props) {
   const router = useRouter();
   const [charges, setCharges] = useState<ChargeView[]>(initialCharges);
+  const [mode, setMode] = useState<ChargeMode>("custom");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [hours, setHours] = useState("");
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<number | null>(null);
@@ -67,20 +71,37 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
     }
   };
 
+  const hourlyHours = mode !== "custom" ? parseInt(hours, 10) : null;
+  const hourlyValid = mode !== "custom" && Number.isInteger(hourlyHours) && (hourlyHours as number) > 0;
+  const hourlyTotal = hourlyValid ? (hourlyHours as number) * HOURLY_FEE_RATE : 0;
+
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    const amt = parseFloat(amount);
-    if (!description.trim() || !amt || amt <= 0) {
-      setError("Enter a description and an amount greater than 0.");
-      return;
+
+    let body: Record<string, unknown>;
+    if (mode === "custom") {
+      const amt = parseFloat(amount);
+      if (!description.trim() || !amt || amt <= 0) {
+        setError("Enter a description and an amount greater than 0.");
+        return;
+      }
+      body = { bookingId, description: description.trim(), amount: amt };
+    } else {
+      // Reject blank, zero, negative, decimal, or non-numeric hours — whole hours only.
+      if (!/^\d+$/.test(hours.trim()) || !hourlyValid) {
+        setError("Enter a whole number of hours greater than 0.");
+        return;
+      }
+      body = { bookingId, feeType: mode, hours: hourlyHours };
     }
+
     setCreating(true);
     try {
       const res = await fetch("/api/admin/charges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, description: description.trim(), amount: amt }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create charge");
@@ -101,6 +122,7 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
       ]);
       setDescription("");
       setAmount("");
+      setHours("");
       flash(data.notified ? "Charge created — guest emailed." : "Charge created (email failed — use Resend).");
       router.refresh();
     } catch (err) {
@@ -163,36 +185,88 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
       </p>
 
       {/* Add form */}
-      <form onSubmit={create} className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-3 items-end mb-6">
-        <div>
-          <label className={labelCls}>Reason</label>
-          <input
-            type="text"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="e.g. Early check-in (10am)"
+      <form onSubmit={create} className="mb-6">
+        <div className="mb-3">
+          <label className={labelCls}>Charge type</label>
+          <select
+            value={mode}
+            onChange={(e) => {
+              setMode(e.target.value as ChargeMode);
+              setError("");
+            }}
             className={inputCls}
-          />
+          >
+            <option value="custom">Custom charge</option>
+            <option value="early_checkin">{HOURLY_FEE_LABELS.early_checkin} (₱{HOURLY_FEE_RATE}/hr)</option>
+            <option value="late_checkout">{HOURLY_FEE_LABELS.late_checkout} (₱{HOURLY_FEE_RATE}/hr)</option>
+          </select>
         </div>
-        <div>
-          <label className={labelCls}>Amount (₱)</label>
-          <input
-            type="number"
-            min={1}
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="500"
-            className={inputCls}
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={creating}
-          className="px-5 py-2 bg-forest text-white rounded-[8px] text-[14px] font-semibold hover:bg-forest/90 disabled:opacity-50 transition-colors whitespace-nowrap"
-        >
-          {creating ? "Creating…" : "Create & email"}
-        </button>
+
+        {mode === "custom" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-3 items-end">
+            <div>
+              <label className={labelCls}>Reason</label>
+              <input
+                type="text"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="e.g. Extra cleaning"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Amount (₱)</label>
+              <input
+                type="number"
+                min={1}
+                step="0.01"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="500"
+                className={inputCls}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={creating}
+              className="px-5 py-2 bg-forest text-white rounded-[8px] text-[14px] font-semibold hover:bg-forest/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {creating ? "Creating…" : "Create & email"}
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-[140px_1fr_auto] gap-3 items-end">
+            <div>
+              <label className={labelCls}>Hours</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+                placeholder="1"
+                className={inputCls}
+              />
+            </div>
+            <div className="text-[13px] text-charcoal/60 pb-2">
+              {hourlyValid ? (
+                <>
+                  {HOURLY_FEE_LABELS[mode]} — {hourlyHours} hour{hourlyHours === 1 ? "" : "s"} × {peso(HOURLY_FEE_RATE)}/hr ={" "}
+                  <strong className="text-charcoal">{peso(hourlyTotal)}</strong>
+                </>
+              ) : (
+                <span className="text-charcoal/35">Enter a whole number of hours to see the total.</span>
+              )}
+            </div>
+            <button
+              type="submit"
+              disabled={creating}
+              className="px-5 py-2 bg-forest text-white rounded-[8px] text-[14px] font-semibold hover:bg-forest/90 disabled:opacity-50 transition-colors whitespace-nowrap"
+            >
+              {creating ? "Creating…" : "Create & email"}
+            </button>
+          </div>
+        )}
       </form>
       {error && <p className="text-red-600 text-[13px] -mt-3 mb-4">{error}</p>}
 

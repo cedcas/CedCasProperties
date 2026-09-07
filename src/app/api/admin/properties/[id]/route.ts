@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { mergePricingNotesPaymentMethods } from "@/lib/pricing-notes";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -44,6 +45,21 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Extra guest fee must be 0 or positive." }, { status: 400 });
     }
     update.extraGuestFeePerNight = egf;
+  }
+
+  // Payment Methods text lives inside the pricingNotes JSON blob. Only this one key
+  // is ever touched — the current row is read back and merged server-side so a stale
+  // or partial client payload can never wipe out rate/deposit/cancellation/etc.
+  if (data.paymentMethods !== undefined) {
+    const trimmed = typeof data.paymentMethods === "string" ? data.paymentMethods.trim() : "";
+    if (!trimmed) {
+      return NextResponse.json({ error: "Payment methods text is required." }, { status: 400 });
+    }
+    const current = await prisma.property.findUnique({
+      where: { id: Number(id) },
+      select: { pricingNotes: true },
+    });
+    update.pricingNotes = mergePricingNotesPaymentMethods(current?.pricingNotes, trimmed);
   }
 
   const property = await prisma.property.update({

@@ -552,7 +552,7 @@ export default async function PropertyDetailPage({
                 <div>
                   <strong>Payment methods:</strong>{" "}
                   {pricingNotes.paymentMethods ||
-                    "GCash, BPI InstaPay (no fees), Stripe / credit card (6% processing fee applies)"}
+                    "GCash, BPI InstaPay (no fees), Credit/Debit Card (6% processing fee applies)"}
                 </div>
                 {pricingNotes.deposit && (
                   <div><strong>Payment:</strong> {pricingNotes.deposit}</div>
