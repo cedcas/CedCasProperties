@@ -25,7 +25,6 @@ export async function POST(req: NextRequest) {
     paymentMethod,
     stripePaymentIntentId,
     discountCode: rawDiscountCode,
-    discountAmount: clientDiscountAmount,
     notes,
   } = await req.json();
 

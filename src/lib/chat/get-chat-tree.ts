@@ -2,12 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { chatTree, type ChatNode } from "./chat-tree";
 import { buildOccupancyNote, sanitizeChargeProse } from "@/lib/occupancy";
 
-/**
- * Returns the chat tree with dynamic property nodes injected from the database.
- * Called server-side (e.g. in layout or page) and passed to the client widget as props.
- */
-export async function getChatTree(): Promise<Record<string, ChatNode>> {
-  const properties = await prisma.property.findMany({
+function fetchChatProperties() {
+  return prisma.property.findMany({
     // only surface fully-priced properties in the chat assistant
     where: { isActive: true, pricePerNight: { gt: 0 } },
     select: {
@@ -24,6 +20,25 @@ export async function getChatTree(): Promise<Record<string, ChatNode>> {
     },
     orderBy: { name: "asc" },
   });
+}
+
+/**
+ * Returns the chat tree with dynamic property nodes injected from the database.
+ * Called server-side (e.g. in layout or page) and passed to the client widget as props.
+ */
+export async function getChatTree(): Promise<Record<string, ChatNode>> {
+  // ChatWidgetServer is mounted in the root layout, so this runs on every
+  // route — including ones Next.js statically prerenders at build time. If
+  // the database is unreachable at that moment (e.g. no DB in the CI build
+  // job), fall back to the generic tree below rather than failing the
+  // build for every static page. Same graceful-degradation precedent as
+  // the WordPress feed fallback (see DEC-011).
+  let properties: Awaited<ReturnType<typeof fetchChatProperties>> = [];
+  try {
+    properties = await fetchChatProperties();
+  } catch (err) {
+    console.error("[chat] Failed to load properties for chat tree, falling back to generic tree:", err);
+  }
 
   // Deep clone so we don't mutate the module-level object
   const tree: Record<string, ChatNode> = JSON.parse(JSON.stringify(chatTree));

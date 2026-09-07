@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma db push --skip-generate && prisma generate && next build",
+    "build:app": "prisma generate && next build",
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
@@ -14,7 +15,7 @@
     "format:check": "prettier --check .",
     "seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts",
     "seed:property-seo": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed-property-seo.ts",
-    "qr:hash": "node scripts/generate-qr-hash.js"
+    "qr:hash": "node scripts/generate-qr-hash.mjs"
   },
   "prisma": {
     "seed": "npx ts-node --compiler-options '{\"module\":\"CommonJS\"}' prisma/seed.ts"

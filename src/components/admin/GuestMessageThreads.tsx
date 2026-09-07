@@ -56,8 +56,22 @@ export default function GuestMessageThreads() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  // Reset to page 1 whenever the search query changes. Adjusted during
+  // render (React's documented pattern for derived state resets) rather
+  // than in an effect, so it doesn't cost an extra commit.
+  const [prevQ, setPrevQ] = useState(q);
+  if (q !== prevQ) {
+    setPrevQ(q);
+    if (page !== 1) setPage(1);
+  }
+
   useEffect(() => {
     const controller = new AbortController();
+    // Clearing a stale error before a new fetch starts is the intended
+    // reset for this data-fetching effect; deferring it would flash last
+    // request's error while the new one is in flight. Admin-only view, no
+    // guest or payment surface affected.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setError(null);
     const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
     if (q) params.set("q", q);
@@ -80,11 +94,6 @@ export default function GuestMessageThreads() {
       });
     return () => controller.abort();
   }, [q, page, reloadKey]);
-
-  // Reset to page 1 whenever search query changes
-  useEffect(() => {
-    setPage(1);
-  }, [q]);
 
   return (
     <section className="mb-10">

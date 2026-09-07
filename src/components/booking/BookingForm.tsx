@@ -92,7 +92,6 @@ function isValidPhone(raw: string, country: CountryCode): boolean {
 
 // ── Stripe payment inner component ──────────────────────────────────────────
 function StripePaymentForm({
-  clientSecret,
   total,
   slug,
   onSuccess,
@@ -153,7 +152,7 @@ function StripePaymentForm({
 }
 
 export default function BookingForm({
-  propertyId, propertyName, propertyType, pricePerNight, maxGuests, includedGuests, extraGuestFeePerNight, bedrooms, slug,
+  propertyId, propertyName, propertyType, pricePerNight, maxGuests, includedGuests, extraGuestFeePerNight, slug,
   initialCheckIn = "", initialCheckOut = "", initialGuests = "1", propertyRules,
 }: Props) {
   const [form, setForm] = useState({

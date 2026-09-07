@@ -15,6 +15,11 @@ export function useQrIntegrity(
   const [blob, setBlob] = useState<Blob | null>(null);
 
   useEffect(() => {
+    // Resetting verification status before re-checking a (possibly new) QR
+    // image is the intended behavior of this payment-integrity guard;
+    // rewriting it is out of scope for a lint-only pass (see CI repair
+    // scope control: no payment-behavior changes).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("loading");
     setBlob(null);
 

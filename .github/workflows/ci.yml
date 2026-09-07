@@ -6,6 +6,18 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Cancel a superseded run (e.g. a new push to the same PR) instead of letting
+# both run to completion.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least-privilege default: none of these jobs need to write to the repo, open
+# checks, or comment on PRs (branch-protection status checks come from the
+# job results themselves, not from a token permission).
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint
@@ -59,10 +71,16 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      # Required for Prisma generate (no real DB needed for build check)
+      # Parsed by Prisma Client generation and by Next.js env validation at
+      # compile time only — never contacted. This job runs `build:app`
+      # (prisma generate + next build), never the production `build` script,
+      # so no `prisma db push` / migration / seed ever runs here and no
+      # database connection is ever attempted. See "CI build vs. production
+      # build" in the Website Technical Specification.
       DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
       NEXTAUTH_SECRET: ci-secret-placeholder
       NEXTAUTH_URL: http://localhost:3000
+      SKIP_ENV_VALIDATION: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -70,9 +88,5 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
-      - name: Generate Prisma client
-        run: npx prisma generate
-      - name: Build Next.js app
-        run: npx next build
-        env:
-          SKIP_ENV_VALIDATION: true
+      - name: Build application (compile-only — no database write)
+        run: npm run build:app

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const search = searchParams.get("search") ?? "";
-  const module = searchParams.get("module") ?? "";
+  const moduleFilter = searchParams.get("module") ?? "";
   const actorRole = searchParams.get("actorRole") ?? "";
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = 50;
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
       { target: { contains: search } },
     ];
   }
-  if (module) where.module = module;
+  if (moduleFilter) where.module = moduleFilter;
   if (actorRole) where.actorRole = actorRole;
 
   const [logs, total] = await Promise.all([
