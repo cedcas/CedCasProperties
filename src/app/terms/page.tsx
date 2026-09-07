@@ -18,7 +18,7 @@ export default function TermsPage() {
       <main className="bg-cream min-h-screen pt-28 pb-20">
         <div className="max-w-3xl mx-auto px-6">
           <h1 className="font-serif font-semibold text-charcoal text-[2rem] mb-2">Terms of Service</h1>
-          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: June 16, 2026</p>
+          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: September 6, 2026</p>
 
           <div className="prose-custom space-y-8 text-[14.5px] text-charcoal/75 leading-[1.85]">
             <section>
@@ -34,7 +34,7 @@ export default function TermsPage() {
               <ul className="list-disc pl-5 space-y-2">
                 <li>A booking request is not confirmed until you receive a confirmation email from us.</li>
                 <li>For <strong>GCash and BPI payments</strong>, your booking remains pending until we manually verify your payment. You will receive a confirmation email once verified.</li>
-                <li>For <strong>card payments (Stripe)</strong>, your booking is confirmed immediately upon successful payment authorization.</li>
+                <li>For <strong>Credit/Debit Card payments</strong>, your booking is confirmed immediately upon successful payment authorization.</li>
                 <li>We reserve the right to decline any booking request at our discretion.</li>
               </ul>
             </section>
@@ -43,10 +43,10 @@ export default function TermsPage() {
               <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">3. Payment Terms</h2>
               <ul className="list-disc pl-5 space-y-2">
                 <li>All prices are listed in Philippine Pesos (PHP).</li>
-                <li>We accept <strong>GCash</strong>, <strong>BPI bank transfer</strong>, and <strong>credit/debit card</strong> (via Stripe).</li>
-                <li>Card payments include a <strong>6% processing fee</strong> to cover Stripe transaction charges. GCash and BPI payments have no additional fees.</li>
+                <li>We accept <strong>GCash</strong>, <strong>BPI bank transfer</strong>, and <strong>Credit/Debit Card</strong>.</li>
+                <li>Card payments include a <strong>6% processing fee</strong> to cover payment processing charges. GCash and BPI payments have no additional fees.</li>
                 <li>Full payment is required at the time of booking. We do not offer partial payments or installment plans.</li>
-                <li>We do not store your credit card information. All card transactions are processed securely by Stripe.</li>
+                <li>We do not store your credit card information. All card transactions are processed securely by our payment processor.</li>
               </ul>
             </section>
 
@@ -64,9 +64,9 @@ export default function TermsPage() {
             <section>
               <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">5. Check-in &amp; Check-out</h2>
               <ul className="list-disc pl-5 space-y-2">
-                <li><strong>Check-in time:</strong> 2:00 PM onwards</li>
-                <li><strong>Check-out time:</strong> 12:00 PM (noon)</li>
-                <li>Early check-in or late check-out may be available upon request, subject to availability. Please mention it in the &ldquo;Special Requests&rdquo; field when booking.</li>
+                <li><strong>Check-in time:</strong> 2:00 PM onwards for B34 (Cozy 1-Bedroom, Spacious 2-Bedroom); 3:00 PM onwards for B38, &ldquo;Mickey in Lipa&rdquo; (Sleeps 7 / 11 / 15).</li>
+                <li><strong>Check-out time:</strong> 12:00 PM (noon) at both properties.</li>
+                <li>Early check-in or late check-out may be available upon request, subject to availability, our cleaning schedule, and adjacent reservations, and requires advance approval. When approved, it is charged at <strong>₱200 per hour</strong>. Please mention it in the &ldquo;Special Requests&rdquo; field when booking, or message us as early as possible. Approval and payment do not guarantee an exact time until confirmed with you directly.</li>
               </ul>
             </section>
 

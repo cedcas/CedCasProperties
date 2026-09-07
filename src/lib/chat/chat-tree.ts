@@ -83,7 +83,7 @@ export const chatTree: Record<string, ChatNode> = {
       "3. Choose a payment method — GCash, BPI, or card\n" +
       "4. For QR payments, scan and pay, then tap \"I Paid\"\n" +
       "5. We'll confirm your booking within a few hours!\n\n" +
-      "Card payments via Stripe are confirmed instantly.",
+      "Card payments are confirmed instantly.",
     options: [
       { label: "Payment methods",  nodeId: "booking-payment" },
       { label: "← Back to topics", nodeId: "root" },
@@ -96,7 +96,7 @@ export const chatTree: Record<string, ChatNode> = {
       "We accept three payment methods:\n\n" +
       "**GCash** — Scan the QR code and pay instantly. No transaction fee.\n\n" +
       "**BPI (InstaPay)** — Scan the QR code to transfer from your BPI account. No transaction fee.\n\n" +
-      "**Credit / Debit Card (Stripe)** — Pay online with any major card. A 6% processing fee applies.\n\n" +
+      "**Credit / Debit Card** — Pay online with any major card. A 6% processing fee applies.\n\n" +
       "GCash and BPI bookings are confirmed once we verify your payment. Card payments are confirmed immediately.",
     options: [
       { label: "How do I book?",    nodeId: "booking-how" },
@@ -152,8 +152,11 @@ export const chatTree: Record<string, ChatNode> = {
   "info-checkin": {
     id: "info-checkin",
     message:
-      "**Check-in** is at **2:00 PM** and **check-out** is at **12:00 PM (noon)**.\n\n" +
-      "Early check-in or late check-out may be available — just let us know when you book and we'll do our best to accommodate!",
+      "Check-in time depends on the house:\n\n" +
+      "• **B34** (Cozy 1-Bedroom, Spacious 2-Bedroom) — check-in from **2:00 PM**\n" +
+      "• **B38, \"Mickey in Lipa\"** (Sleeps 7 / 11 / 15) — check-in from **3:00 PM**\n\n" +
+      "**Check-out** is **12:00 PM (noon)** at both houses.\n\n" +
+      "Early check-in or late check-out may be available, subject to our cleaning schedule and other bookings — when approved, it's charged at ₱200 per hour. Just message us as early as possible, ideally at the time of booking.",
     options: [
       { label: "Amenities",         nodeId: "info-amenities" },
       { label: "← Back to topics",  nodeId: "root" },
