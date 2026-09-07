@@ -386,7 +386,7 @@ export default async function StaycationPage() {
             <div className={`${prose} space-y-4`}>
               <p>
                 Lipa is about {lead("an hour from Alabang")} on SLEX and the STAR Tollway — call it{" "}
-                {lead("an hour and three quarters from central Manila")} once traffic has its say. It
+                {lead("about one hour from central Manila")} once traffic has its say. It
                 sits high enough to be genuinely cooler than the lowlands, and it doesn&rsquo;t fill up
                 the way Tagaytay does on a long weekend. It&rsquo;s where we live, and it&rsquo;s where
                 we run {hasInventory ? `${numberWord(count)} private ${plural(count, "home")}` : "private homes"}{" "}

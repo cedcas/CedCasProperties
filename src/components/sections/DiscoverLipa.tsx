@@ -200,7 +200,7 @@ export default function DiscoverLipa() {
 
               {/* Distance badge */}
               <div className="absolute top-4 right-4 bg-white/90 backdrop-blur-sm text-[#2C2C2C] rounded-[10px] px-3 py-2 shadow-md text-center">
-                <div className="text-[13px] font-bold text-[#2C2C2C] leading-tight">🚗 1 hr 35 min</div>
+                <div className="text-[13px] font-bold text-[#2C2C2C] leading-tight">🚗 About 1 hour</div>
                 <div className="text-[11px] text-[#4A4A4A] mt-0.5">84.3 km from Manila</div>
               </div>
 
@@ -213,7 +213,7 @@ export default function DiscoverLipa() {
                   </div>
                   <div className="text-right text-[11px] text-white/70 leading-[1.7]">
                     Via SLEX + STAR Tollway<br/>
-                    <span className="text-[#FF5371] font-semibold">~84 km · 1h 35m</span>
+                    <span className="text-[#FF5371] font-semibold">~84 km · about 1 hr</span>
                   </div>
                 </div>
               </div>
