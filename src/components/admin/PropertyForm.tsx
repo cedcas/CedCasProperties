@@ -2,8 +2,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Property } from "@prisma/client";
+import { safeParsePricingNotes } from "@/lib/pricing-notes";
 
 const AMENITY_OPTIONS = ["WiFi", "AC", "Parking", "TV", "Kitchen", "Pool", "Washer", "Coffee"];
+const APPROVED_PAYMENT_METHODS_TEXT =
+  "GCash, BPI InstaPay (no fees), Credit/Debit Card (6% processing fee applies)";
 
 export default function PropertyForm({ property }: { property?: Property }) {
   const router = useRouter();
@@ -22,6 +25,9 @@ export default function PropertyForm({ property }: { property?: Property }) {
     isFeatured:     property?.isFeatured ?? false,
     airbnbIcsUrl:   (property as Property & { airbnbIcsUrl?: string | null })?.airbnbIcsUrl ?? "",
     propertyRules:  (property as Property & { propertyRules?: string | null })?.propertyRules ?? "",
+    paymentMethods: typeof safeParsePricingNotes(property?.pricingNotes).paymentMethods === "string"
+      ? (safeParsePricingNotes(property?.pricingNotes).paymentMethods as string)
+      : "",
   });
   const [exportUrl, setExportUrl] = useState("");
   const [amenities, setAmenities] = useState<string[]>(
@@ -53,10 +59,14 @@ export default function PropertyForm({ property }: { property?: Property }) {
     setSaving(true);
     setError("");
     try {
-      // Don't send `images` on edit — images are managed by ImageManager separately
+      // Don't send `images` on edit — images are managed by ImageManager separately.
+      // Omit paymentMethods entirely when blank (an untouched or not-yet-set field) —
+      // the API treats a present-but-empty value as a validation error, and this is a
+      // single-field partial update, not a "clear this value" action. Also never send
+      // it on create — new properties don't have a pricingNotes row to merge into yet.
       const body = isEdit
-        ? { ...form, amenities: JSON.stringify(amenities) }
-        : { ...form, amenities: JSON.stringify(amenities), images: "[]" };
+        ? { ...form, amenities: JSON.stringify(amenities), paymentMethods: form.paymentMethods.trim() || undefined }
+        : { ...form, amenities: JSON.stringify(amenities), images: "[]", paymentMethods: undefined };
       const url  = isEdit ? `/api/admin/properties/${property.id}` : "/api/admin/properties";
       const res  = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
@@ -142,6 +152,33 @@ export default function PropertyForm({ property }: { property?: Property }) {
           </p>
         </div>
       </div>
+
+      {/* ── Payment Methods (pricingNotes.paymentMethods) ───────────────────── */}
+      {isEdit && (
+        <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
+          <h3 className="font-serif font-semibold text-charcoal mb-1">Payment Methods</h3>
+          <p className="text-[11.5px] text-charcoal/45 mb-3">
+            The exact text shown on this property&rsquo;s page under &ldquo;Pricing &amp; payment.&rdquo;
+            Editing this field only touches this value — every other pricing note (rate, discounts,
+            deposit, cancellation) is preserved.
+          </p>
+          <textarea
+            name="paymentMethods"
+            value={form.paymentMethods}
+            onChange={handle}
+            rows={2}
+            placeholder={APPROVED_PAYMENT_METHODS_TEXT}
+            className={`${inputCls} resize-none`}
+          />
+          <button
+            type="button"
+            onClick={() => setForm((p) => ({ ...p, paymentMethods: APPROVED_PAYMENT_METHODS_TEXT }))}
+            className="mt-2 text-[12px] font-semibold text-forest hover:underline"
+          >
+            Use approved wording
+          </button>
+        </div>
+      )}
 
       {/* ── iCal / Airbnb Sync ─────────────────────────────────────────────── */}
       <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
