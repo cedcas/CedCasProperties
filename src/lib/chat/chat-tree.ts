@@ -263,7 +263,7 @@ export const chatTree: Record<string, ChatNode> = {
   lipa: {
     id: "lipa",
     message:
-      "Lipa City is one of Batangas' most vibrant cities — just about 1.5 hours from Metro Manila via SLEX and STAR Tollway. What would you like to know?",
+      "Lipa City is one of Batangas' most vibrant cities — about one hour from Metro Manila via SLEX and STAR Tollway. What would you like to know?",
     options: [
       { label: "How to get there",    nodeId: "lipa-directions" },
       { label: "Nearby attractions",  nodeId: "lipa-attractions" },
@@ -275,7 +275,7 @@ export const chatTree: Record<string, ChatNode> = {
     id: "lipa-directions",
     message:
       "**From Metro Manila:**\n" +
-      "Take SLEX → STAR Tollway → Lipa exit. The drive is approximately 84 km and takes about 1 hour 35 minutes in normal traffic.\n\n" +
+      "Take SLEX → STAR Tollway → Lipa exit. The drive is approximately 84 km and takes about one hour in normal traffic.\n\n" +
       "**By bus:**\n" +
       "DLTB and Jam Liner have regular trips from Manila to Lipa via the Batangas route. Look for buses headed to Lipa or Batangas City.",
     options: [

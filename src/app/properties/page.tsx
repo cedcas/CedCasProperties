@@ -366,7 +366,7 @@ export default async function PropertiesIndexPage() {
                   <li><strong className="text-charcoal">Netflix</strong>, and a living room actually built for sitting in</li>
                   <li>
                     <strong className="text-charcoal">GCash, BPI InstaPay</strong> (no fees){" "}
-                    <strong className="text-charcoal">or credit card</strong> via Stripe ({stripePct}% processing)
+                    <strong className="text-charcoal">or Credit/Debit Card</strong> ({stripePct}% processing)
                   </li>
                   <li>
                     <strong className="text-charcoal">No cleaning fee, no service fee, no resort fee.</strong>{" "}

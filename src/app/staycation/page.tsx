@@ -283,11 +283,11 @@ export default async function StaycationPage() {
   faqs.push(
     {
       q: "How do I pay?",
-      a: `GCash, BPI InstaPay (no fees), or credit card via Stripe (${stripePct}% processing fee).`,
+      a: `GCash, BPI InstaPay (no fees), or Credit/Debit Card (${stripePct}% processing fee).`,
     },
     {
       q: "Is it safe to book directly?",
-      a: "Payment goes through Stripe or a named BPI account, you get written confirmation, and you're dealing with Melody and Wilma directly. Full detail on the FAQ page.",
+      a: "Payment goes through a secure card payment or a named BPI account, you get written confirmation, and you're dealing with Melody and Wilma directly. Full detail on the FAQ page.",
       links: [{ phrase: "FAQ page", href: "/faq" }],
     },
     {
@@ -471,7 +471,7 @@ export default async function StaycationPage() {
               </p>
               <p>
                 Booking here, you pay the rate and the extra-guest fee, and that&rsquo;s the total. We take{" "}
-                {lead("GCash")}, {lead("BPI InstaPay")} (no fees), and {lead("credit card via Stripe")} (
+                {lead("GCash")}, {lead("BPI InstaPay")} (no fees), and {lead("Credit/Debit Card")} (
                 {stripePct}% processing). You&rsquo;re also messaging the people who own the homes rather
                 than a support queue — which matters more than it sounds when you&rsquo;re arriving at
                 11pm and the gate is closed.

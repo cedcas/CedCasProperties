@@ -101,7 +101,7 @@ const SHARED_PRICING = (rate: string): PricingNotes => ({
   weeklyDiscount: "Weekly stays (7+ nights): ask about the discount when you message",
   monthlyDiscount: "Monthly stays (28+ nights): dedicated rate available — message for terms",
   paymentMethods:
-    "GCash, BPI InstaPay (no fees), Stripe / credit card (6% processing fee applies)",
+    "GCash, BPI InstaPay (no fees), Credit/Debit Card (6% processing fee applies)",
   deposit: "Full payment required at the time of booking to secure your dates",
   cancellation: "100% refund 7+ days out; 50% refund 3–7 days out; no refund inside 3 days",
 });

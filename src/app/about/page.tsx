@@ -206,8 +206,8 @@ export default async function AboutPage() {
                   ))}
                   <li>
                     Every one of them has a full kitchen, fast WiFi, Netflix, and parking inside the
-                    village gates. All of them take GCash, BPI InstaPay (no fees), and credit card
-                    via Stripe ({stripePct}% processing fee). Booking direct here saves you the
+                    village gates. All of them take GCash, BPI InstaPay (no fees), and Credit/Debit
+                    Card ({stripePct}% processing fee). Booking direct here saves you the
                     14&ndash;20% Airbnb service fee.
                   </li>
                   <li>
@@ -224,7 +224,7 @@ export default async function AboutPage() {
                   <Link href="/properties" className="text-forest hover:underline">
                     our homes page
                   </Link>
-                  . All of them take GCash, BPI InstaPay (no fees), and credit card via Stripe (
+                  . All of them take GCash, BPI InstaPay (no fees), and Credit/Debit Card (
                   {stripePct}% processing fee). Booking direct here saves you the 14&ndash;20%
                   Airbnb service fee.
                 </p>
