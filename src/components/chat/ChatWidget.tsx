@@ -38,6 +38,10 @@ export default function ChatWidget({ tree }: ChatWidgetProps) {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed.messages?.length) {
+          // One-time restore of a guest's chat session from sessionStorage
+          // on mount; rewriting this guest-facing widget's init flow is out
+          // of scope for a lint-only pass (see CI repair scope control).
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setMessages(parsed.messages);
           setCurrentNodeId(parsed.currentNodeId || "root");
           setInitialized(true);

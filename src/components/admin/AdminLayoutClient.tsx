@@ -1,7 +1,22 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Image from "next/image";
 import AdminSidebar from "./AdminSidebar";
+
+const SIDEBAR_STORAGE_KEY = "admin-sidebar-collapsed";
+
+function subscribeToStorage(callback: () => void) {
+  window.addEventListener("storage", callback);
+  return () => window.removeEventListener("storage", callback);
+}
+
+function getStoredCollapsed() {
+  return localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true";
+}
+
+function getServerCollapsed() {
+  return false;
+}
 
 export default function AdminLayoutClient({
   user,
@@ -14,13 +29,14 @@ export default function AdminLayoutClient({
   deploymentId?: string;
   deploymentDate?: string;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
+  // Reads the persisted preference without a mount-effect: getServerSnapshot
+  // keeps SSR/hydration output at `false`, then React resyncs to the real
+  // localStorage value right after hydration (same effective behavior as
+  // the previous useEffect, without a synchronous setState-in-effect).
+  const storedCollapsed = useSyncExternalStore(subscribeToStorage, getStoredCollapsed, getServerCollapsed);
+  const [collapsedOverride, setCollapsedOverride] = useState<boolean | null>(null);
+  const collapsed = collapsedOverride ?? storedCollapsed;
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("admin-sidebar-collapsed");
-    if (stored === "true") setCollapsed(true);
-  }, []);
 
   // Lock body scroll while the mobile drawer is open.
   useEffect(() => {
@@ -29,10 +45,9 @@ export default function AdminLayoutClient({
   }, [mobileOpen]);
 
   const toggle = () => {
-    setCollapsed((prev) => {
-      localStorage.setItem("admin-sidebar-collapsed", String(!prev));
-      return !prev;
-    });
+    const next = !collapsed;
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+    setCollapsedOverride(next);
   };
 
   return (

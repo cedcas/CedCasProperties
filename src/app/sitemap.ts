@@ -1,13 +1,16 @@
 import type { MetadataRoute } from "next";
-import { prisma } from "@/lib/prisma";
+import { getPublicListings } from "@/lib/listings";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
+// Reads live inventory, so this route can't be statically prerendered: a
+// build-time Prisma query fails CI (no database in the lint/build workflow).
+// Same precedent as /about and /properties — dynamic, with the query itself
+// cached for an hour via getPublicListings() in src/lib/listings.ts.
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const properties = await prisma.property.findMany({
-    where: { isActive: true, pricePerNight: { gt: 0 } },
-    select: { slug: true, updatedAt: true },
-  });
+  const properties = await getPublicListings();
 
   const now = new Date();
 
