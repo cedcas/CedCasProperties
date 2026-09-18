@@ -282,7 +282,7 @@ of these dimensions.
 | Testing/validation | Have relevant checks run (`npm run lint`, typecheck, `npm test`, `npm run build:app`)? For a booking/payment change, has it been verified against a safe, non-real-guest path? |
 | Deployment/release state | Does the reply distinguish "committed" from "merged to `main`" from "confirmed live" (DEC-006)? Is a manual Owner step being handed off explicitly? |
 | Documentation/governance | Does `HIL_PROJECT_STATUS.md`, `HIL_DECISIONS.md`, `HIL_COMPLETION_LOG.md`, `HIL Commits.md`, or `docs/HIL_SEO_SPECIFICATION.md` need updating per the rules in this file? |
-| HIL/PinasBNB boundary impact | Does this touch anything that could blur `haveninlipa.com` / `blog.haveninlipa.com` and `haven-in-lipa.pinasbnb.pro`'s separation, or misrepresent HIL as an independent external PinasBNB customer? If PinasBNB is referenced at all, flag it — this boundary is not yet documented as a `DEC-###` (see `docs/HIL_SEO_SPECIFICATION.md` §1). |
+| HIL/PinasBNB boundary impact | Does this touch anything that could blur `haveninlipa.com` / `blog.haveninlipa.com` and `haven-in-lipa.pinasbnb.pro`'s separation, or misrepresent HIL as an independent external PinasBNB customer? HIL is PinasBNB's customer-zero/living-demo property, confirmed by the Owner ([DEC-019](About%20HIL/HIL_DECISIONS.md)) — a settled fact, not to be relitigated, but still respect the boundary (no merge, no shared DNS/booking system). |
 
 ## Documentation & Context Loading (read this first)
 

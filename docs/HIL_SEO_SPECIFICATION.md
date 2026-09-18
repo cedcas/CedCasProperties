@@ -1,7 +1,10 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-17 (created — SEO/content governance consolidation, see
-> [DEC-018](../About%20HIL/HIL_DECISIONS.md) and [content/seo/README.md](../content/seo/README.md))
+> **Last updated:** 2026-09-17 (created earlier the same day — SEO/content governance
+> consolidation, see [DEC-018](../About%20HIL/HIL_DECISIONS.md) and
+> [content/seo/README.md](../content/seo/README.md) — then updated same day once the
+> Owner confirmed two items originally flagged as open/unverified: the Airbnb sibling
+> cross-link unlink (§19–20) and the PinasBNB boundary (§1, [DEC-019](../About%20HIL/HIL_DECISIONS.md)))
 >
 > **This is a focused governance document** — it separates verified facts from decisions,
 > plans, assumptions, and open questions, and states approval gates explicitly. It is
@@ -35,28 +38,26 @@
   `blog/` itself is gitignored (deployed separately, per `.gitignore`). The two sites
   integrate **only through public REST APIs** (`GET /api/properties.json` on the main
   site; WordPress's own REST API for content operations) — [DEC-011](../About%20HIL/HIL_DECISIONS.md).
-- **`haven-in-lipa.pinasbnb.pro`** — a PinasBNB comparison/pilot application. **Not found
-  anywhere in HIL's own pre-existing documentation** (`About HIL/`, `HIL_DECISIONS.md`,
-  the technical specs) as of this migration — its existence and relationship to HIL is
-  asserted by the 2026-09-17 consolidation mandate, not by HIL's own historical record.
+- **`haven-in-lipa.pinasbnb.pro`** — a PinasBNB-owned comparison/pilot application.
+  HIL is PinasBNB's customer-zero/living-demo property. **Not found in HIL's own
+  pre-existing documentation** at the time of the 2026-09-17 migration (nothing in
+  `About HIL/` or `HIL_DECISIONS.md` corroborated it independently), but **the Owner
+  confirmed both facts the same day** — recorded as
+  [DEC-019](../About%20HIL/HIL_DECISIONS.md).
 
-### Assumptions (flagged — not independently verified from this repo)
-- That `haven-in-lipa.pinasbnb.pro` is a PinasBNB-owned comparison/pilot property, and
-  that HIL is described as PinasBNB's "customer-zero/living-demo" property. **Owner should
-  confirm and, if accurate, this should get its own `DEC-###` entry** — right now it exists
-  only in this migration's mandate, not as a documented product decision.
-
-### Durable decision (this migration)
+### Durable decisions
 - **Domain/booking/comparison boundaries are preserved exactly as they were before this
   consolidation.** No DNS change, no merge of HIL into PinasBNB, no alteration to the
-  booking system. HIL is not to be presented as an independent external customer of
-  PinasBNB if the relationship above is confirmed — see `DEC-018`.
+  booking system. HIL is not presented as an independent external customer of
+  PinasBNB — see `DEC-018` and `DEC-019`.
+- The customer-zero/living-demo relationship and the `haven-in-lipa.pinasbnb.pro` boundary
+  are confirmed facts, per `DEC-019` (2026-09-17) — not to be relitigated in a future
+  session without new information.
 
 ### Open questions
 - What specifically is compared on `haven-in-lipa.pinasbnb.pro`, who maintains it, and
-  what (if anything) it reads from `haveninlipa.com`'s public APIs — unknown from this
-  repo; ask the Owner or locate that project's own documentation before any HIL work
-  assumes an integration exists.
+  what (if anything) it reads from `haveninlipa.com`'s public APIs — still unconfirmed.
+  The relationship itself (§ above) is settled; its technical integration details are not.
 
 ---
 
@@ -414,15 +415,17 @@
 - `WP_ALLOW_PUBLISH=false` remains enforced — analysts cannot publish under any
   circumstance this spec is aware of.
 
-### Approval gates currently open (none closed by this migration)
-1. Airbnb sibling cross-link unlink — the single Active Gate in `HIL_PROJECT_STATUS.md`,
-   **open since 2026-08-08**. See the note under §20 — this migration explicitly does not
-   treat it as closed, despite the consolidation mandate's premise that it was.
-2. `hil-seo` v1.1.1 upload → verification → GSC resubmission → cache purge → Yoast
+### Approval gates currently open
+1. `hil-seo` v1.1.1 upload → verification → GSC resubmission → cache purge → Yoast
    deactivation (§3).
-3. Article #6 WordPress-side repoint + 301 (§2, §8).
-4. `stay_match_click` diagnosis (§13, §14).
-5. `main` branch protection (this section).
+2. Article #6 WordPress-side repoint + 301 (§2, §8).
+3. `stay_match_click` diagnosis (§13, §14).
+4. `main` branch protection (this section).
+
+**Closed since the initial version of this document:** the Airbnb sibling cross-link
+unlink — flagged in §20 below as a discrepancy against the migration mandate's premise,
+then confirmed complete by the Owner the same day (2026-09-17). Not closed by this
+migration or by this document; closed by Owner action, recorded here for reference.
 
 ### Deferred / not authorized by this migration
 Everything in this section beyond documenting current state. No implementation, no
@@ -432,18 +435,23 @@ Yoast change, no cache purge, no publishing, no production change.
 
 ## 20. Reconciliation notes — discrepancies found during this migration
 
-**The consolidation mandate stated "the Airbnb sibling cross-link risk is closed."**
-HIL's own current-status document (`About HIL/HIL_PROJECT_STATUS.md`, last updated
-2026-09-07) lists it as the **single Active Gate**, open since 2026-08-08, with no
-recorded closure. This specification follows the verified current document, not the
-mandate's premise — **the item is treated as open**, consistent with this migration's own
-rule not to convert open items into completed work by virtue of documentation
-consolidation. The Owner should confirm which is actually true (has it been unlinked on
-Airbnb's dashboard since 2026-09-07 without the doc being updated, or is the mandate's
-premise simply stale) and correct `HIL_PROJECT_STATUS.md` accordingly — **not done as part
-of this migration**, since that would be resolving an open item based on an unverified
-external claim rather than evidence.
+**The consolidation mandate stated "the Airbnb sibling cross-link risk is closed" — flagged, then confirmed, not relitigated.**
+At the time this document was first written, HIL's own current-status document
+(`About HIL/HIL_PROJECT_STATUS.md`, then last updated 2026-09-07) listed it as the
+**single Active Gate**, open since 2026-08-08, with no recorded closure. This
+specification initially followed the verified current document over the mandate's
+premise, treating the item as open — consistent with the rule not to convert open items
+into completed work by virtue of documentation consolidation alone. **The Owner
+subsequently confirmed, the same day (2026-09-17), that the unlink is in fact complete.**
+`HIL_PROJECT_STATUS.md`'s Active Gate is now closed accordingly (see its Recently
+Completed). This is now a settled fact, not an open discrepancy — do not relitigate it in
+a future session absent new contrary evidence.
+
+**The PinasBNB customer-zero / `haven-in-lipa.pinasbnb.pro` relationship (§1) — flagged, then confirmed.**
+Not found in HIL's own prior documentation at migration time; the Owner confirmed both
+the customer-zero/living-demo framing and the comparison-app boundary the same day —
+recorded as [DEC-019](../About%20HIL/HIL_DECISIONS.md). Also now settled, not open.
 
 No other discrepancy of this kind was found between the mandate and HIL's existing record,
-though §1, §14, and §16 above flag facts asserted by the mandate that could not be
-independently verified from this repository's existing documentation.
+though §14 and §16 above still flag facts asserted by the mandate (Clarity/GTM presence;
+GBP management workflow) that remain unconfirmed as of this writing.
