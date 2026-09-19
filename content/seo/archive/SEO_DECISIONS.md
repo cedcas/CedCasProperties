@@ -6,6 +6,11 @@
 > for provenance and is not maintained going forward — the former shared-workspace copy at
 > `/VSCode/seo/content for HavenInLipa/SEO_DECISIONS.md` carries the same notice and was
 > left in place, unmodified, as the pre-migration record.
+>
+> **Updated 2026-09-19 (Owner-directed, SEO Work Stream):** this file is being maintained again
+> for the `hil-seo`/Yoast cutover only. Added **SEO-DEC-026**; annotated **SEO-DEC-020** and
+> **SEO-DEC-023** where later live evidence showed their recorded status was wrong. All other
+> entries are unchanged. 28 `SEO-DEC-###` identifiers now exist.
 
 ---
 
@@ -431,7 +436,7 @@ None
 ## SEO-DEC-020 — Custom SEO plugin uses WordPress core's sitemap; Yoast sitemap retired with a redirect
 
 Date: 2026-09-07
-Status: Executed — all 6 cutover modules (including sitemap) turned ON live by Cedric via the Administrator screen (SEO-DEC-025). One defect found and fixed same-day: see Implications.
+Status: **Complete as of the evening of 2026-09-19 (see SEO-DEC-026 Outcome).** Earlier the same day it was found to be: **Partially executed — sitemap transition NOT complete (corrected 2026-09-19).** The 6 cutover flags were turned ON via the Administrator screen (SEO-DEC-025), but `/wp-sitemap.xml` has never served: Yoast's XML-sitemap feature is still on, so Yoast disables core's sitemap and redirects `/wp-sitemap.xml` → `/sitemap_index.xml`. The Redirection rule for the reverse direction was added, producing a live redirect loop found 2026-09-19. The same-day robots.txt "fix" (v1.1.1) was never installed and could not have worked. Sequence corrected and v1.1.2 built under SEO-DEC-026.
 Area: Technical SEO
 
 ### Decision
@@ -445,6 +450,7 @@ Matches the proven pattern already live on TribeMedSpa and NetCoreSolutions (`tm
 - **Defect found and fixed same day**: with the sitemap module turned ON, Yoast's virtual robots.txt (no physical file exists on this site — confirmed via Yoast's own File Editor) still advertised its own retired `Sitemap: https://blog.haveninlipa.com/sitemap_index.xml` line. Root cause: the plugin had no `robots_txt` filter at all — enabling the sitemap module only ever controlled the noindex-exclusion filters on core's `/wp-sitemap.xml`, not robots.txt's own advertised URL. Fixed in plugin v1.1.1 (`includes/sitemap.php`): a `robots_txt` filter at priority 999 (after Yoast's own callback) finds the exact existing "Sitemap:" line and rewrites its URL in place — never appends, so there is no code path that can produce a duplicate line — and automatically reverts to Yoast's original line the instant the sitemap module is turned off or Emergency Rollback is used, since the filter re-checks the live flag on every request rather than writing a persistent change. Yoast remains fully active throughout; this only corrects the one line it emits.
 - The 301 redirect from `/sitemap_index.xml` to `/wp-sitemap.xml` (in the Redirection plugin) and the GSC resubmission remain manual, separate steps — this fix only addresses robots.txt's advertised URL, not the redirect itself.
 - **Executed.** All 6 cutover modules confirmed live via the Administrator screen; the robots.txt fix ships in v1.1.1, packaged and pending Cedric's manual upload as of this entry.
+- **Correction, 2026-09-19 (see SEO-DEC-026):** (1) v1.1.1 was never installed — the live plugin readme reported `Stable tag: 1.1.0`. (2) It could not have worked: Yoast SEO 28.4 registers its `robots_txt` callback at priority 99,999 (`src/integrations/front-end/robots-txt-integration.php`), so a priority-999 filter ran before Yoast appended its block; the "Yoast hooks at priority 10" premise above was wrong. (3) The claim that "nothing else in WordPress core adds a `Sitemap:` line" is also wrong — core adds `Sitemap: <home>/wp-sitemap.xml` itself when its sitemaps are enabled. (4) Sequencing flaw: the documented order placed the 301 (`/sitemap_index.xml` → `/wp-sitemap.xml`) before Yoast's sitemap was off, which loops against Yoast's own redirect and left the site with no working sitemap index. Superseded by SEO-DEC-026's order.
 
 ### Supersedes
 None
@@ -499,7 +505,7 @@ None
 ## SEO-DEC-023 — "1 hour from Manila" claim removed from 3 meta descriptions; durable non-numeric wording approved
 
 Date: 2026-09-07
-Status: Complete — live on production. The meta description module was turned ON via the Administrator screen (SEO-DEC-025); the approved wording now renders for all 3 posts. Should be spot-checked once more (cache-busted) after the v1.1.1 upload, alongside the robots.txt fix verification.
+Status: **Complete as of the evening of 2026-09-19** — Yoast is deactivated so only the plugin's descriptions are served, and the two truncated strings were replaced (verified 27/27 posts, none contains "1 hour from Manila"). Earlier the same day: **Partly complete — corrected 2026-09-19.** `hil-seo`'s description tag carries the approved wording for all 3 posts, but (a) Yoast's own description tag on the same pages still prints "1 hour from Manila" until Yoast is deactivated, and (b) `hil_seo_trim_description()` (158-char limit) truncates two of the three approved strings mid-phrase ("…where to stay, a…", "…couple-fit rental, a comfortable…"). See SEO-DEC-026. Original status text follows: the approved wording now renders for all 3 posts. Should be spot-checked once more (cache-busted) after the v1.1.1 upload, alongside the robots.txt fix verification.
 Area: Content
 
 ### Decision
@@ -510,7 +516,7 @@ The specific "1 hour" figure was never sourced or fact-checked and is the same c
 
 ### Implications
 - Final approved copy for all three descriptions is recorded in `HIL_SEO_Metadata_Backfill.xlsx` (Validation Status: "Approved — pending live application").
-- **Not yet applied to production.** Two of the three affected posts (#8 and #12 — WP ids 73, 272) are among the 18 Cassandra-Kim-authored posts and are additionally blocked on SEO-DEC-019/SEO-DEC-021 before they can be reached via REST at all.
+- ~~**Not yet applied to production.** Two of the three affected posts (#8 and #12 — WP ids 73, 272) are among the 18 Cassandra-Kim-authored posts and are additionally blocked on SEO-DEC-019/SEO-DEC-021 before they can be reached via REST at all.~~ **Stale (2026-09-19):** the blocks cleared on 2026-09-07 (SEO-DEC-019/-021) and the wording is applied in `hil_meta_description`; the live state is the partial one described in Status above.
 - If/when an actual drive time is independently verified later, that becomes a new, separate decision — this entry only retires the unverified claim, it doesn't pre-approve whatever number eventually replaces it.
 
 ### Supersedes
@@ -562,3 +568,100 @@ The restriction is real and was verified, not assumed (`HTTP 403` reproduced dir
 
 ### Supersedes
 None
+
+---
+
+## SEO-DEC-026 — Sitemap/robots cutover order corrected to a loop-free sequence; `hil-seo` v1.1.2 supersedes v1.1.1
+
+Date: 2026-09-19
+Status: **Executed 2026-09-19 — cutover complete and verified; Yoast deactivated, not deleted.** Sequence below was amended during execution (see Outcome). Record: `HIL_SEO_Implementation_Plan.md` §8.7–8.9.
+Area: Technical SEO
+
+### Decision
+1. **Order (durable).** Every checkpoint must leave at least one sitemap URL returning HTTP 200:
+   1. Redirection: **disable** (not delete) the `/sitemap_index.xml` → `/wp-sitemap.xml` rule. Yoast's index serves again; `/wp-sitemap.xml` → Yoast's index in one hop.
+   2. Upload `hil-seo` v1.1.2 (replace). No output change while Yoast's XML sitemaps are on; read the new Status panel.
+   3. Yoast SEO → Settings → Site features → **XML sitemaps OFF** (Yoast stays active). Verify `/wp-sitemap.xml` = 200 immediately; if not, switch it back ON (returns to checkpoint 1).
+   4. Redirection: **re-enable** the `/sitemap_index.xml` rule. Verify one hop to a 200.
+   5. LiteSpeed Purge All; verify robots.txt carries one `Sitemap: …/wp-sitemap.xml` line.
+   6. GSC: submit `/wp-sitemap.xml`; keep the old entry until the new one reads Success.
+   7. Analyst metadata fixes (below), then a full cache-busted verification pass.
+   8. Deactivate Yoast (never delete); purge; full pass again. Rollback per plan §8.
+2. **Plugin v1.1.2** replaces v1.1.1 (never installed): robots filter at `PHP_INT_MAX`, inert unless core's sitemap is really being served and Yoast's sitemap line is absent, guarantees exactly one core `Sitemap:` line, no rewriting of Yoast's line; core's `users` sitemap provider dropped (author archives are `noindex`, SEO-DEC-008); read-only Status panel + `GET /hil-seo/v1/status`; on-screen instructions rewritten to this order.
+3. **Analyst metadata fixes before Yoast deactivation:** (a) replace the two truncated SEO-DEC-023 descriptions with strings ≤158 chars that keep the approved wording; (b) set `hil_robots_index=noindex` on article #6 so a URL that now 301s to `/staycation` stays out of core's sitemap.
+4. **Yoast deletion is a separate, later decision** — not authorized here (see Implications).
+
+### Reason
+Live evidence 2026-09-19, read-only: `/wp-sitemap.xml` → 301 `x-redirect-by: Yoast SEO` → `/sitemap_index.xml` → 301 `x-redirect-by: redirection` → `/wp-sitemap.xml` (curl stopped at 6 hops); `/wp-sitemap.xml?nocache=` = 404 (core's sitemap suppressed); robots.txt (uncached `/?robots=1`) still `Sitemap: …/sitemap_index.xml`; installed plugin readme `Stable tag: 1.1.0`. Yoast 28.4 source confirms `robots_txt` at 99,999 and that `WPSEO_Sitemaps` is only constructed while `enable_xml_sitemap` is true. The old documented order (301 at step 3, Yoast off at step 7) could not have worked.
+
+### Implications
+- **Yoast has no setting that disables only its description/schema output**, so duplicate description/`og:*`/JSON-LD on every post (Yoast + `hil-seo`) is expected until Yoast is deactivated (27 of 27 checked posts, 2026-09-19). Earlier docs' "disable Yoast's schema module in General → Features" instruction does not match Yoast 28.4.
+- **Before Yoast can be deleted** (not merely deactivated): (i) rollback window closed and one GSC crawl cycle clean; (ii) `src/components/layout/Footer.tsx` reads `_yoast_wpseo_focuskw` (via `blog/plugin/hil-expose-focuskw.php`) — the meta survives deactivation for existing posts and the footer falls back to the post title, but new posts only get `hil_focus_keyword`, so the footer should be pointed at `hil_focus_keyword` (a Website change, non-blocking for deactivation); (iii) Yoast's `wpseo_*` post meta and any Yoast-created redirects/tables should be exported first.
+- Two Redirection rules exist live that no document records: `/sitemap_index.xml` → `/wp-sitemap.xml` and article #6 → `https://haveninlipa.com/staycation` (301, 0 published posts still link to it). Author/date unknown.
+- Everything in step 1–6 needs an Administrator; the Analyst's Editor credential cannot reach Redirection, Yoast settings, Plugins, or LiteSpeed (SEO-DEC-019/-025).
+
+### Outcome and amendments (2026-09-19, added after execution)
+- **Sequence as executed:** steps 1–4 as written, with a **cache purge inserted after step 3 and again after each plugin change** (a purge must precede step 4, or the stale cached Yoast 301 recreates the loop). **Two cache layers must be cleared, in this order: LiteSpeed (Toolbox → Purge All), then Hostinger's CDN (hPanel → Websites → the `blog.haveninlipa.com` row → CDN → Flush cache).** LiteSpeed also caches 404s. Step 7 was done by Cedric in the post editor's "SEO (HIL)" box rather than by Analyst REST.
+- **Plugin releases:** v1.1.2 (robots filter fixed; Status panel), v1.1.3 (the taxonomy-exclusion filter had hooked a non-existent WordPress hook since v1.0.0, so core's sitemap listed 149 noindex archives; the users provider is emptied rather than dropped because on WordPress 7.0.5 an unregistered sitemap type returns a 200 soft page), v1.1.4 (blog-index title, canonical, description, `og:*`/Twitter and default-image setting, inert while Yoast is active), v1.1.5 (paginated canonical no longer keeps query strings).
+- **Rollback used once:** the first Yoast deactivation failed (homepage and `/page/N/` lost canonical, description, `og:*`; title suffix doubled — the 09-07 parity check covered only the 34 posts). Minimal rollback (reactivate Yoast; XML sitemaps left OFF so the sitemap was untouched) restored the homepage exactly. The second deactivation passed.
+- **Deliberate departure from "roll back on any failure":** the second deactivation showed one low-severity defect (canonical retained query strings on `/page/N/` only). It was fixed forward (v1.1.5) instead of rolled back, on the Owner's upload of the fix, because plain URLs were correct and rollback would have re-introduced duplicate tags.
+- **Findings that corrected earlier records:** all six flags were turned ON on 2026-09-08, not 2026-09-07; the article #6 301 was already live and no post linked to it; the "disable Yoast's schema in General → Features" step does not exist in Yoast 28.4.
+- **SEO-DEC-020 and SEO-DEC-023 are now complete** (their 2026-09-19 "partial" annotations are resolved): core sitemap is live with the 301; the plugin's approved descriptions are the only ones served.
+- **Post-cutover verification passed (2026-09-19, 22:35–22:38 UTC):** independent read-only pass, 4,238 in-scope checks, 0 failures, no rollback or remediation required (`HIL_SEO_Implementation_Plan.md` §8.10). Two documented, non-blocking differences are recorded there: 11 descriptions are the ≤158-char trim of longer approved text (Owner may accept or shorten them), and noindex archives use the core title format and carry no `og:*` (by design).
+- **Still open, not part of this decision:** GSC "Success" for the new sitemap and removal of the old entry; one crawl cycle of monitoring; the Yoast-deletion prerequisites above; verification of the 6 unpublished posts through the authenticated preview route.
+
+### Supersedes
+The sequence in SEO-DEC-020's Implications, `HIL_Yoast_Migration_and_Rollback_Plan.md` Stage 9, and `HIL_SEO_Implementation_Plan.md` §4 / §7 (v1.1.1 upload). SEO-DEC-020's decision itself (core sitemap is the system of record) is unchanged.
+
+
+---
+
+## SEO-DEC-027 — Owner decisions after the production verification: technical cutover formally closed; 11 descriptions rewritten; archive format accepted; no OG on noindex archives; monitoring and scheduled-post checkpoints
+
+Date: 2026-09-19
+Status: Active — decisions 1–5 in force; the 11-description rewrite is being applied (see `HIL_SEO_Implementation_Plan.md` §8.11 for the live status line)
+Area: Technical SEO / Content
+
+### Decision
+1. **The technical `hil-seo`/Yoast cutover is formally closed.** The Owner accepted the §8.10 read-only verification (4,238 in-scope checks, 0 failures). Remaining work is monitoring, not implementation.
+2. **Rewrite the 11 truncated meta descriptions** (posts 27, 77, 205, 307, 451, 552, 575, 590, 602, 626, 718) to ~150–158 characters ending naturally, no ellipsis. Only these 11 change. Final text and the editorial choices made are in plan §8.11: post 27's unsupported "1 hour away" replaced by the approved non-numeric wording; unverifiable "brownout-proof" and the "cheaper" comparison dropped; and, per HIL DEC-007, hard-coded capacities removed — post 205's approved "sleeps 5, 9, or 13" was wrong against the live inventory (Mickey sleeps 7/11/15), post 552's "9-pax" was a literal.
+3. **Accept the revised archive-title format** (`X – Haven in Lipa Blog`) on noindex archives.
+4. **Do not add Open Graph/Twitter metadata to noindex archives.**
+5. **Yoast stays installed but inactive; deleting it needs separate Owner approval.**
+6. **Monitoring continues** until `/wp-sitemap.xml` shows Success in Google Search Console and one clean crawl cycle completes (Analyst-proposed definition: 14 days to 2026-10-03, criteria in plan §8.11 — Owner may amend). A verification checkpoint is added for each of the six scheduled posts (IDs 763–768) after publication.
+
+### Reason
+The §8.10 advisories were the only open items after verification. The 11 descriptions were the documented ≤158-character trim of longer approved text (mid-sentence "…"); the archive title format is the documented Audit §3 fix and the archives are noindex; social tags on noindex archives add no search value.
+
+### Implications
+- Not changed and needing a separate Owner decision: post 75's live description contains "just 1 hour from the metro" (same class as SEO-DEC-023) plus a hard-coded "₱1,500/night" and "400 Mbps".
+- The paginated-title suffix `Page N of M` will change from 3 to 4 once more than 30 posts are published; that is expected.
+- The Analyst never publishes (SEO-DEC-010); each scheduled post publishes on the Owner's schedule and is then verified.
+
+### Supersedes
+Closes advisories 1–3 of plan §8.10 and the "Still open" list of SEO-DEC-026 except GSC "Success", the crawl cycle, Yoast deletion, and the six-post checkpoints.
+
+---
+
+## SEO-DEC-028 — Blog claim-durability rules applied to posts 75, 205 and 552; post 75 description rewritten; post 763 handled by checkpoint, not reopened
+
+Date: 2026-09-19
+Status: Decided; the WordPress edits are consolidated in one owner batch (plan §8.12) because WordPress write credentials were unavailable to the Analyst session
+Area: Content / Technical SEO
+
+### Decision
+1. **Post 75's meta description** is rewritten to 152 characters with a natural ending and no drive-time, price or speed figure (durable wording per SEO-DEC-023).
+2. **Remove or correct claims that are wrong, contradicted or likely to change; keep facts that are current and integral.** Wrong/contradicted (changed): "400 Mbps" (property pages say up to 340 Mbps) and "500+/400+ mbps"; post 75's excerpt price "P2,000" (current ₱1,500); "1 hour"/"about 1 hour"/"2 hours" travel times; post 205's "sleeps 5, 9, or 13", "8 to 13 guests", "families of 4 to 9"; post 552's "One hour from SLEX vs. 3+ hours". Correct but hard-coded HIL rates and third-party fares/meal prices in post 75 and the per-night prices in post 552's "Where to stay" list are made number-free (HIL DEC-007).
+3. **Retained on purpose:** the 5- and 9-guest capacities of Cozy 1BR and Spacious 2BR (current per `/api/properties.json`; the obsolete 5/9/13 set was Mickey's old configuration), Mickey's current 7/11/15 configurations and room-level bed counts, the "48 hours" notification window (policy), post 552's cost-per-head math and the heading "What 9 people actually need…" (the article's purpose; a one-sentence currency note is added), and post 552's "save 15–20% vs Airbnb" (a pricing/policy claim, needs an Owner decision).
+3a. **Headings, URLs, slugs and structure are preserved.** The one heading-level change is post 75's title and SEO title, from which the parenthetical "(400 Mbps WiFi + ₱1,500/night)" is removed.
+4. **Post 763** is neither reopened nor unscheduled: its schedule and accessibility wording are covered by owner batch C, with qualified-wording patterns for any statement that cannot be supported.
+
+### Reason
+The Owner asked for durable, non-contradicted copy without materially altering policy, pricing, property facts or publication status. The main-site feed is the source of truth for prices and capacities (DEC-007), so only figures that disagree with it, or that are unnecessary and volatile, were changed.
+
+### Implications
+- The same claim classes exist blog-wide (travel times in all 28 posts, prices in 27, capacity phrases in 25, Mbps in 10). A content-durability sweep is a separate, owner-approved work package; nothing beyond posts 75/205/552 was changed or scheduled for change here.
+- Verification of the batch is prepared and runs once the Owner reports it applied; if any verified stale output remains, LiteSpeed then the CDN are purged.
+
+### Supersedes
+Extends SEO-DEC-027 (item 2 covered only the 11 descriptions); does not supersede any earlier decision.

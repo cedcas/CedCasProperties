@@ -1,6 +1,7 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-17 (created earlier the same day — SEO/content governance
+> **Last updated:** 2026-09-19 end of day (§3, §7, §8, §19 only — `hil-seo`/Yoast cutover
+> executed and verified, `SEO-DEC-026`). Earlier stamp: 2026-09-17 (created earlier the same day — SEO/content governance
 > consolidation, see [DEC-018](../About%20HIL/HIL_DECISIONS.md) and
 > [content/seo/README.md](../content/seo/README.md) — then updated same day once the
 > Owner confirmed two items originally flagged as open/unverified: the Airbnb sibling
@@ -90,31 +91,50 @@
 ### Verified facts (as recorded in the migrated `SEO-DEC-019`–`SEO-DEC-025`, `content/seo/archive/SEO_DECISIONS.md`)
 - A custom `hil-seo` WordPress plugin is replacing Yoast, built and owned end-to-end by
   the SEO Analyst directly (no Web Work Stream handoff — `SEO-DEC-024`).
-- As of the last recorded status (2026-09-07): all 6 output modules (meta, title,
-  canonical, robots, schema, sitemap) are live via an Administrator-only cutover screen;
-  the 34-post metadata backfill and 18-post author reassignment are complete and verified;
-  a robots.txt defect (stale `Sitemap:` line) was found and fixed same-day, packaged as
-  `v1.1.1` (`content/seo/runs/090726/hil-seo-plugin.zip`), **pending Cedric's manual
-  re-upload** — not yet confirmed applied as of this migration.
-- **Yoast remains active throughout the entire cutover** — nothing above deactivates it.
+- **As of 2026-09-19 (evening): the cutover is complete and verified.** `hil-seo` **v1.1.5**
+  is the sole SEO output on `blog.haveninlipa.com`; all 6 modules are ON (switched on
+  2026-09-08); the 34-post metadata backfill and 18-post author reassignment (2026-09-07)
+  stand. Yoast SEO 28.4 is **installed but deactivated** (not deleted). Core `/wp-sitemap.xml`
+  serves 28 URLs; `/sitemap_index.xml` 301s to it; the virtual robots.txt (no physical file)
+  carries one `Sitemap: …/wp-sitemap.xml` line. Verified on bare URLs, 22:18 UTC — record in
+  `content/seo/runs/090726/HIL_SEO_Implementation_Plan.md` §8.7–8.9, decision `SEO-DEC-026`.
+  (The 2026-09-07 status — flags ON, v1.1.1 "pending re-upload" — was superseded: v1.1.1 was
+  never installed and could not have worked.)
+- **The blog homepage and `/page/N/` are described by the plugin** (v1.1.4+): title
+  `<site> - <tagline>` / `<site> - Page N of M - <tagline>`, clean self-canonical, description =
+  tagline, `og:*`/Twitter with the default image (Media Library ID 25, set on the HIL SEO
+  screen). That output stands down while Yoast is active.
+- **Two cache layers** sit in front of the blog: LiteSpeed and Hostinger's CDN (hPanel →
+  Websites → the `blog.haveninlipa.com` row → CDN → Flush cache). Purge LiteSpeed first, then
+  the CDN, after any change. LiteSpeed also caches 404s.
 
-### Approved sequence (durable, per `SEO-DEC-020`, `SEO-DEC-025`, and the project mandate)
-1. Upload `hil-seo` `v1.1.1`.
-2. Verify `robots.txt`'s `Sitemap:` line (cache-busted) reads `/wp-sitemap.xml`, no duplicate.
-3. Confirm the 301 from the retired Yoast sitemap URL (`/sitemap_index.xml`) in Redirection.
-4. GSC resubmission.
-5. Full cache-busted verification pass across all posts.
-6. LiteSpeed cache purge.
-7. Yoast deactivation — **last step, not yet reached**.
+### Sequence — **CORRECTED 2026-09-19 and EXECUTED the same day (`SEO-DEC-026`)**
+The original order (upload v1.1.1 → robots → 301 → GSC → verify → purge → deactivate Yoast) is retired: it produced a live `/wp-sitemap.xml` ⇄ `/sitemap_index.xml` redirect loop (Yoast redirects the former while its XML-sitemap feature is on), v1.1.1 was never installed (live readme: 1.1.0), and its robots fix could not work (Yoast hooks `robots_txt` at 99,999). Current order — a valid sitemap at every checkpoint; full detail, checks and rollback in `content/seo/runs/090726/HIL_SEO_Implementation_Plan.md` §8:
+1. Redirection: **disable** the `/sitemap_index.xml` rule.
+2. Upload `hil-seo` **v1.1.2**.
+3. Yoast → Settings → Site features → **XML sitemaps OFF**; verify `/wp-sitemap.xml` = 200 (else switch back ON).
+4. Redirection: **re-enable** the rule; verify one hop.
+5. LiteSpeed **Purge All**; verify one `Sitemap: …/wp-sitemap.xml` line in robots.txt.
+6. GSC: submit `/wp-sitemap.xml`.
+7. Analyst metadata fixes; full cache-busted verification pass.
+8. Yoast deactivation (never delete). **Executed 2026-09-19** — the first attempt failed
+   (homepage lost canonical/description/`og:*`) and was rolled back by reactivating Yoast only;
+   after v1.1.4 the second attempt passed. Steps 1–8 all done; purges of both cache layers were
+   added between steps and after each plugin change. Deletion is a separate later decision.
 
-### Deferred / not authorized by this migration
-- Steps 1–7 above. **This migration does not perform, advance, or verify any of them.**
-  Do not treat "the plugin is packaged" as "the fix is live," and do not deactivate Yoast
-  without independently confirming steps 1–6 first.
+### Deferred / not authorized
+- **Deleting Yoast.** Prerequisites: rollback window closed and one clean GSC crawl cycle;
+  the new sitemap shown as Success in GSC and the old entry removed; Yoast's settings exported;
+  and (longer term) `src/components/layout/Footer.tsx` reading `hil_focus_keyword` instead of
+  `_yoast_wpseo_focuskw` (works today because that meta survives deactivation).
+- Rollback stays available: reactivate Yoast (its XML-sitemaps setting is OFF, so the sitemap is
+  unaffected). Returning fully to Yoast's sitemap also needs XML sitemaps ON and the Redirection
+  rule disabled.
 
 ### Owner actions required
-- Re-upload `v1.1.1`, then execute the on-screen instructions in **WP Admin → HIL SEO**
-  for the remaining steps.
+- Confirm the new sitemap shows Success in GSC (first read: "Couldn't fetch", while stale caches
+  served a redirect; URL Inspection live test: available), then remove the old `sitemap_index.xml`
+  entry. Optional: Rich Results Test on `/` and one post (expect 0 critical errors).
 
 ---
 
@@ -188,7 +208,7 @@
   catching up, not a live regression, as of that status snapshot.
 
 ### Open items (not closed by this migration)
-- Robots.txt's `Sitemap:` line still needs post-`v1.1.1` verification (§3).
+- ~~Robots.txt's `Sitemap:` line still advertises `sitemap_index.xml`~~ — **resolved 2026-09-19**: virtual robots.txt now has one `Sitemap: …/wp-sitemap.xml` line (written by WordPress core once Yoast's XML-sitemaps feature is off; the plugin's v1.1.2+ filter is only a safety net).
 - 5 newly-discovered category archives pending a noindex decision as of the last recorded
   status — see archived `SEO_PROJECT_STATUS.md`.
 
@@ -198,8 +218,10 @@
 
 ### Verified facts
 - Redirection plugin is installed on the blog (superseding the 2026-08-15 finding that it
-  was absent) and is the mechanism used for the pending `/sitemap_index.xml` → `/wp-sitemap.xml`
-  redirect and the pending article #6 301.
+  was absent). Verified live 2026-09-19: two 301 rules — article #6 → `https://haveninlipa.com/staycation`
+  (correct; 0 posts link to it; the post is also set `noindex` so it stays out of the sitemap) and
+  `/sitemap_index.xml` → `/wp-sitemap.xml` (enabled; one hop to a 200 now that Yoast's sitemap
+  feature is off — it looped while that feature was on).
 - Main-site redirects follow build → repoint → redirect sequencing (`DEC-010`) —
   `/contact` → `/#contact` is a shipped example.
 
@@ -416,8 +438,9 @@
   circumstance this spec is aware of.
 
 ### Approval gates currently open
-1. `hil-seo` v1.1.1 upload → verification → GSC resubmission → cache purge → Yoast
-   deactivation (§3).
+1. `hil-seo`/Yoast cutover — **executed 2026-09-19 (`SEO-DEC-026`); gate stays open only for
+   GSC "Success" on the new sitemap and one clean crawl cycle**, after which Yoast deletion may be
+   considered (see §3 deferred list).
 2. Article #6 WordPress-side repoint + 301 (§2, §8).
 3. `stay_match_click` diagnosis (§13, §14).
 4. `main` branch protection (this section).
