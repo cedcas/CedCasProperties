@@ -33,6 +33,9 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+# SEO workspace secrets (blog WordPress credentials): real file never committed, placeholder template is
+content/seo/.env.seo
+!content/seo/.env.seo.example
 
 # vercel
 .vercel
