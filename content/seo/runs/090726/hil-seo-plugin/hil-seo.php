@@ -3,7 +3,7 @@
  * Plugin Name:       HIL SEO
  * Plugin URI:        https://haveninlipa.com
  * Description:       Custom SEO output and editorial workflow for the Haven in Lipa blog — meta description, Open Graph/Twitter cards, robots control, hand-authored schema, and an SEO-title override. Built to replace Yoast SEO's output, not its editorial UI conventions. See HIL_Custom_SEO_Plugin_Requirements.md.
- * Version:           1.1.1
+ * Version:           1.1.5
  * Requires at least: 6.5
  * Requires PHP:      7.4
  * Author:            Haven in Lipa SEO
@@ -33,7 +33,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'HIL_SEO_VERSION', '1.1.1' );
+define( 'HIL_SEO_VERSION', '1.1.5' );
 define( 'HIL_SEO_FILE', __FILE__ );
 define( 'HIL_SEO_DIR', plugin_dir_path( __FILE__ ) );
 

@@ -53,111 +53,220 @@ function hil_seo_sitemap_exclude_noindexed_posts( array $args ): array {
 add_filter( 'wp_sitemaps_posts_query_args', 'hil_seo_sitemap_exclude_noindexed_posts' );
 
 /**
- * Excludes noindexed terms (category/tag) from core's taxonomy sitemap.
+ * Keeps noindexed terms (category/tag) out of core's taxonomy sitemaps.
  *
- * Note: this is a secondary safeguard. The primary reason HIL's tag/category
- * archives don't need to appear in a sitemap at all is that a thin archive
- * page carries no unique content worth crawl priority in the first place —
- * this filter just makes sure the noindex policy and the sitemap agree, in
- * case core's taxonomy sitemap provider is ever enabled for a taxonomy where
- * it currently isn't.
+ * Every term archive defaults to `noindex, follow` (SEO-DEC-008, robots.php)
+ * unless a term is explicitly overridden to `index` via `hil_term_robots_index`,
+ * so only those overridden terms may appear in the sitemap.
+ *
+ * 1.1.3 fix: v1.0.0–1.1.2 hooked `wp_sitemaps_taxonomies_entries`, which is not a
+ * WordPress hook — the filter never ran, and core's sitemap listed all 8
+ * categories and 141 tags (found live 2026-09-19 when core's sitemap first
+ * served). The real hook is `wp_sitemaps_taxonomies_query_args`, which core
+ * applies to both the URL list and the page count, so a taxonomy with no
+ * qualifying terms drops out of the index and its sitemap URL returns 404
+ * (a registered-but-empty provider 404s; an unregistered one falls back to a 200
+ * soft page on this WordPress version, so the providers are left registered).
  *
  * @since 1.0.0
- * @param array<int, WP_Term> $terms    Terms provider is about to include.
- * @param string              $taxonomy Taxonomy name.
- * @return array<int, WP_Term>
+ * @since 1.1.3 Hook corrected.
+ * @param array<string, mixed> $args     WP_Term_Query args.
+ * @param string               $taxonomy Taxonomy name.
+ * @return array<string, mixed>
  */
-function hil_seo_sitemap_exclude_noindexed_terms( array $terms, string $taxonomy ): array {
+function hil_seo_sitemap_taxonomy_query_args( array $args, string $taxonomy ): array {
 	if ( ! hil_seo_cutover_enabled( 'sitemap' ) ) {
-		return $terms;
+		return $args;
 	}
 
-	return array_values(
-		array_filter(
-			$terms,
-			static function ( $term ) {
-				if ( ! ( $term instanceof WP_Term ) ) {
-					return true;
-				}
-
-				$override = (string) get_term_meta( $term->term_id, 'hil_term_robots_index', true );
-
-				// Terms default to noindex per SEO-DEC-008 (robots.php), so
-				// exclude from the sitemap unless explicitly overridden to index.
-				return 'index' === $override;
-			}
-		)
+	$meta_query         = isset( $args['meta_query'] ) && is_array( $args['meta_query'] ) ? $args['meta_query'] : array();
+	$meta_query[]       = array(
+		'key'     => 'hil_term_robots_index',
+		'value'   => 'index',
+		'compare' => '=',
 	);
+	$args['meta_query'] = $meta_query;
+
+	return $args;
 }
-add_filter( 'wp_sitemaps_taxonomies_entries', 'hil_seo_sitemap_exclude_noindexed_terms', 10, 2 );
+add_filter( 'wp_sitemaps_taxonomies_query_args', 'hil_seo_sitemap_taxonomy_query_args', 10, 2 );
 
 /**
- * Corrects the virtual robots.txt's Sitemap: line while Yoast is still active.
+ * Keeps the author archive out of core's sitemap.
  *
- * Found live 2026-09-07: no physical robots.txt file exists on this site
- * (confirmed via Yoast's own File Editor) — WordPress serves a virtual one
- * built by core's do_robots(), and Yoast hooks the `robots_txt` filter to
- * append its own block, including "Sitemap: https://.../sitemap_index.xml".
- * Enabling this plugin's sitemap module (SEO-DEC-020) makes core's
- * /wp-sitemap.xml the system of record, but Yoast's robots.txt output still
- * advertised its own retired URL — this closes that specific gap.
+ * Core registers a "users" sitemap provider (one entry per author with published
+ * posts) that Yoast never had — Yoast's author sitemap was 404 on this site.
+ * Every author archive here is `noindex, follow` (SEO-DEC-008; `/author/haven/`
+ * verified live 2026-09-19), so once core's sitemap replaces Yoast's that provider
+ * would publish a noindex URL in the sitemap.
  *
- * Deliberately a targeted string replacement, not an append: it finds the
- * exact "Sitemap: <yoast url>" line Yoast's own filter already produced and
- * rewrites only that line's URL. This is what "no duplicate sitemap lines"
- * means in practice — nothing is ever added, only the one existing line is
- * corrected, so there is no code path that could produce two Sitemap: lines.
- * Priority 999 guarantees this runs after Yoast's own robots_txt callback
- * (Yoast hooks at priority 10), regardless of load order between the two
- * plugins.
+ * The provider stays registered but its query is emptied (`include => [0]` matches
+ * no user), so it drops out of the index and `wp-sitemap-users-1.xml` returns a
+ * proper 404. 1.1.2 instead dropped the provider via `wp_sitemaps_add_provider`;
+ * on this site's WordPress (7.0.5) an unregistered sitemap type returns a 200 soft
+ * page rather than a 404 (verified live: `wp-sitemap-users-1.xml` and
+ * `wp-sitemap-foo-1.xml` both 200 text/html), so that approach was replaced.
  *
- * Scope, deliberately narrow: this only corrects the URL Yoast already
- * writes. It does not make this plugin the owner of robots.txt — that
- * remains Yoast's while Yoast is active. Full ownership of robots.txt
- * (needed once Yoast is eventually deactivated, since nothing else in
- * WordPress core adds a Sitemap: line on its own) is a separate step already
- * tracked in HIL_SEO_Implementation_Plan.md's post-cutover instructions —
- * not solved by this function.
+ * @since 1.1.2
+ * @since 1.1.3 Mechanism changed from dropping the provider to emptying its query.
+ * @param array<string, mixed> $args WP_User_Query args.
+ * @return array<string, mixed>
+ */
+function hil_seo_sitemap_users_query_args( array $args ): array {
+	if ( ! hil_seo_cutover_enabled( 'sitemap' ) ) {
+		return $args;
+	}
+
+	$args['include'] = array( 0 );
+
+	return $args;
+}
+add_filter( 'wp_sitemaps_users_query_args', 'hil_seo_sitemap_users_query_args' );
+
+/**
+ * Whether WordPress core is actually serving /wp-sitemap.xml right now.
  *
- * Automatically inert the moment the sitemap module is turned OFF, whether
- * by its own toggle or by Emergency Rollback (both go through
- * hil_seo_set_cutover_flag(), which this reads live on every request) — no
- * separate "undo" code path is needed, because this function only ever
- * transforms Yoast's output when the flag is on; when it's off, Yoast's
- * original robots.txt (still pointing at sitemap_index.xml) passes through
- * completely untouched.
+ * Yoast SEO switches core's sitemap off while its own XML-sitemap feature is
+ * enabled (confirmed live 2026-09-19: /wp-sitemap.xml returned 404 for a
+ * query-string request and a Yoast 301 for the bare URL). Anything that
+ * advertises /wp-sitemap.xml must first check this — advertising it while it
+ * redirects or 404s is what produced the 2026-09-19 sitemap loop.
+ *
+ * @since 1.1.2
+ * @return bool
+ */
+function hil_seo_core_sitemaps_enabled(): bool {
+	if ( ! function_exists( 'wp_sitemaps_get_server' ) ) {
+		return false;
+	}
+
+	$server = wp_sitemaps_get_server();
+
+	return is_object( $server ) && method_exists( $server, 'sitemaps_enabled' ) && (bool) $server->sitemaps_enabled();
+}
+
+/**
+ * Ensures the virtual robots.txt advertises core's sitemap exactly once — but
+ * only once core is actually serving it, and never while Yoast still owns the
+ * sitemap line.
+ *
+ * Corrects v1.1.1, whose premise was wrong on two counts (both verified against
+ * Yoast SEO 28.4's own source, 2026-09-19):
+ *  - Yoast's `robots_txt` callback runs at priority 99,999, not 10. v1.1.1's
+ *    priority-999 filter therefore ran BEFORE Yoast appended its block, so the
+ *    rewrite it described could never match anything.
+ *  - "Nothing else in WordPress core adds a Sitemap: line" is false: core adds
+ *    `Sitemap: <home>/wp-sitemap.xml` itself (priority 0) whenever its sitemaps
+ *    are enabled, and Yoast leaves that line alone (it only strips core's default
+ *    User-agent/Disallow lines).
+ * Rewriting Yoast's `sitemap_index.xml` line to `/wp-sitemap.xml` was also the
+ * wrong idea in principle: Yoast writes that line only while its XML-sitemap
+ * feature is on, and in that state core's sitemap is off and Yoast redirects
+ * /wp-sitemap.xml back to /sitemap_index.xml — so the rewrite would advertise a
+ * URL that redirects. That rewrite is removed.
+ *
+ * What this does now, in order, and only when the sitemap module is ON:
+ *  1. Core's sitemap must actually be enabled — otherwise leave the output alone.
+ *  2. If Yoast's `sitemap_index.xml` line is present, Yoast still owns sitemap
+ *     advertisement — leave the output alone.
+ *  3. Otherwise guarantee exactly one `Sitemap: <home>/wp-sitemap.xml` line:
+ *     append it if missing, drop repeats if duplicated. In the expected end
+ *     states (Yoast's XML feature off, or Yoast deactivated) core already wrote
+ *     that line, so this changes nothing — it is a safety net, not the mechanism.
+ *
+ * Priority PHP_INT_MAX so it sees the final output of every other callback,
+ * Yoast's 99,999 included. No physical robots.txt is ever created; this only
+ * transforms the virtual one, and is inert when the module is OFF or after
+ * Emergency Rollback (the flag is re-read on every request).
  *
  * @since 1.1.1
- * @param string $output Robots.txt content built so far (after Yoast's own filter has run).
+ * @since 1.1.2 Priority, premise and scope corrected; see above.
+ * @param string $output Robots.txt content built so far.
  * @param bool   $public Whether the site is set to discourage search engines.
  * @return string
  */
 function hil_seo_filter_robots_txt( string $output, bool $public ): string {
-	if ( ! hil_seo_cutover_enabled( 'sitemap' ) ) {
+	if ( ! hil_seo_cutover_enabled( 'sitemap' ) || ! hil_seo_core_sitemaps_enabled() ) {
 		return $output;
 	}
 
-	$yoast_sitemap_url = home_url( '/sitemap_index.xml' );
-	$core_sitemap_url  = home_url( '/wp-sitemap.xml' );
+	$core_url  = home_url( '/wp-sitemap.xml' );
+	$yoast_url = home_url( '/sitemap_index.xml' );
 
-	// Nothing to do if Yoast's line isn't present — e.g. Yoast has since been
-	// deactivated, or its sitemap module was already disabled independently.
-	// Returning unchanged here is the safe default in every case where this
-	// function's one specific assumption (Yoast wrote that exact line) no
-	// longer holds, rather than guessing at what to do instead.
-	if ( false === strpos( $output, $yoast_sitemap_url ) ) {
+	if ( false !== strpos( $output, $yoast_url ) ) {
 		return $output;
 	}
 
-	$corrected = preg_replace(
-		'/^Sitemap:\s*' . preg_quote( $yoast_sitemap_url, '/' ) . '\s*$/mi',
-		'Sitemap: ' . $core_sitemap_url,
-		$output
-	);
+	$line_pattern = '/^Sitemap:[ \t]*' . preg_quote( $core_url, '/' ) . '[ \t]*\r?$/mi';
+	$count        = preg_match_all( $line_pattern, $output );
 
-	// preg_replace() returns null on a regex engine error (not "no match" —
-	// that already returns the original string unchanged). Fall back to the
-	// unmodified output rather than risk serving a null/empty robots.txt.
-	return null !== $corrected ? $corrected : $output;
+	if ( false === $count ) {
+		return $output;
+	}
+
+	if ( 0 === $count ) {
+		return rtrim( $output ) . "\n\nSitemap: " . $core_url . "\n";
+	}
+
+	if ( $count > 1 ) {
+		$seen    = 0;
+		$deduped = preg_replace_callback(
+			$line_pattern,
+			static function ( array $match ) use ( &$seen ): string {
+				return 1 === ++$seen ? $match[0] : '';
+			},
+			$output
+		);
+
+		if ( null !== $deduped ) {
+			return $deduped;
+		}
+	}
+
+	return $output;
 }
-add_filter( 'robots_txt', 'hil_seo_filter_robots_txt', 999, 2 );
+add_filter( 'robots_txt', 'hil_seo_filter_robots_txt', PHP_INT_MAX, 2 );
+
+/**
+ * Read-only snapshot of the state that decides whether the sitemap transition can
+ * work: plugin version, cutover flags, whether core's sitemap is being served,
+ * and whether Yoast (and its XML-sitemap feature) is active. Shared by the
+ * Administrator screen and the REST route below so they can never disagree.
+ *
+ * @since 1.1.2
+ * @return array<string, mixed>
+ */
+function hil_seo_status_snapshot(): array {
+	$yoast_options = get_option( 'wpseo', array() );
+
+	return array(
+		'version'               => HIL_SEO_VERSION,
+		'flags'                 => hil_seo_get_cutover_flags(),
+		'core_sitemaps_enabled' => hil_seo_core_sitemaps_enabled(),
+		'yoast_active'          => defined( 'WPSEO_VERSION' ),
+		'yoast_version'         => defined( 'WPSEO_VERSION' ) ? WPSEO_VERSION : null,
+		'yoast_xml_sitemap'     => is_array( $yoast_options ) && ! empty( $yoast_options['enable_xml_sitemap'] ),
+		'default_social_image_id' => (int) get_option( 'hil_seo_default_social_image', 0 ),
+	);
+}
+
+/**
+ * Registers GET /hil-seo/v1/status (edit_posts, read-only — same ceiling as the
+ * existing preview and cutover-read routes). Deliberately a separate route:
+ * GET /cutover keeps returning the bare flags object existing tooling expects.
+ *
+ * @since 1.1.2
+ * @return void
+ */
+function hil_seo_register_status_route(): void {
+	register_rest_route(
+		'hil-seo/v1',
+		'/status',
+		array(
+			'methods'             => 'GET',
+			'callback'            => static fn() => rest_ensure_response( hil_seo_status_snapshot() ),
+			'permission_callback' => static fn() => current_user_can( 'edit_posts' ),
+		)
+	);
+}
+add_action( 'rest_api_init', 'hil_seo_register_status_route' );

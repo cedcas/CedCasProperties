@@ -130,6 +130,75 @@ function hil_seo_resolve_social_image( WP_Post $post ): string {
 }
 
 /**
+ * Default social image / logo URL: the attachment set on the HIL SEO screen
+ * (`hil_seo_default_social_image`), then the site icon. Empty when neither is set.
+ *
+ * @since 1.1.4
+ * @return string
+ */
+function hil_seo_default_social_image_url(): string {
+	$logo_id = (int) get_option( 'hil_seo_default_social_image', 0 );
+
+	if ( $logo_id ) {
+		$url = wp_get_attachment_image_url( $logo_id, 'full' );
+
+		if ( $url ) {
+			return (string) $url;
+		}
+	}
+
+	$icon_id = (int) get_option( 'site_icon', 0 );
+
+	if ( $icon_id ) {
+		$url = wp_get_attachment_image_url( $icon_id, 'full' );
+
+		if ( $url ) {
+			return (string) $url;
+		}
+	}
+
+	return '';
+}
+
+/**
+ * Description, Open Graph and Twitter tags for the blog index and /page/N/,
+ * matching what Yoast rendered before the cutover (description = site tagline,
+ * og:title = site name, site logo as image). Only runs while Yoast is not active
+ * (see hil_seo_is_blog_index()).
+ *
+ * @since 1.1.4
+ * @return void
+ */
+function hil_seo_print_blog_index_meta(): void {
+	$name        = hil_seo_blog_index_name();
+	$description = hil_seo_blog_index_tagline();
+	$url         = hil_seo_blog_index_canonical();
+
+	if ( '' !== $description ) {
+		printf( '<meta name="description" content="%s">' . "\n", esc_attr( $description ) );
+		printf( '<meta property="og:description" content="%s">' . "\n", esc_attr( $description ) );
+		printf( '<meta name="twitter:description" content="%s">' . "\n", esc_attr( $description ) );
+	}
+
+	printf( '<meta property="og:locale" content="%s">' . "\n", esc_attr( get_locale() ) );
+	printf( '<meta property="og:title" content="%s">' . "\n", esc_attr( $name ) );
+	printf( '<meta property="og:type" content="website">' . "\n" );
+	printf( '<meta property="og:url" content="%s">' . "\n", esc_url( $url ) );
+	printf( '<meta property="og:site_name" content="%s">' . "\n", esc_attr( $name ) );
+	printf( '<meta name="twitter:title" content="%s">' . "\n", esc_attr( $name ) );
+
+	$image = hil_seo_default_social_image_url();
+
+	if ( '' !== $image ) {
+		printf( '<meta property="og:image" content="%s">' . "\n", esc_url( $image ) );
+		printf( '<meta name="twitter:card" content="summary_large_image">' . "\n" );
+		printf( '<meta name="twitter:image" content="%s">' . "\n", esc_url( $image ) );
+	} else {
+		printf( '<meta name="twitter:card" content="summary">' . "\n" );
+	}
+}
+
+/**
  * Prints the description, Open Graph and Twitter card tags for the current
  * singular request.
  *
@@ -138,6 +207,11 @@ function hil_seo_resolve_social_image( WP_Post $post ): string {
  */
 function hil_seo_print_seo_meta(): void {
 	if ( ! hil_seo_cutover_enabled( 'meta' ) ) {
+		return;
+	}
+
+	if ( hil_seo_is_blog_index() ) {
+		hil_seo_print_blog_index_meta();
 		return;
 	}
 
@@ -159,6 +233,11 @@ function hil_seo_print_seo_meta(): void {
 		printf( '<meta name="description" content="%s">' . "\n", esc_attr( $description ) );
 		printf( '<meta property="og:description" content="%s">' . "\n", esc_attr( $description ) );
 		printf( '<meta name="twitter:description" content="%s">' . "\n", esc_attr( $description ) );
+	}
+
+	// Yoast prints og:locale itself; skip while it is active so it never doubles.
+	if ( ! defined( 'WPSEO_VERSION' ) ) {
+		printf( '<meta property="og:locale" content="%s">' . "\n", esc_attr( get_locale() ) );
 	}
 
 	printf( '<meta property="og:title" content="%s">' . "\n", esc_attr( $title ) );
