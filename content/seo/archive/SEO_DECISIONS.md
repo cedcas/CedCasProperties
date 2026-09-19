@@ -646,7 +646,7 @@ Closes advisories 1–3 of plan §8.10 and the "Still open" list of SEO-DEC-026 
 ## SEO-DEC-028 — Blog claim-durability rules applied to posts 75, 205 and 552; post 75 description rewritten; post 763 handled by checkpoint, not reopened
 
 Date: 2026-09-19
-Status: Decided; the WordPress edits are consolidated in one owner batch (plan §8.12) because WordPress write credentials were unavailable to the Analyst session
+Status: **Executed 2026-09-19** — WordPress REST access was restored the same day; edits applied and verified (plan §8.13). Extended by Owner instruction: the fixed "15–20%" savings claim was replaced with "compare the current direct-booking and platform totals" wherever it appeared in posts 75, 205 and 552, and post 763 was reviewed and qualified before publication with its schedule preserved.
 Area: Content / Technical SEO
 
 ### Decision

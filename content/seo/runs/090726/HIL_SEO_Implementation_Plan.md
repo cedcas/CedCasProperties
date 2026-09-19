@@ -225,7 +225,7 @@ Editorial choices made while shortening (Owner to note): post 27's approved text
 
 **Finding outside the approved 11 — NOT changed, needs an Owner decision:** post **75** (`work-from-lipa-the-affordable-remote-work-staycation…`) has a live description containing "just 1 hour from the metro" (same class as SEO-DEC-023) plus a hard-coded "₱1,500/night" and "400 Mbps" (pricing/speed facts owned by the Owner; the main site normalises pricing at render time, the blog does not).
 
-**Application status:** ☐ applied by Owner · ☐ verified live (bare + cache-busted; only these 11 descriptions and their derived `og:description`/`twitter:description` changed; the other 16 posts byte-identical) — *update this line when done.*
+**Application status:** ☑ 11 descriptions + post 75 applied by the Analyst via REST on 2026-09-19 after access was restored · ☑ verified live (bare + cache-busted; authenticated read-after-write 312/312, rendered 373/373; only the intended fields changed) — see §8.13.
 
 **Monitoring — definition of "one clean crawl cycle" (proposed by the Analyst; Owner may amend).** 14 calendar days from 2026-09-19 (to 2026-10-03), reviewed in the early-October Maintenance run. Clean means, on the blog property in GSC: (1) Sitemaps: `wp-sitemap.xml` = **Success**, discovered pages ≈ the published post count + homepage, no errors; the old `sitemap_index.xml` entry then removed; (2) Page indexing: zero "Submitted URL marked 'noindex'", zero "Submitted URL not found (404)", zero "Redirect error"/"Server error (5xx)"; expected and acceptable: article #6 "Page with redirect" and noindex archives "Excluded by 'noindex' tag"; (3) Enhancements: no new structured-data errors; (4) Crawl stats: no spike in 4xx/5xx on `blog.haveninlipa.com`; (5) blog clicks/impressions show no unexplained drop against the prior 28 days. Owner/Analyst record the result in the log below. Yoast may be considered for deletion only after this closes **and** the Owner separately approves.
 
@@ -233,9 +233,9 @@ Editorial choices made while shortening (Owner to note): post 27's approved text
 
 | ID | Slug | Scheduled (per 09-07) | Checkpoint result |
 |---|---|---|---|
-| 763 | senior-friendly-staycation-guide-lipa | 2026-09-21 08:08 | ☐ |
-| 764 | solo-travel-guide-lipa | 2026-09-28 08:00 | ☐ |
-| 765 | family-reunion-accommodation-lipa | 2026-10-05 08:00 | ☐ |
+| 763 | senior-friendly-staycation-guide-lipa | 2026-09-21 08:08 (confirmed via REST, `future`) | Pre-publication review **done 2026-09-19** (schedule preserved; 8 wording edits + meta description, §8.13). Post-publication check ☐ due within 2 h of 08:08 |
+| 764 | solo-travel-guide-lipa | 2026-09-28 08:00 (confirmed via REST, `future`) | Pre-publication: description rewritten 172→157 chars (§8.14). Post-publication check ☐ |
+| 765 | family-reunion-accommodation-lipa | 2026-10-05 08:00 (confirmed via REST, `future`) | Pre-publication: description rewritten 159→158 chars (§8.14). Post-publication check ☐ |
 | 766 | team-building-house-rentals-lipa | 2026-10-12 08:00 | ☐ |
 | 767 | wedding-guest-accommodation-lipa | 2026-10-19 08:00 | ☐ |
 | 768 | whole-house-rental-vs-hotel-lipa | 2026-10-26 08:00 | ☐ |
@@ -245,6 +245,8 @@ Per-post checkpoint — **before publication** (Analyst reads via `GET /wp-json/
 
 
 ### 8.12 Work package 2026-09-19: blog-claim durability, description rewrites and scheduled-post checkpoints — SEO-DEC-028
+
+> **UPDATE — executed.** WordPress REST write access was restored later the same day, and the Analyst applied and verified everything in this section without the owner batch; see **§8.13** for the record, the additions beyond this batch (fixed savings-percentage claim, post 763 review) and the verification evidence. The "pending" wording in the status table and batch below is kept as the record of intent.
 
 **Owner instruction:** complete end-to-end without further editorial approvals unless a change would materially alter policy, pricing, property facts or publication status. **WordPress write credentials were not available to the Analyst session** (the Analyst REST credential is held outside this workspace; the session was denied when it tried to locate it and did not work around that). Per the instruction, every task that does not need a WordPress write was completed, and every required edit is consolidated into the **single owner batch below**.
 
@@ -343,3 +345,66 @@ Per-post checkpoint — **before publication** (Analyst reads via `GET /wp-json/
 
 **After the batch:** tell the Analyst session "batch applied". It will run the prepared read-after-write and rendered verification (12 descriptions exact on bare and cache-busted URLs; only the intended posts and SEO fields changed versus the pre-change snapshot of all 27 posts; every Find string gone and every Replace string present in the rendered text; all headings, slugs and structure identical; only one added line each in posts 75 and 552; no Mbps/peso/hour residue in post 75; no obsolete 5/9/13 in post 205 while 7/11/15 remain; the sitemap still 28 URLs) and purge LiteSpeed then the CDN only if a verified stale copy remains.
 
+
+
+### 8.13 Execution record — WordPress edits applied and verified (2026-09-19, SEO-DEC-028)
+
+**Access.** WordPress REST write access was restored for the SEO Analyst account (WordPress user `haven`, id 3, role Editor). The Application Password is read from `content/seo/.env.seo` (gitignored, `chmod 600`, Dropbox-ignored) into the process environment and is never printed or written to any document. The client refused to run unless `WP_ALLOW_PUBLISH=false` and could only send `title`, `excerpt`, `content` and the two `hil_*` meta keys — never `status`, `date`, `slug` or `author`; after every write it checked those four were unchanged.
+
+**What was written (13 posts, one REST update each, 2026-09-19 23:36 UTC):** the 12 approved meta descriptions (§8.11 table + post 75); post 75 title, SEO title and excerpt; excerpts of posts 205 and 552; body corrections in posts 75, 205, 552; and post 763's review edits and a rewritten meta description. Body edits were made at the raw block-markup level (matching through `<em>`, `<strong>`, links and curly/straight quotes) so bold lead-ins, links, images and block structure are preserved.
+
+**Authoritative sources used for facts:** main-site `/api/properties.json` (capacities 5 / 9 / 7 / 11 / 15; every listing has Kitchen and Parking; Mickey listings are "2 Floor" properties) and `src/lib/faqs.ts` (Spacious 2BR has a loft reached by an internal staircase; parking is a garage plus street parking directly in front; the village is gated; B34 fiber up to 340 Mbps, B38 up to 520 Mbps). No authoritative fact conflicted with the approved corrections.
+
+**Corrections to earlier notes.** Post 205's "more than 500 mbps" was actually consistent with the FAQ (Mickey up to 520 Mbps); it was removed for durability, not because it was wrong. Post 75's "400 Mbps" contradicted the B34 listings (up to 340 Mbps). The 5 and 9 capacities of Cozy 1BR and Spacious 2BR are current and were preserved, as were Mickey's 7/11/15.
+
+**Additions beyond the §8.12 batch (Owner instruction: replace the unsupported "save 15–20% vs Airbnb" claim with durable wording; no fixed savings percentage).** The identical fixed-percentage claim was replaced wherever it appeared in the three audited posts, using "compare the current direct-booking and platform totals":
+
+| Post | Old | New |
+|---|---|---|
+| 552 | Book direct with host Melody and save 15–20% vs Airbnb — no platform fees. | Book direct with host Melody and compare the current direct-booking and platform totals before you decide. |
+| 552 | All direct-booking — save 15–20% vs Airbnb, and you’re messaging host Melody, not a call center: | All direct-booking — compare the current direct-booking and platform totals, and you're messaging host Melody, not a call center: |
+| 552 | remember the 14–20% service fee stacks on top. | remember the platform's service fee stacks on top. |
+| 552 | sleeps up to 15, from ₱6,500/night (bigger crew) | sleeps up to 15 (bigger crew) |
+| 552 | Booking direct saves you 15–20% — here’s why | Compare direct-booking and platform totals — here's how |
+| 75 | Lipa — it’s about 2 hours and costs around ₱238. JAM Liner from Buendia is another option at ₱150-200. | Lipa. JAM Liner from Buendia is another option. Travel times and fares vary, so check the operator's current schedule and rates. |
+| 75 | Booking direct saves you 15-20% — here’s why | Compare direct-booking and platform totals — here's how |
+| 205 | Book direct and save 15–20% vs. the OTAs. | Book direct and compare the current direct-booking and platform totals. |
+| 205 | There are no platform fees — just GCash, BPI InstaPay, or Stripe and direct rates that usually beat listing platforms by 15 to 20%. | There are no platform fees — just GCash, BPI InstaPay, or credit/debit card, and direct rates you can compare against listing platforms. |
+| 205 | The 15 to 20% you save by booking direct is real. | Comparing the current direct-booking total with the platform total is the best way to see your savings. |
+| 205 | Booking direct saves you 15–20% — here’s why | Compare direct-booking and platform totals — here's how |
+
+Also: post 205's payment sentence now says "credit/debit card" instead of "Stripe" (SEO-DEC-015); post 552's "14–20% service fee" now reads "the platform's service fee"; the post 75 "By bus" sentence was joined cleanly ("…headed to Lipa. JAM Liner from Buendia is another option. Travel times and fares vary…").
+
+**Post 763 — reviewed before publication; schedule preserved.** Status `future`, date `2026-09-21T08:08:00`, unchanged before and after every write (the other five scheduled posts, 764–768, are also unchanged: 2026-09-28, 10-05, 10-12, 10-19, 10-26, 08:00). Kept, because supported by authoritative property data: full kitchen in every listing; parking in every listing; the Owner-confirmed "what we're still confirming" disclaimer about step-free access and in-unit accessibility features. Changed:
+
+| Old | New |
+|---|---|
+| the rest of the family is fifteen feet away in the living room or kitchen | the rest of the family is nearby in the living room or kitchen |
+| Every unit has real furniture — beds and seating, not floor mats — and a full kitchen. | Every unit has real beds and seating and a full kitchen. |
+| Parking is on-site, close to the front door, at every configuration. | Every configuration has parking: a garage at the property, plus street parking directly in front. Ask Melody about the walk from the parking spot to the door. |
+| The neighborhood is flat, residential, and quiet — no hills to climb to get around the immediate area. | The neighborhood is a gated residential village. We haven’t documented the terrain around each house yet, so ask Melody if slopes or uneven ground matter for your family. Stairs: the Mickey in Lipa houses are two-floor properties, and the Spacious 2BR has a loft reached by an internal staircase. If stairs are a concern, message ahead and ask which configuration suits your family. |
+| the Cozy 1BR keeps everything on one simple footprint — fewer rooms to navigate, everything close together. | the Cozy 1BR keeps things simple — one bedroom, fewer rooms to navigate, everything close together. |
+| A short, flat walk around the neighborhood if anyone’s up for it — nothing that requires a plan. | A short walk around the neighborhood if anyone’s up for it — nothing that requires a plan. |
+| Casa de Segunda is a short, mostly flat, indoor heritage stop that doesn’t demand much walking and gives everyone something to talk about over dinner. | Casa de Segunda is an indoor heritage stop that gives everyone something to talk about over dinner. Check its current access and how much walking is involved before you go. |
+| isn’t just about saving the 15–20% platform fee, though that’s real. | isn’t just about price — compare the current direct-booking and platform totals for your dates. |
+
+Meta description rewritten from 194 characters (which would have published truncated with "…") to 157: *Planning a Lipa getaway with grandparents or older parents? See why a private house with a real kitchen and direct host contact suits multi-generation trips.* No certification, measurement or "fully accessible" language exists in the post. Left as is: the title and slug ("Senior-Friendly…"), which the article's own disclaimers qualify; general "quiet" and "resort vs house" statements (not accessibility claims).
+
+**Verification (all read-only after the writes).**
+
+- **Authenticated read-after-write, all 34 posts (28 published + 6 scheduled): 312/312.** Every post's slug, status, date and author unchanged; only the intended fields changed on each edited post; the 21 other posts (including scheduled 764–768) byte-identical in content, title, excerpt and meta; stored content equals the planned content byte-for-byte for the 4 posts with body edits (the server altered nothing); all headings, images and link URLs identical; block markers balanced (+1 paragraph block each in posts 75 and 552). (Two checks initially failed because my expected block delta was mis-specified as 0 or 2 instead of 0 or 1; corrected, no site defect.)
+- **Rendered public output, bare and cache-busted, 27 published posts: 373/373.** All 12 descriptions (and `og:description`, `twitter:description`) equal the approved text; exactly one title/description/canonical/JSON-LD per post; no Yoast markup; bare output identical to cache-busted on all 27 (no stale cache); the only rendered fields that differ from the pre-change snapshot are the description trio on the 12 posts, the derived `BlogPosting.description` in their JSON-LD, and for post 75 the title/`og:title`/`twitter:title`, JSON-LD headline and breadcrumb name (two checks initially failed only because my spec omitted those derived JSON-LD fields and treated an appended sentence as a replaced one; both verified key-by-key and corrected). Post 75 has no Mbps, peso or hour figure left; posts 75/205/552 contain no fixed savings percentage; 205 keeps 7/11/15 and has no 5/9/13, 8-to-13, 4-to-9, Mbps or "Stripe"; 552 keeps 5/7/9/11/15, the cost-per-head math and no per-night list prices; post 763 is still not public (404).
+- **Site-wide sweep:** homepage, pagination, noindex archives, sitemaps (28 URLs) and robots.txt unchanged.
+- **Cache:** no stale output was found, so neither LiteSpeed nor the CDN was purged (WordPress/LiteSpeed refreshed the edited pages on save).
+
+**Left unchanged, for the record:** post 205's "half the price" comparison with a hotel ballroom; post 75's "booking direct instead of Airbnb is cheaper" sentence; post 205's "no platform fees" statement; post 763's title; SEO titles longer than 60–65 characters (identical to Yoast's originals). The blog-wide backlog of fixed prices, drive times and capacity phrases in other posts remains a separate sweep.
+
+**Monitoring through 2026-10-03.** (1) GSC: `wp-sitemap.xml` Success, then remove the old `sitemap_index.xml` entry; (2) crawl-cycle criteria in §8.11 reviewed at the early-October Maintenance run; (3) **post 763 publishes 2026-09-21 08:08** — run the post-publication checkpoint within 2 hours (bare and cache-busted: description 157 chars, one canonical/JSON-LD, no Yoast, in the sitemap, homepage still correct); the `Page N of M` suffix will move from 3 to 4 once the published count passes 30; (4) checkpoints for 764 (09-28), 765 (10-05), 766 (10-12), 767 (10-19), 768 (10-26) as each publishes; (5) Yoast stays installed and inactive; deletion needs separate Owner approval; (6) optional Rich Results Test on `/` and one post.
+
+
+### 8.14 Addendum (2026-09-19, later): Analyst reads, scheduled-post previews and two more descriptions
+
+- **Module flags and plugin status (authenticated, `GET /hil-seo/v1/cutover` and `/status`):** all six flags ON (`meta`, `title`, `canonical`, `robots`, `schema`, `sitemap`); plugin `1.1.5`; core sitemap served `true`; Yoast active `false` (installed, inactive), Yoast XML sitemaps `false`; default social image ID `25`. This closes the earlier "authenticated read of the flags" item.
+- **Scheduled posts 763–768, plugin preview route (`GET /hil-seo/v1/preview/<id>`):** all six are `index, follow` and schedule-preserved (763 2026-09-21 08:08; 764 09-28; 765 10-05; 766 10-12; 767 10-19; 768 10-26, all 08:00). The preview canonical reads `https://blog.haveninlipa.com/?p=<id>` **because scheduled posts have no permalink yet; it becomes the clean permalink at publication — confirm that in each post's post-publication checkpoint.**
+- **Two more truncated descriptions fixed before publication (meta-only, schedule untouched, same class as the 11):** post 764 (172 chars → 157) *Traveling alone to Lipa? Here’s the honest case for a whole house over a hotel room: privacy, a kitchen, and quiet for travelers who want more than one room.* and post 765 (159 → 158, "houses" → "homes") *Planning a family reunion in Lipa? See how our homes fit three generations under one roof, separate sleeping zones, shared kitchen, up to 24 across two homes.* Posts 766, 767 and 768 already stored 155–157 characters with no drive-time, price, speed or percentage claim.
+- **Gotcha:** authenticated REST GETs (including the plugin preview) can be served from cache for an identical URL; always add a cache-busting query string when verifying read-after-write. The read-after-write was re-run that way over all 34 posts: **312/312**.

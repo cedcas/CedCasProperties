@@ -61,6 +61,20 @@ search queries, click/impression counts, post metadata, category/tag/author stat
 credentials or guest PII. If a future export contains anything more sensitive, keep the
 original outside Git and add only a sanitized inventory or reference here instead.
 
+### SEO secrets file
+
+The blog's WordPress credentials live in **`content/seo/.env.seo`** — gitignored
+(`.gitignore`), `chmod 600`, and flagged `com.dropbox.ignored` so Dropbox does not sync it
+(this repo sits inside Dropbox, and the governance rule is that WordPress Application
+Passwords are not held in Dropbox). The tracked placeholder template is
+`content/seo/.env.seo.example`. Variables (names only, never values in docs or chat):
+`HIL_WP_URL`, `WP_APPLICATION_PASSWORD_NAME`, `WP_APPLICATION_PASSWORD` (Editor account — edits, never publishes),
+`WP_ALLOW_PUBLISH` (must stay `false`, SEO-DEC-009/010). The login is the documented WordPress user `haven` (id 3);
+`HIL_WP_USER` may hold it but is not required by the client. Load with
+`set -a; source content/seo/.env.seo; set +a`. After editing the file, check the Dropbox flag
+survived: `xattr -l content/seo/.env.seo` should list `com.dropbox.ignored: 1` (some editors
+replace the file and drop the flag; re-apply with `xattr -w com.dropbox.ignored 1 content/seo/.env.seo`).
+
 ## Evidence vs. plans vs. drafts vs. published material
 
 - **Evidence** (`runs/`, `research/`, `evidence/`, `analytics/`) — what was observed or
