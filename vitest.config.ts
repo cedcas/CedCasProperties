@@ -33,6 +33,14 @@ export default defineConfig({
       {
         resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
         test: {
+          name: "tz-utc",
+          include: ["src/**/*.test.ts"],
+          env: { TZ: "UTC" }, // the Vercel server runtime — where local time and UTC coincide
+        },
+      },
+      {
+        resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+        test: {
           name: "tz-manila",
           include: ["src/**/*.test.ts"],
           env: { TZ: "Asia/Manila" }, // UTC+8 — ahead of UTC, where dates shift forwards

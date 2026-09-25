@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { scopeAppliesToProperty } from "@/lib/promo";
+import { formatStayRangeShort } from "@/lib/dates";
 
 type Channel = "email" | "sms";
 
@@ -43,10 +44,6 @@ type QuickReply = {
   channel: Channel;
   isActive: boolean;
 };
-
-function fmtShortDate(d: string | Date): string {
-  return new Date(d).toLocaleDateString("en-PH", { month: "numeric", day: "numeric" });
-}
 
 function fmtTime(d: string | Date): string {
   return new Date(d).toLocaleString("en-PH", {
@@ -195,7 +192,7 @@ export default function ThreadDetail({ bookingId }: { bookingId: number }) {
           <i className="fa-solid fa-chevron-left text-[10px]" /> Back to Messages
         </Link>
         <h1 className="font-serif font-semibold text-charcoal text-[1.5rem] truncate">
-          {firstName(booking.guestName)}, {booking.property.type}, {fmtShortDate(booking.checkIn)}–{fmtShortDate(booking.checkOut)}
+          {firstName(booking.guestName)}, {booking.property.type}, {formatStayRangeShort(booking.checkIn, booking.checkOut)}
         </h1>
         <div className="text-[13px] text-charcoal/55 mt-1 flex items-center gap-2 flex-wrap">
           <span>{booking.guestName}</span>

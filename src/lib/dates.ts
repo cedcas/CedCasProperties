@@ -24,6 +24,18 @@ export function formatStayDate(
   return date.toLocaleDateString("en-PH", { timeZone: "UTC", ...opts });
 }
 
+/** Terse `M/D` presentation used by the Guest Messages thread list and thread header. */
+const SHORT_STAY_DATE_OPTS: Intl.DateTimeFormatOptions = { month: "numeric", day: "numeric" };
+
+/**
+ * `9/25–9/27`-style stay range for the Guest Messages thread title. Both ends are calendar
+ * dates, so they go through {@link formatStayDate} (UTC) — never the viewer's local zone.
+ * Message timestamps (`sentAt` / `lastSentAt`) are real instants and must NOT use this.
+ */
+export function formatStayRangeShort(checkIn: string | Date, checkOut: string | Date): string {
+  return `${formatStayDate(checkIn, SHORT_STAY_DATE_OPTS)}–${formatStayDate(checkOut, SHORT_STAY_DATE_OPTS)}`;
+}
+
 /**
  * ── UTC calendar-date helpers ──────────────────────────────────────────────
  *
