@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { formatStayRangeShort } from "@/lib/dates";
 
 type Thread = {
   bookingId: number;
@@ -23,10 +24,6 @@ const PAGE_SIZE = 10;
 
 function firstName(full: string): string {
   return full.trim().split(/\s+/)[0] ?? full;
-}
-
-function shortDate(d: string | Date): string {
-  return new Date(d).toLocaleDateString("en-PH", { month: "numeric", day: "numeric" });
 }
 
 function relTime(d: string | Date): string {
@@ -164,7 +161,7 @@ export default function GuestMessageThreads() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-3 mb-0.5">
                   <div className="font-semibold text-charcoal text-[14.5px] truncate">
-                    {firstName(t.guestName)}, {t.property.type}, {shortDate(t.checkIn)}–{shortDate(t.checkOut)}
+                    {firstName(t.guestName)}, {t.property.type}, {formatStayRangeShort(t.checkIn, t.checkOut)}
                   </div>
                   <div className="text-[11px] text-charcoal/40 flex-shrink-0">{relTime(t.lastSentAt)}</div>
                 </div>

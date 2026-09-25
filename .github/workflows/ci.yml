@@ -63,7 +63,7 @@ jobs:
         run: npx prisma generate
         env:
           DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
-      # Runs the suite twice, under TZ=America/Chicago and TZ=Asia/Manila, so a
+      # Runs the suite three times, under TZ=America/Chicago, Asia/Manila and UTC, so a
       # local-time date bug cannot pass by virtue of the runner being on UTC.
       - run: npm test
 
