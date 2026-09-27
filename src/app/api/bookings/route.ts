@@ -1,17 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createMailer, FROM_ADDRESS } from "@/lib/email";
-import { getDailyRates, sumDailyRates, calcStripeFee, calcExtraGuestFee, STRIPE_FEE_RATE } from "@/lib/pricing";
+import Stripe from "stripe";
+import { STRIPE_FEE_RATE } from "@/lib/pricing";
+import { computeBookingQuote } from "@/lib/booking-quote";
+import { toStripeAmount, verifyPaymentIntent, bookingIntentMetadata } from "@/lib/stripe-payment";
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
-import { codeAppliesToProperty } from "@/lib/promo";
-import { formatStayDate, toUtcMidnight } from "@/lib/dates";
+import { formatStayDate } from "@/lib/dates";
 import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
 
 export async function POST(req: NextRequest) {
+  // Client-sent totalPrice / nightlyTotal / discountAmount are deliberately NOT read:
+  // every peso is recomputed by computeBookingQuote below.
   const {
     propertyId,
     guestName,
@@ -20,10 +24,8 @@ export async function POST(req: NextRequest) {
     checkIn,
     checkOut,
     guests,
-    totalPrice,
-    nightlyTotal: clientNightlyTotal,
     paymentMethod,
-    stripePaymentIntentId,
+    stripePaymentIntentId: rawStripePaymentIntentId,
     discountCode: rawDiscountCode,
     notes,
   } = await req.json();
@@ -38,59 +40,34 @@ export async function POST(req: NextRequest) {
   }
   const guestPhoneE164 = normalizedPhone.e164;
 
-  // Stay dates are calendar dates anchored at UTC midnight — see src/lib/dates.ts.
-  const checkInDate  = toUtcMidnight(checkIn);
-  const checkOutDate = toUtcMidnight(checkOut);
-
-  if (isNaN(checkInDate.getTime()) || isNaN(checkOutDate.getTime()) || checkOutDate <= checkInDate) {
-    return NextResponse.json({ error: "Invalid check-in / check-out dates" }, { status: 400 });
-  }
-
-  // ── Property lookup ───────────────────────────────────────────────────────
-  const property = await prisma.property.findUnique({
-    where: { id: Number(propertyId) },
-    select: {
-      name: true,
-      pricePerNight: true,
-      maxGuests: true,
-      includedGuests: true,
-      extraGuestFeePerNight: true,
-      rates: { select: { rateType: true } },
-      // Overlapping bookings and the external feed are no longer selected here —
-      // availability is resolved by src/lib/availability.ts below.
-    },
+  // ── Server-side quote ─────────────────────────────────────────────────────
+  // Date validation, property lookup, capacity/pricing guards, promo and every fee
+  // live in src/lib/booking-quote.ts — the same computation that priced the Stripe
+  // PaymentIntent, so the two can be compared exactly.
+  const quoteResult = await computeBookingQuote({
+    propertyId,
+    checkIn,
+    checkOut,
+    guests,
+    discountCode: rawDiscountCode,
+    paymentMethod,
   });
-
-  if (!property) return NextResponse.json({ error: "Property not found" }, { status: 404 });
-
-  // ── Guest capacity guard ────────────────────────────────────────────────────
-  // The booking form caps the guest dropdown at maxGuests, but never trust the client:
-  // reject anything over capacity (or a non-positive count) server-side.
-  const guestCount = Number(guests) || 1;
-  if (guestCount < 1 || guestCount > property.maxGuests) {
-    return NextResponse.json(
-      { error: `This property accommodates up to ${property.maxGuests} guest${property.maxGuests !== 1 ? "s" : ""}.` },
-      { status: 400 }
-    );
+  if (!quoteResult.ok) {
+    return NextResponse.json({ error: quoteResult.error }, { status: quoteResult.status });
   }
-
-  // ── Pricing guard ──────────────────────────────────────────────────────────
-  // Never let an unpriced property be booked (would otherwise charge ₱0).
-  if (Number(property.pricePerNight) <= 0) {
-    return NextResponse.json({ error: "This property isn't available for booking yet — pricing hasn't been set up." }, { status: 400 });
-  }
-  // Weekend rate is required: block a stay that includes a Fri/Sat when no weekend rate exists.
-  const hasWeekendRate = property.rates.some((r) => r.rateType === "weekend");
-  if (!hasWeekendRate) {
-    let stayHasWeekend = false;
-    for (const d = new Date(checkInDate); d < checkOutDate; d.setDate(d.getDate() + 1)) {
-      const dow = d.getDay();
-      if (dow === 5 || dow === 6) { stayHasWeekend = true; break; }
-    }
-    if (stayHasWeekend) {
-      return NextResponse.json({ error: "Weekend pricing for these dates isn't available yet. Please contact us or choose different dates." }, { status: 400 });
-    }
-  }
+  const {
+    property,
+    checkInDate,
+    checkOutDate,
+    guestCount,
+    dailyRates,
+    nightlyTotal: serverNightlyTotal,
+    extraGuestFee,
+    discountCode,
+    discountAmount,
+    stripeFee,
+    total: computedTotal,
+  } = quoteResult.quote;
 
   // ── Availability enforcement ─────────────────────────────────────────────
   // Single source of truth (src/lib/availability.ts): HIL bookings in a blocking status,
@@ -118,52 +95,66 @@ export async function POST(req: NextRequest) {
     throw err;
   }
 
-  // ── Discount code validation ──────────────────────────────────────────────
-  let discountCode: string | null = null;
-  let discountAmount: number = 0;
+  // ── Stripe payment verification ──────────────────────────────────────────
+  // A card booking is auto-confirmed, so the PaymentIntent id from the browser is only
+  // a claim: retrieve it with the secret key and require that it succeeded, in PHP, for
+  // exactly the server-computed total, and that it was created for THIS stay.
+  // GCash/BPI never get here — they stay "pending" for manual admin verification, and
+  // any intent id they send is dropped so it can't be stored against the booking.
+  const isStripe = paymentMethod === "stripe";
+  let stripePaymentIntentId: string | null = null;
 
-  if (rawDiscountCode) {
-    const codeUpper = rawDiscountCode.trim().toUpperCase();
-    const discount = await prisma.discountCode.findUnique({
-      where: { code: codeUpper },
-    });
-
-    if (discount && discount.isActive && codeAppliesToProperty(discount.propertyIds, Number(propertyId))) {
-      if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
-        const nightlyBase = clientNightlyTotal ?? parseFloat(totalPrice);
-        if (discount.type === "percentage") {
-          discountAmount = Math.round(nightlyBase * (Number(discount.value) / 100) * 100) / 100;
-        } else {
-          discountAmount = Math.min(Number(discount.value), nightlyBase);
-        }
-        discountCode = codeUpper;
-      }
+  if (isStripe) {
+    if (typeof rawStripePaymentIntentId !== "string" || !rawStripePaymentIntentId) {
+      return NextResponse.json({ error: "Missing payment reference" }, { status: 400 });
     }
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (!secretKey) {
+      return NextResponse.json({ error: "Card payments are unavailable." }, { status: 503 });
+    }
+
+    let pi: Stripe.PaymentIntent;
+    try {
+      pi = await new Stripe(secretKey).paymentIntents.retrieve(rawStripePaymentIntentId);
+    } catch {
+      return NextResponse.json({ error: "Could not verify payment" }, { status: 400 });
+    }
+
+    const expectedAmount = toStripeAmount(computedTotal);
+    const verification = verifyPaymentIntent(pi, {
+      amount: expectedAmount,
+      metadata: bookingIntentMetadata({
+        propertyId: Number(propertyId),
+        checkIn: checkInDate,
+        checkOut: checkOutDate,
+        guests: guestCount,
+        discountCode,
+        amount: expectedAmount,
+      }),
+    });
+    if (!verification.ok) {
+      console.error("[bookings] Stripe verification failed:", pi.id, verification.error);
+      return NextResponse.json({ error: verification.error }, { status: verification.status });
+    }
+
+    // Reuse protection: one PaymentIntent pays for one booking. Residual race: two
+    // concurrent requests carrying the same intent can both pass this check before
+    // either inserts — only a unique constraint on Booking.stripePaymentIntentId can
+    // close that fully (schema follow-up, intentionally not part of this change).
+    const existing = await prisma.booking.findFirst({
+      where: { stripePaymentIntentId: pi.id },
+      select: { id: true },
+    });
+    if (existing) {
+      return NextResponse.json({ error: "This payment has already been used for a booking." }, { status: 409 });
+    }
+
+    stripePaymentIntentId = pi.id;
   }
 
-  // ── Compute server-side pricing ──────────────────────────────────────────
-  const dailyRates = await getDailyRates(
-    Number(propertyId),
-    checkInDate,
-    checkOutDate,
-    Number(property.pricePerNight)
-  );
-  const serverNightlyTotal = sumDailyRates(dailyRates);
-  // Extra-guest fee — recomputed from the property's own fields (never trust the client total).
-  // Promo discounts the nightly base only; the fee is added on top, then Stripe's 6% on the full amount.
-  const extraGuestFee = calcExtraGuestFee(
-    guestCount,
-    property.includedGuests,
-    Number(property.extraGuestFeePerNight),
-    dailyRates.length
-  );
-  const chargeBeforeStripe = serverNightlyTotal + extraGuestFee - discountAmount;
-  const stripeFee = paymentMethod === "stripe" ? calcStripeFee(chargeBeforeStripe) : 0;
-  const computedTotal = chargeBeforeStripe + stripeFee;
-
   // ── Save booking ──────────────────────────────────────────────────────────
-  // Stripe payments with a successful PaymentIntent are auto-confirmed
-  const isStripeConfirmed = paymentMethod === "stripe" && stripePaymentIntentId;
+  // Only a verified Stripe payment is auto-confirmed.
+  const isStripeConfirmed = isStripe && stripePaymentIntentId !== null;
 
   const booking = await prisma.booking.create({
     data: {
@@ -181,7 +172,7 @@ export async function POST(req: NextRequest) {
       discountCode: discountCode || null,
       discountAmount: discountAmount > 0 ? discountAmount : null,
       paymentMethod: paymentMethod || null,
-      stripePaymentIntentId: stripePaymentIntentId || null,
+      stripePaymentIntentId,
       status:    isStripeConfirmed ? "confirmed" : "pending",
       notes:     notes || null,
     },
