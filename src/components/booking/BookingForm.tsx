@@ -294,6 +294,16 @@ export default function BookingForm({
 
   const todayStr = new Date().toISOString().split("T")[0];
 
+  // What the card is for — never how much. The server prices the stay itself and
+  // stamps the intent with these details, which /api/bookings then verifies.
+  const paymentIntentRequest = {
+    propertyId,
+    checkIn: form.checkIn,
+    checkOut: form.checkOut,
+    guests: Number(form.guests) || 1,
+    discountCode: appliedDiscount?.code ?? null,
+  };
+
   // Clear Stripe client secret when switching away from Stripe
   useEffect(() => {
     if (paymentMethod !== "stripe") {
@@ -313,15 +323,7 @@ export default function BookingForm({
     fetch("/api/stripe/payment-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        amount: total,
-        metadata: {
-          propertyId: String(propertyId),
-          guestName: form.guestName,
-          checkIn: form.checkIn,
-          checkOut: form.checkOut,
-        },
-      }),
+      body: JSON.stringify(paymentIntentRequest),
     })
       .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
       .then(({ ok, data }) => {
@@ -410,15 +412,7 @@ export default function BookingForm({
         const res = await fetch("/api/stripe/payment-intent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            amount: total,
-            metadata: {
-              propertyId: String(propertyId),
-              guestName: form.guestName,
-              checkIn: form.checkIn,
-              checkOut: form.checkOut,
-            },
-          }),
+          body: JSON.stringify(paymentIntentRequest),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Payment setup failed");
@@ -451,12 +445,9 @@ export default function BookingForm({
           ...form,
           // Send a clean E.164 number so the server parses it unambiguously (any country).
           guestPhone: parsePhoneNumberFromString(form.guestPhone, phoneCountry)?.number ?? form.guestPhone,
-          totalPrice: total,
-          nightlyTotal: computedNightlyTotal,
           paymentMethod,
           stripePaymentIntentId: overridePaymentIntentId || stripePaymentIntentId || null,
           discountCode: appliedDiscount?.code || null,
-          discountAmount: discountAmount || null,
         }),
       });
       if (!res.ok) {
@@ -535,7 +526,13 @@ export default function BookingForm({
     return (
       <div className="max-w-lg mx-auto">
         {/* Back */}
-        <button onClick={() => setStep("form")} className="flex items-center gap-2 text-[13px] text-charcoal/45 hover:text-forest transition-colors mb-6">
+        <button onClick={() => {
+          // Going back lets the guest change dates/guests/promo; drop the intent so a
+          // stale one (priced for the old details) can never be confirmed.
+          setStripeClientSecret(null);
+          setStripePaymentIntentId(null);
+          setStep("form");
+        }} className="flex items-center gap-2 text-[13px] text-charcoal/45 hover:text-forest transition-colors mb-6">
           <i className="fa-solid fa-arrow-left text-[11px]" /> Back to details
         </button>
 

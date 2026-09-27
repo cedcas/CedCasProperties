@@ -5,6 +5,7 @@ import { createMailer, FROM_ADDRESS } from "@/lib/email";
 import { sendGuestMessage } from "@/lib/guestMessages";
 import { calcStripeFee, STRIPE_FEE_RATE } from "@/lib/pricing";
 import { logAction, getIpFromRequest } from "@/lib/log";
+import { toStripeAmount, verifyPaymentIntent, chargeIntentMetadata } from "@/lib/stripe-payment";
 
 const peso = (n: number) => `₱${Number(n).toLocaleString("en-PH", { maximumFractionDigits: 2 })}`;
 const ADMIN_EMAIL = "customerservice@haveninlipa.com";
@@ -48,11 +49,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tok
     } catch {
       return NextResponse.json({ error: "Could not verify payment" }, { status: 400 });
     }
-    if (pi.status !== "succeeded") {
-      return NextResponse.json({ error: "Payment was not completed." }, { status: 400 });
+    // Status alone isn't enough: the intent must be for exactly this charge's server-computed
+    // card total, in PHP, and minted for this charge — otherwise any succeeded intent
+    // (e.g. a ₱1 one, or one that already paid another charge) could mark this paid.
+    const stripeFee = calcStripeFee(amount);
+    const expectedAmount = toStripeAmount(amount + stripeFee);
+    const verification = verifyPaymentIntent(pi, {
+      amount: expectedAmount,
+      metadata: chargeIntentMetadata({ chargeId: charge.id, token, amount: expectedAmount }),
+    });
+    if (!verification.ok) {
+      console.error("[charges] Stripe verification failed:", pi.id, verification.error);
+      return NextResponse.json({ error: verification.error }, { status: verification.status });
+    }
+    const alreadyUsed = await prisma.additionalCharge.findFirst({
+      where: { stripePaymentIntentId: paymentIntentId, id: { not: charge.id } },
+      select: { id: true },
+    });
+    if (alreadyUsed) {
+      return NextResponse.json({ error: "This payment has already been used." }, { status: 409 });
     }
 
-    const stripeFee = calcStripeFee(amount);
     const updated = await prisma.additionalCharge.update({
       where: { id: charge.id },
       data: {
