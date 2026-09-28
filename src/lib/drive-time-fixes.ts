@@ -4,10 +4,11 @@
 // SM City Lipa about 7 km / about 20 minutes by car, Casa Marikit about 10 km /
 // about 30 minutes by car, both varying with traffic.
 //
-// Callers: scripts/fix-property-content.ts (CLI, second pass after the
-// Maculot/Mbps/parking pass) and the TEMPORARY DEC-012 route
-// src/app/api/admin/dev/fix-drive-times/route.ts. Both do the Prisma I/O; this
-// module has no Prisma or database access so it can be unit tested offline.
+// Caller: scripts/fix-property-content.ts (CLI, second pass after the
+// Maculot/Mbps/parking pass), which does the Prisma I/O; this module has no
+// Prisma or database access so it can be unit tested offline. (The TEMPORARY
+// DEC-012 route /api/admin/dev/fix-drive-times that also used it ran once on
+// production 2026-09-28 and was then removed — see DEC-016.)
 //
 // Unlike the Maculot pass (whole-field overwrite from the seed modules), this
 // pass makes TARGETED replacements: each rule below swaps one exact old
@@ -434,30 +435,4 @@ export function planDriveTimeFixes(rows: PropertyContentRow[]): DriveTimePlan {
   }
 
   return { changes, updates, planHash: computePlanHash(changes) };
-}
-
-// ── Temporary-route POST gate (pure, so it's testable without a DB) ────────
-export const DRIVE_TIME_CONFIRM = "APPLY-DRIVE-TIMES";
-
-export type ApplyGateResult = { ok: true } | { ok: false; status: 400 | 409; error: string };
-
-export function checkApplyRequest(body: unknown, currentPlanHash: string): ApplyGateResult {
-  if (!body || typeof body !== "object") {
-    return { ok: false, status: 400, error: `JSON body required: {"confirm":"${DRIVE_TIME_CONFIRM}","planHash":"<from GET>"}` };
-  }
-  const { confirm, planHash } = body as { confirm?: unknown; planHash?: unknown };
-  if (confirm !== DRIVE_TIME_CONFIRM) {
-    return { ok: false, status: 400, error: `Missing or wrong confirm — expected "${DRIVE_TIME_CONFIRM}".` };
-  }
-  if (typeof planHash !== "string" || planHash.length === 0) {
-    return { ok: false, status: 400, error: "Missing planHash — run GET first and pass its planHash." };
-  }
-  if (planHash !== currentPlanHash) {
-    return {
-      ok: false,
-      status: 409,
-      error: `planHash mismatch (sent ${planHash}, current ${currentPlanHash}) — the data changed since the dry run. Re-run GET and review again.`,
-    };
-  }
-  return { ok: true };
 }
