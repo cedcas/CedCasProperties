@@ -86,6 +86,33 @@ model Booking {
   derivedBlocks         AvailabilityBlock[] // sibling blocks this booking generated on shared-inventory properties
 }
 
+// A guest who reached the payment screen (QR or card) — written before any Booking exists,
+// because GCash/BPI bookings are only created when the guest taps "I Paid". A row that
+// is still unlinked after ABANDON_AFTER_MINUTES triggers one admin alert, so a payment
+// that arrives without a booking is immediately explainable. See
+// src/lib/checkout-abandonment.ts. Holds guest PII: purged after RETENTION_DAYS.
+model CheckoutAttempt {
+  id            Int       @id @default(autoincrement())
+  token         String    @unique // opaque; held by the browser to update/complete this attempt
+  propertyId    Int // no relation on purpose — a deleted property must not block the purge
+  guestName     String
+  guestEmail    String
+  guestPhone    String
+  checkIn       DateTime
+  checkOut      DateTime
+  guests        Int
+  paymentMethod String // "gcash" | "bpi" | "stripe" — last method shown on the payment screen
+  discountCode  String?
+  total         Decimal   @db.Decimal(10, 2) // server quote for that method
+  bookingId     Int? // set when the booking is submitted
+  alertedAt     DateTime? // set when the abandonment alert was claimed/sent
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([bookingId, alertedAt, updatedAt])
+  @@index([guestEmail])
+}
+
 model AdditionalCharge {
   id                    Int       @id @default(autoincrement())
   booking               Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)

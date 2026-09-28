@@ -1,0 +1,35 @@
+name: Checkout Abandonment Alerts
+
+# REDUNDANT BACKSTOP ONLY — not the primary mechanism.
+#
+# The primary trigger is Vercel Cron every 5 minutes (vercel.json). GitHub throttles
+# short-interval schedules on shared runners and skips most slots, so on its own this
+# would deliver alerts hours late — it only covers a Vercel Cron outage, and
+# workflow_dispatch gives a manual trigger.
+#
+# Concurrent runs are safe: each alert is claimed in the DB (CheckoutAttempt.alertedAt)
+# before the email is sent. See src/lib/checkout-abandonment.ts.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: checkout-abandonment
+  cancel-in-progress: true
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Call Vercel cron endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+               --max-time 90 \
+               -H "Authorization: Bearer $CRON_SECRET" \
+               https://haveninlipa.com/api/cron/checkout-abandonment
