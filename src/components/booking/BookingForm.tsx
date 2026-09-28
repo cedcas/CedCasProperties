@@ -350,6 +350,46 @@ export default function BookingForm({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paymentMethod, step]);
 
+  // ── Payment-screen tracking ──
+  // Each time the payment screen is shown (or its method changes): record a
+  // CheckoutAttempt so an unfinished checkout alerts the Owner after 10 minutes
+  // (src/lib/checkout-abandonment.ts), and send GA4's add_payment_info as the funnel
+  // step between book_click and booking_confirmed. The token keeps later calls on this
+  // page updating the same attempt. Best-effort: never blocks or surfaces an error.
+  const checkoutTokenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (step !== "payment") return;
+    track("add_payment_info", {
+      property: slug,
+      payment_type: paymentMethod,
+      value: Math.round(total),
+      currency: "PHP",
+    });
+    fetch("/api/checkout-attempts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: checkoutTokenRef.current,
+        propertyId,
+        guestName: form.guestName,
+        guestEmail: form.guestEmail,
+        guestPhone: parsePhoneNumberFromString(form.guestPhone, phoneCountry)?.number ?? form.guestPhone,
+        checkIn: form.checkIn,
+        checkOut: form.checkOut,
+        guests: Number(form.guests) || 1,
+        discountCode: appliedDiscount?.code ?? null,
+        paymentMethod,
+      }),
+    })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.token) checkoutTokenRef.current = data.token;
+      })
+      .catch(() => {});
+  // Only the step/method transition should fire; the other values are read as-is.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paymentMethod, step]);
+
   const applyDiscountCode = async () => {
     if (!discountCodeInput.trim()) return;
     if (computedNightlyTotal <= 0) {
@@ -448,6 +488,7 @@ export default function BookingForm({
           paymentMethod,
           stripePaymentIntentId: overridePaymentIntentId || stripePaymentIntentId || null,
           discountCode: appliedDiscount?.code || null,
+          checkoutAttemptToken: checkoutTokenRef.current,
         }),
       });
       if (!res.ok) {

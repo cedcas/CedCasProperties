@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     stripePaymentIntentId: rawStripePaymentIntentId,
     discountCode: rawDiscountCode,
     notes,
+    checkoutAttemptToken,
   } = await req.json();
 
   if (!propertyId || !guestName || !guestEmail || !guestPhone || !checkIn || !checkOut) {
@@ -195,6 +196,20 @@ export async function POST(req: NextRequest) {
     await reconcileBookingDerivedBlocks(booking.id);
   } catch (err) {
     console.error("[bookings] inventory-group propagation failed:", err);
+  }
+
+  // Checkout-abandonment tracking: mark the payment-screen attempt as completed so no
+  // "checkout not completed" alert fires for it (src/lib/checkout-abandonment.ts).
+  // Best-effort — the cron also matches by guest/property/check-in as a backstop.
+  if (typeof checkoutAttemptToken === "string" && checkoutAttemptToken) {
+    try {
+      await prisma.checkoutAttempt.updateMany({
+        where: { token: checkoutAttemptToken, bookingId: null },
+        data: { bookingId: booking.id },
+      });
+    } catch (err) {
+      console.error("[bookings] checkout attempt link failed:", err);
+    }
   }
 
   // Promote any pre-booking Contact Us inquiries from this email into the new
