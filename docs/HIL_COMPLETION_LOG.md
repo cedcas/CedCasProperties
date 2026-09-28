@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-09-27 — Production drive-time correction tooling (SM Lipa / Casa Marikit), dry-run-first
+
+Area: Website | Content
+
+Status: **Built on branch `fix/property-drive-times-db`, PR against `dev`. Not merged, not deployed, and not run against any database (no dry run either).** Production property text still has the old drive times until the Owner runs it.
+
+- **Why:** PR #26 (`db0cdbc`) fixed the drive times in the repo source only. Production's 5 property rows still say "5 / 5–10 / five to ten minutes to SM Lipa" and "a short drive to … Casa Marikit". `scripts/fix-property-content.ts` did not detect these phrases.
+- **What:** new pure `src/lib/drive-time-fixes.ts` with a self-contained, reviewed table of exact old → new substrings (wording copied from `db0cdbc`). It is wired into `scripts/fix-property-content.ts` as a second pass, in the same dry run, transaction and post-write re-scan. The Maculot/Mbps/parking pass is unchanged. `neighborhoodPlaces` moves SM Lipa and Casa Marikit into a new "About 20 to 30 minutes by car" band. Any residual stale SM Lipa / Casa Marikit phrase aborts the whole run with a property/field/excerpt list. There is also a TEMPORARY admin-only DEC-012 route, `src/app/api/admin/dev/fix-drive-times/route.ts`: GET = read-only plan + `planHash`; POST needs `{"confirm":"APPLY-DRIVE-TIMES","planHash":…}`. Decision: DEC-016 extension (targeted replacements). How it works: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md).
+- **Expected dry run (from the pre-#26 content):** 20 field changes on all 5 properties. id 1 `cozy-1-bedroom`: description, amenityDetails, neighborhoodPlaces. id 2 `spacious-2-bedroom`: description, bestForSegments, amenityDetails, neighborhoodPlaces, propertyFaqs. id 3 `…sleeps-7`: bestForSegments, amenityDetails, neighborhoodPlaces, propertyFaqs. ids 4 `…sleeps-11` and 5 `…sleeps-15`: description, amenityDetails, neighborhoodPlaces, propertyFaqs.
+- **Verification:** `npm run lint` clean, `npx tsc --noEmit` clean, `npx vitest run` 1035/1035 (was 921; +38 cases × 3 TZ projects). `npx prisma generate && npx next build` passed with a placeholder `DATABASE_URL`. The commit cherry-picks cleanly onto `origin/main`, where tsc and the two content-fix test files pass. No schema change.
+- **Pending (Owner):** `dev` and `main` are not reconciled. The real run needs this commit cherry-picked onto a branch off `main`, a PR to `main`, and a production deploy verified per DEC-006. Then GET (review), POST with the `planHash`, confirm on the live listings, and a removal PR for the temp route.
+
+---
+
 ## 2026-09-27 — `/weddings-accommodation` SEO rework for Lipa wedding-destination / venue intent
 
 Area: SEO | Website
