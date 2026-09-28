@@ -8,7 +8,7 @@
 
 Area: Website | Content
 
-Status: **Built on branch `fix/property-drive-times-db`, PR against `dev`. Not merged, not deployed, and not run against any database (no dry run either).** Production property text still has the old drive times until the Owner runs it.
+Status: **Built on branch `fix/property-drive-times-db`, [PR #28](https://github.com/cedcas/CedCasProperties/pull/28) against `dev`. Not merged, not deployed, and not run against any database (no dry run either).** Production property text still has the old drive times until the Owner runs it.
 
 - **Why:** PR #26 (`db0cdbc`) fixed the drive times in the repo source only. Production's 5 property rows still say "5 / 5–10 / five to ten minutes to SM Lipa" and "a short drive to … Casa Marikit". `scripts/fix-property-content.ts` did not detect these phrases.
 - **What:** new pure `src/lib/drive-time-fixes.ts` with a self-contained, reviewed table of exact old → new substrings (wording copied from `db0cdbc`). It is wired into `scripts/fix-property-content.ts` as a second pass, in the same dry run, transaction and post-write re-scan. The Maculot/Mbps/parking pass is unchanged. `neighborhoodPlaces` moves SM Lipa and Casa Marikit into a new "About 20 to 30 minutes by car" band. Any residual stale SM Lipa / Casa Marikit phrase aborts the whole run with a property/field/excerpt list. There is also a TEMPORARY admin-only DEC-012 route, `src/app/api/admin/dev/fix-drive-times/route.ts`: GET = read-only plan + `planHash`; POST needs `{"confirm":"APPLY-DRIVE-TIMES","planHash":…}`. Decision: DEC-016 extension (targeted replacements). How it works: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md).
@@ -18,11 +18,19 @@ Status: **Built on branch `fix/property-drive-times-db`, PR against `dev`. Not m
 
 ---
 
+## 2026-09-27 — Leftover manual-fix admin route removed from `dev`
+
+Area: Website
+
+Status: **PR #27 merged into `dev` 2026-09-27 (`35d682f`); not on `main` (already deleted there).** `src/app/api/admin/dev/manual-fix/route.ts` had been deleted on `main` 2026-09-17 (PR #21, `111ca40`) but survived on `dev`, where it was the original PR #19 version (`bec0f8c`), not the sequenced fix. No other code references; lint, typecheck and 651 tests pass. See [DEC-012](HIL_DECISIONS.md).
+
+---
+
 ## 2026-09-27 — `/weddings-accommodation` SEO rework for Lipa wedding-destination / venue intent
 
 Area: SEO | Website
 
-Status: **Built and verified locally — PR against `dev` (branch `seo/weddings-accommodation-rework`). Not merged, not on `main`, not deployed.**
+Status: **Merged into `dev` via PR #26 (merge `d236376`, 2026-09-27). Not on `main`, not deployed.**
 
 ### Outcome
 Reworked the wedding money page for the venue/destination-intent queries it was already surfacing for (GSC Aug 28–Sep 24 2026: 324 impr, pos 19.8, 1 click; `wedding destination in lipa` 175 impr, `wedding venue in lipa` 96 impr) without claiming to be a venue (`SEO-DEC-030`; DEC-008/SEO-DEC-003 unchanged).
@@ -46,13 +54,13 @@ Owner fact-check answered 2026-09-27: from Bella Vita, SM City Lipa ≈ 7 km / 2
 
 Area: Website / SEO / Analytics
 
-Status: **Committed on branch `fix/analytics-tracking`; PR against `dev` to be opened. Not merged, not deployed.** The Stay Match v1.0.2 plugin is an artifact only and needs an Owner upload to WordPress.
+Status: **Merged into `dev` via PR #25 (merge `a90c72b`, 2026-09-27 22:25 CT). Not on `main`, not deployed.** The Stay Match v1.0.2 plugin is an artifact only and needs an Owner upload to WordPress.
 
 - **Why:** the 2026-09-27 GA4 review found admin sessions (52 "Organic Search" landings on `/admin/*`/`/pay/*`), dev/preview/local-host sessions (7), and 4 test `booking_confirmed` events (2026-08-09) in the reports. It also found `stay_match_click` at 0 and `generate_lead` not marked as a key event.
 - **What:** GA4 loads and sends only on `haveninlipa.com`/`www.` (runtime hostname allowlist, not a preview build), never on `/admin/*`, including after SPA navigation (`ga-disable-G-2SV2PXYB7T`). `track()` is a no-op otherwise. Owner/staff devices get `traffic_type: internal`. `/pay/[token]` stays tracked with the token redacted from `page_location`. DebugView opt-in via `?ga_debug=1`. New `stay_match_arrival` landing event, fed by non-UTM `?hil_sm=&hil_sm_post=` params that plugin v1.0.2 appends (`content/seo/runs/092726/`). `generate_lead` confirmed as the only lead event (contact form) and given `lead_source`. Decision: [DEC-021](HIL_DECISIONS.md). How it works: [Website spec → GA4 Analytics Events](HIL%20Website%20Technical%20Specification.md).
 - **`stay_match_click` finding:** no defect in v1.0.1 that would suppress real readers' clicks. With ~14 real viewers, 0 clicks is plausible. The pagePath-`/` views/clicks are inferred (not proven) to be editor previews. The measurement is unverifiable from the blog alone, hence the landing-side event. Detail: [HIL_SEO_SPECIFICATION.md §13](HIL_SEO_SPECIFICATION.md).
-- **Tests:** suite 651 → 867 (new `analytics-config`, `analytics-track`, `analytics-component` (jsdom), `stay-match-arrival`). `npm run lint`, `tsc --noEmit` and `npm test` clean. `npm run build:app` not run in this session. **No schema change.** `Booking.isTest` is proposed in DEC-021, pending Owner approval.
-- **Owner steps (GA4 UI / WordPress):** set the Internal Traffic and Developer data filters Active; mark `generate_lead` as a key event; upload Stay Match v1.0.2; decide on the `Booking.isTest` proposal.
+- **Tests:** suite 651 → 867 (new `analytics-config`, `analytics-track`, `analytics-component` (jsdom), `stay-match-arrival`). `npm run lint`, `tsc --noEmit` and `npm test` clean. `npm run build:app` not run in this session. **No schema change.** The `Booking.isTest` proposal in DEC-021 was **declined by the Owner on 2026-09-27**: test bookings are made on `dev.haveninlipa.com` (separate database; sends no GA4 after this change), so no DB flag is needed. Owner test bookings made on production, if any, are still tagged `traffic_type: internal` via the admin-device marker.
+- **Owner steps (GA4 UI / WordPress):** set the Internal Traffic and Developer data filters Active; mark `generate_lead` as a key event; upload Stay Match v1.0.2.
 
 ---
 
