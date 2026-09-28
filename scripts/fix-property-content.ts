@@ -10,8 +10,8 @@
 // never a whole-field overwrite — applied on top of the first pass's output,
 // in the same dry run / transaction / verification. Any stale drive-time
 // phrase the reviewed table doesn't cover aborts the whole run. The same pure
-// lib backs the TEMPORARY DEC-012 route
-// src/app/api/admin/dev/fix-drive-times/route.ts for running this on Vercel.
+// lib backed the TEMPORARY DEC-012 route /api/admin/dev/fix-drive-times,
+// which ran once on production 2026-09-28 and was then removed (DEC-016).
 //
 // Usage:
 //   npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/fix-property-content.ts
@@ -213,7 +213,7 @@ async function main() {
     console.log("\n" + "=".repeat(72));
     const fieldCount = updates.reduce((n, u) => n + Object.keys(u.data).length, 0);
     console.log(`\nTotal: ${report.length} fragment change(s) in ${fieldCount} field(s) across ${updates.length} propert${updates.length === 1 ? "y" : "ies"}.`);
-    console.log(`Drive-time planHash: ${driveTimePlanHash} (equals the temporary route's GET planHash when the first pass is clean)`);
+    console.log(`Drive-time planHash: ${driveTimePlanHash}`);
 
     if (!EXECUTE) {
       console.log("\nDry run only — no database write was made. Re-run with --execute to apply, after Owner review of this report.");

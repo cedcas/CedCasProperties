@@ -327,6 +327,8 @@ Never give a script that's meant to run standalone (`node script.ts`) an uncondi
 
 **Extension, 2026-09-27 — later corrections are targeted substring replacements, self-contained in `src/lib`.** The SM Lipa / Casa Marikit drive-time correction (`src/lib/drive-time-fixes.ts`, a second pass in `scripts/fix-property-content.ts`) does **not** overwrite whole fields from the seed modules the way the 2026-09-07 pass did. It applies a hardcoded, reviewed table of exact old → new substrings (JSON fields edited on the parsed value, re-serialized with `JSON.stringify`, abort if the stored text doesn't round-trip). Anything the table doesn't cover that still looks stale aborts the run for a human to fix by hand. Two reasons: (1) since DEC-015 some fields can be edited in admin, so a whole-field overwrite could silently revert an Owner edit; (2) `dev` and `main` carry different versions of `prisma/property-content/*`, so a correction that reads its targets from those modules would write different text depending on which branch was deployed. Future one-off content corrections should follow this pattern: targets live in the lib, not in the content modules. Keep the {id, slug} assertions, the unexpected-content abort, dry run by default, one transaction, the post-write re-scan and idempotency. On production, run via a temporary DEC-012 route that uses the same pure functions (GET = plan + `planHash`; POST needs an explicit confirm string plus the reviewed `planHash`), then delete the route.
 
+**Addendum, 2026-09-28 — the drive-time route was used once and removed.** `/api/admin/dev/fix-drive-times` went live with release PR #30 (`41d666a`). The Owner ran it once on production at 2026-09-28 00:11 CT: GET dry run, planHash `db895ae4f17708a6`, 20 fields across 5 properties, then POST `success: true`, 20 written, and the re-check passed. The Owner verified all 5 live listings. The route was deleted in the follow-up PR. `src/lib/drive-time-fixes.ts` and the CLI pass in `scripts/fix-property-content.ts` stay; the route-only POST gate (`checkApplyRequest`, `DRIVE_TIME_CONFIRM`) was removed with it. A future run needs a new temporary route, following the pattern above.
+
 ### Supersedes
 None
 
@@ -493,7 +495,7 @@ The earlier implicit behavior "a Stripe booking with a PaymentIntent id is auto-
 ## DEC-021 — GA4 runs only on the production hostname and never on admin routes; owner devices are tagged internal, not excluded
 
 Date: 2026-09-27
-Status: Active — implemented on branch `fix/analytics-tracking` (PR against `dev`); **not yet merged or deployed**
+Status: Active — merged into `dev` (PR #25), released to `main` via PR #30 (`41d666a`), **live on production** 2026-09-28
 Area: Website | SEO | Cross-Workstream
 
 ### Decision
@@ -549,6 +551,29 @@ into Testing in the UI, while hits that were never sent can't be recovered.
 ### Supersedes
 The 2026-08-08 `track()` behaviour ("send from every host; stamp `debug_mode` off
 `PROD_HOSTS` and rely on the Developer filter") in the Website spec → GA4 Analytics Events.
+
+---
+
+## DEC-022 — Unfinished checkouts are recorded before the booking exists and alerted after 10 minutes via Vercel Cron; `add_payment_info` is a funnel step, not a key event
+
+Date: 2026-09-28
+Status: Active — PR #32 (`cbfd123`), **live on production** 2026-09-28
+Area: Website | Analytics
+
+### Decision
+When a guest reaches the payment screen (any method), the site writes a `CheckoutAttempt` (guest contact, stay, method, server-quoted total). `/api/bookings` links it to the booking it produced. An attempt with no booking after **10 minutes of inactivity** triggers **one** admin email per guest/stay. It is only an alert: **no dates are held** and no booking is created. The trigger is **Vercel Cron every 5 minutes** (`vercel.json`); GitHub Actions is a backstop only. GA4 gets `add_payment_info` on the same screen, as a funnel step. **It is not marked as a key event.**
+
+### Reason
+Booking #140 (2026-09-27): the guest paid by GCash at 11:15 AM PHT but tapped "I Paid" 53 minutes later. For that hour the Owner had a payment with no booking, no guest identity and no held dates. **Alert only after 10 minutes, not on every QR view (Owner choice):** normal bookings stay quiet. **Why not hold dates at the QR screen:** abandoned checkouts would block inventory and need expiry logic. The Owner chose the alert-only option. **Why Vercel Cron:** the repo's GitHub schedules deliver ~12% of `*/15` slots, with gaps of up to 3.5 h (see `sync-external-calendars.yml`). The Owner now has a paid Vercel plan that allows 5-minute schedules. **Why not a key event:** a key event counts as a conversion, so every abandoned checkout would inflate conversions. Abandonment is the *gap* between `add_payment_info` and `booking_confirmed`. The GA4 funnel starts at the `/book` page view, not at `book_click`, which also fires on the "I've Paid" button.
+
+### Implications
+- `CheckoutAttempt` holds guest PII: 30-day purge, no PII sent to GA4. Alert recipient is `customerservice@haveninlipa.com`.
+- New time-sensitive cron jobs should use Vercel Cron in `vercel.json`. The three existing jobs still run on GitHub Actions / cron-job.org and could migrate later. That is not done.
+- Keep `dev` merged up with `main`: building a branch that lacks the model makes the production-style `prisma db push` fail, rather than drop the table.
+- Possible later upgrade (not built): hold dates at the QR screen with a short expiry, if alerts prove insufficient.
+
+### Supersedes
+None
 
 ---
 

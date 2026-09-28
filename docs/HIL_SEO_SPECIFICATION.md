@@ -359,7 +359,9 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   (multi-audience hub articles).
 - Funnel: `stay_match_view` → `stay_match_click` (destination: property|book) →
   `stay_match_arrival` (main site, from plugin v1.0.2 — see below) →
-  `check_availability` → `book_click` → `booking_confirmed` (main site). `booking_confirmed`
+  `check_availability` → `/book` page view → `add_payment_info` → `booking_confirmed` (main
+  site; `add_payment_info` added 2026-09-28, funnel step only — DEC-022. `book_click` also fires
+  on the payment screen's "I've Paid" button, so it is not a funnel-entry step). `booking_confirmed`
   carries `value`/`currency`/`transaction_id`/`property` (Listing dimension), so revenue
   attributes per property landing page.
 
