@@ -95,7 +95,8 @@ export default function ChargePaymentClient({ token, description, amount, guestF
     fetch("/api/stripe/payment-intent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: cardTotal, metadata: { kind: "additional_charge", token, description } }),
+      // The server looks the charge up by token and prices the card total itself.
+      body: JSON.stringify({ kind: "additional_charge", token }),
     })
       .then((r) => r.json())
       .then((data) => {
@@ -111,7 +112,7 @@ export default function ChargePaymentClient({ token, description, amount, guestF
     return () => {
       cancelled = true;
     };
-  }, [method, clientSecret, cardTotal, token, description]);
+  }, [method, clientSecret, token]);
 
   const submitPaid = async (paymentMethod: Method, stripePaymentIntentId?: string) => {
     setSubmitting(true);
