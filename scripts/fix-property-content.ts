@@ -4,6 +4,15 @@
 // line with the Owner-approved facts already fixed in
 // prisma/seed-property-seo.ts / prisma/seed-property-seo-mickey.ts.
 //
+// Second pass (added 2026-09-27): corrects the superseded SM City Lipa /
+// Casa Marikit drive times (Owner-confirmed ~20 min / ~30 min by car) with
+// TARGETED exact-substring replacements from src/lib/drive-time-fixes.ts —
+// never a whole-field overwrite — applied on top of the first pass's output,
+// in the same dry run / transaction / verification. Any stale drive-time
+// phrase the reviewed table doesn't cover aborts the whole run. The same pure
+// lib backs the TEMPORARY DEC-012 route
+// src/app/api/admin/dev/fix-drive-times/route.ts for running this on Vercel.
+//
 // Usage:
 //   npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/fix-property-content.ts
 //   npx ts-node --compiler-options '{"module":"CommonJS"}' scripts/fix-property-content.ts --execute
@@ -41,6 +50,7 @@ import {
   UnexpectedContentError,
   type ContentFieldName,
 } from "../src/lib/property-content-fixes";
+import { planDriveTimeFixes, type PropertyContentRow } from "../src/lib/drive-time-fixes";
 import { TWO_BR, ONE_BR, type PropertySeoContent as ContentA } from "../prisma/property-content/b34-content";
 import {
   SLEEPS_7,
@@ -166,7 +176,24 @@ async function scan(prisma: PrismaClient) {
     }
   }
 
-  return { rows, report, updates };
+  // ── Second pass: SM Lipa / Casa Marikit drive times, on top of pass 1 ──
+  // Throws UnexpectedContentError (aborting everything) on any residual stale
+  // drive-time phrase, before any transaction is opened.
+  const afterPass1: PropertyContentRow[] = rows.map((r) => ({
+    ...r,
+    ...(updates.find((u) => u.id === r.id)?.data ?? {}),
+  }));
+  const driveTimes = planDriveTimeFixes(afterPass1);
+  for (const c of driveTimes.changes) {
+    for (const f of c.fragments) {
+      report.push({ id: c.id, slug: c.slug, field: c.field, oldFragment: f.old, newFragment: f.new });
+    }
+    const existing = updates.find((u) => u.id === c.id);
+    if (existing) existing.data[c.field] = c.after;
+    else updates.push({ id: c.id, slug: c.slug, data: { [c.field]: c.after } });
+  }
+
+  return { rows, report, updates, driveTimePlanHash: driveTimes.planHash };
 }
 
 async function main() {
@@ -174,7 +201,7 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
-    const { report, updates } = await scan(prisma);
+    const { report, updates, driveTimePlanHash } = await scan(prisma);
 
     console.log(`\n${EXECUTE ? "EXECUTE MODE" : "DRY RUN"} — 5/5 properties evaluated, ${updates.length} need changes\n`);
     console.log("=".repeat(72));
@@ -184,7 +211,9 @@ async function main() {
       console.log(`  NEW: ${r.newFragment}`);
     }
     console.log("\n" + "=".repeat(72));
-    console.log(`\nTotal field-level changes proposed: ${report.length} across ${updates.length} propert${updates.length === 1 ? "y" : "ies"}.`);
+    const fieldCount = updates.reduce((n, u) => n + Object.keys(u.data).length, 0);
+    console.log(`\nTotal: ${report.length} fragment change(s) in ${fieldCount} field(s) across ${updates.length} propert${updates.length === 1 ? "y" : "ies"}.`);
+    console.log(`Drive-time planHash: ${driveTimePlanHash} (equals the temporary route's GET planHash when the first pass is clean)`);
 
     if (!EXECUTE) {
       console.log("\nDry run only — no database write was made. Re-run with --execute to apply, after Owner review of this report.");
@@ -201,7 +230,16 @@ async function main() {
     console.log(`\n✓ Transaction committed — ${updates.length} propert${updates.length === 1 ? "y" : "ies"} updated.`);
 
     // ── Re-query all 5 and verify zero stale patterns remain ──
-    const verify = await scan(prisma);
+    let verify: Awaited<ReturnType<typeof scan>>;
+    try {
+      verify = await scan(prisma);
+    } catch (e) {
+      // The transaction already committed — don't let main()'s catch claim otherwise.
+      console.error("\n✗ POST-WRITE VERIFICATION FAILED (the write above DID commit):");
+      console.error(e instanceof Error ? e.message : e);
+      process.exitCode = 1;
+      return;
+    }
     if (verify.report.length > 0) {
       console.error("\n✗ POST-WRITE VERIFICATION FAILED — stale content still detected:");
       for (const r of verify.report) {
@@ -210,7 +248,7 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    console.log("\n✓ Post-write verification: zero stale patterns remain across all 5 properties.");
+    console.log("\n✓ Post-write verification: zero stale patterns (Maculot/Mbps/parking or SM Lipa/Casa Marikit drive times) remain across all 5 properties.");
   } finally {
     await prisma.$disconnect();
   }
