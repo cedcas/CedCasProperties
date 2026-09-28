@@ -4,6 +4,14 @@
 
 ---
 
+## 2026-09-27 — Leftover manual-fix admin route removed from `dev`
+
+Area: Website
+
+Status: **Committed on branch `chore/remove-manual-fix-route` (PR against `dev`, not merged).** `src/app/api/admin/dev/manual-fix/route.ts` had been deleted on `main` 2026-09-17 (PR #21, `111ca40`) but survived on `dev`, where it was the original PR #19 version (`bec0f8c`), not the sequenced fix. No other code references; lint, typecheck and 651 tests pass. See [DEC-012](HIL_DECISIONS.md).
+
+---
+
 ## 2026-09-27 — Analytics tracking fixes: GA4 production/admin gate, internal-traffic tagging, Stay Match landing confirmation
 
 Area: Website / SEO / Analytics

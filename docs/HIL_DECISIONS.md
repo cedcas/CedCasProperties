@@ -243,6 +243,8 @@ Never assume a local or CI script can reach the production DB. This also means D
 
 **⚠️ Update, 2026-09-06 — observed contradiction, cause unconfirmed.** During a Claude Code session (same day as DEC-015), `npm run dev` from this repo's working directory successfully read live data from the production database (`[redacted: production DB name]`) — the active `DATABASE_URL` in `.env` points at prod, not `DEV_DATABASE_URL`. This was a **read only** — no write, migration, or seed script was run, and no write was authorized. Cause is unknown: could mean Hostinger's allowlist changed, this specific harness's egress IP differs from whatever environment this decision was originally written against, or something else entirely. **Do not treat this as "DB access is now reliably available"** — the original reasoning (silent TCP drop from non-allowlisted IPs) may still hold in other environments or for write paths specifically. Any session that finds itself with apparent DB access should still get explicit Owner authorization before running anything beyond a read-only query, and should flag it the same way rather than assuming it's now the norm. Investigating *why* this happened is an open item — see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
 
+2026-09-27: `manual-fix` route (`src/app/api/admin/dev/manual-fix/route.ts`) also removed from `dev` (it had been deleted on `main` 2026-09-17 via PR #21 but survived on `dev`).
+
 ### Supersedes
 None
 
