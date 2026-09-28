@@ -243,6 +243,8 @@ Never assume a local or CI script can reach the production DB. This also means D
 
 **⚠️ Update, 2026-09-06 — observed contradiction, cause unconfirmed.** During a Claude Code session (same day as DEC-015), `npm run dev` from this repo's working directory successfully read live data from the production database (`[redacted: production DB name]`) — the active `DATABASE_URL` in `.env` points at prod, not `DEV_DATABASE_URL`. This was a **read only** — no write, migration, or seed script was run, and no write was authorized. Cause is unknown: could mean Hostinger's allowlist changed, this specific harness's egress IP differs from whatever environment this decision was originally written against, or something else entirely. **Do not treat this as "DB access is now reliably available"** — the original reasoning (silent TCP drop from non-allowlisted IPs) may still hold in other environments or for write paths specifically. Any session that finds itself with apparent DB access should still get explicit Owner authorization before running anything beyond a read-only query, and should flag it the same way rather than assuming it's now the norm. Investigating *why* this happened is an open item — see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
 
+2026-09-27: `manual-fix` route (`src/app/api/admin/dev/manual-fix/route.ts`) also removed from `dev` (it had been deleted on `main` 2026-09-17 via PR #21 but survived on `dev`).
+
 ### Supersedes
 None
 
@@ -528,28 +530,19 @@ into Testing in the UI, while hits that were never sent can't be recovered.
   Segment by hostname/page path when reading it.
 - `blog.haveninlipa.com` (WordPress) is outside this repo and this decision. Stay Match
   v1.0.2 applies the same tag-don't-drop idea to editor previews there.
-- **Test bookings stay unlabeled in the DB.** Non-production test bookings are now out of
-  GA4 automatically, and owner tests on production carry `traffic_type: internal`. No
-  `test_booking` event param was added, because no explicit non-schema signal exists at
-  booking time beyond the same internal marker. Proper labeling needs a schema change,
-  proposed below.
+- **Test bookings stay unlabeled in the DB — by Owner decision.** The Owner runs test
+  bookings on `dev.haveninlipa.com` (a Vercel Preview deployment with its own database,
+  DEC-013), so they never reach the production DB, and the hostname allowlist above means
+  that host sends no GA4 events either. Any owner test booking made on production is still
+  tagged `traffic_type: internal` via the admin-device marker. No `test_booking` event
+  param was added.
 
-### Open proposal — `Booking.isTest` (needs Owner approval; NOT implemented)
-- **Field:** `isTest Boolean @default(false)` on `Booking`. No index needed at current volume.
-- **Default / backfill:** `false`, so every existing booking stays "real". No automatic
-  backfill. The Owner flags known test bookings by hand.
-- **Where set:** an Admin-only "Test booking" toggle on `/admin/bookings/[id]`, saved
-  through the existing `PATCH /api/admin/bookings/[id]`. Deliberately no heuristics
-  (guest name/email patterns).
-- **What it excludes:** revenue/lifetime-value figures (`src/lib/customers.ts`, the
-  customer pages, booking-list totals) and any future revenue or ambassador-reward report
-  (rewards are not computed in code today). It does **not** change availability: a pending/confirmed test booking still
-  blocks dates until cancelled, for double-booking safety (DEC-002). Emails and SMS
-  behave as for any booking.
-- **Migration:** additive, non-destructive column. It would reach production through the
-  Vercel-build `prisma db push` (still the only path — see the open "remove `prisma db
-  push` from the production build" item) and reach the dev DB separately (DEC-013). It would
-  also give the pending hourly-fee workflow test a clean way to mark its throwaway booking.
+### Proposal declined — `Booking.isTest` (Declined by Owner 2026-09-27; NOT implemented)
+- **Was proposed:** an `isTest Boolean @default(false)` column on `Booking`, set by an
+  admin-only toggle, to exclude test bookings from revenue/customer figures.
+- **Why declined:** test bookings are made on `dev.haveninlipa.com`, whose separate
+  database keeps them out of production data, and after this decision that host sends
+  nothing to GA4, so a DB flag isn't needed. No schema change.
 
 ### Supersedes
 The 2026-08-08 `track()` behaviour ("send from every host; stamp `debug_mode` off
