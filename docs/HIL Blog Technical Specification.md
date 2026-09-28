@@ -1,6 +1,6 @@
 # Haven in Lipa — Blog Technical Specification
 
-> **Last updated:** 2026-09-27 (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
+> **Last updated:** 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
 >
 > This spec covers the WordPress blog at `blog.haveninlipa.com` and how the main rental app integrates with it. Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); SEO / structured data lives in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).
 >
@@ -77,7 +77,7 @@ Three invariants that must survive future edits:
 
 ---
 
-## Stay Match — contextual recommendation plugin (built 2026-08-26, not yet installed)
+## Stay Match — contextual recommendation plugin (built and installed 2026-08-26; v1.0.2 pending deploy)
 
 Brief: `081526/Stay_Match_Engine_ClaudeCode.md`. Consumes the feed above to replace the static "Where to stay" CTA with a recommendation that names a specific listing and says why it fits the article. WordPress-side only — plugin source is `blog/plugin/hil-stay-match.php` (gitignored, same posture as `hil-expose-focuskw.php`), installed the same way: WP Admin → Plugins → Add New → Upload Plugin, using `hil-stay-match.php.zip`.
 
@@ -103,6 +103,14 @@ Brief: `081526/Stay_Match_Engine_ClaudeCode.md`. Consumes the feed above to repl
 2. A manual `window.gtag('event', 'manual_test', {event_callback, event_timeout: 500})` in the console — if this also fails to produce a `collect` request, something is blocking analytics transport generally from that browser/session (extension, consent mode), unrelated to this plugin's code.
 
 **Separate, unrelated finding surfaced during this debugging:** a **React hydration error (minified #418)** fires in the console on `haveninlipa.com/properties/spacious-2-bedroom/book` (main Next.js app, not the blog) after navigating there from the blog link. Worth a look independent of Stay Match.
+
+**Finding, 2026-09-27 — the two console diagnostics above are superseded.** HIL PM confirmed on the live HTML of an enrolled post that the widget (`data-analytics` attributes intact) and footer script render exactly as in the v1.0.1 source, and that gtag on the blog is a **plain snippet in the theme head** (`gtag('config','G-2SV2PXYB7T')`, not Site Kit as stated above), with no LiteSpeed JS delay. GA4 shows `stay_match_click` only on 2026-08-27 (8 events, 1 user, pagePath `/`), so the event can fire. Code review found no defect that would suppress real readers' clicks. Proven vs inferred, and the numbers, are in [HIL_SEO_SPECIFICATION.md §13](HIL_SEO_SPECIFICATION.md). In short: ~14 real viewers make 0 clicks unremarkable, and the pagePath-`/` views/clicks are most likely **editor previews** (`/?p=<id>&preview=true`: `is_singular('post')` is true there, and GA4's pagePath drops the query) — inferred, not verified.
+
+**v1.0.2 (2026-09-27) — artifact only, NOT deployed:** `content/seo/runs/092726/hil-stay-match.php` + `Stay_Match_v1.0.2_Deploy_Note.md` (in git, unlike `blog/`). Cedric uploads it (Plugins → Upload → replace, then purge LiteSpeed + Hostinger CDN). Changes:
+- `hil_sm_link()` appends `?hil_sm=<property|book>&hil_sm_post=<post_slug>` (`add_query_arg`) to **every** Stay Match href. The main site records `stay_match_arrival` on landing and strips the params ([Website spec → GA4 Analytics Events](HIL%20Website%20Technical%20Specification.md)), which gives a landing-side confirmation that doesn't depend on the blog-page beacon. Not UTMs: UTMs would start a new GA4 session and overwrite the reader's real source.
+- Views/clicks on previews or unpublished posts get `debug_mode` + `traffic_type: 'internal'`; logged-in editors (`body.logged-in`) get `traffic_type: 'internal'`. Both are detected client-side so a cached page can't carry another visitor's flags. Tagged, not dropped: they only leave reports once the GA4 filters are Active.
+- Click handler: text-node `e.target` guard before `closest()`, non-primary/modified clicks, `#` links and `defaultPrevented` fall through to the browser, `transport_type: 'beacon'`. `stay_match_click` name and params unchanged.
+- Rollback: re-upload v1.0.1; the main site ignores missing params.
 
 Current status of both open items (who's doing what next) is tracked in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md), not here. Also still open: confirm #27's actual scheduled publish date in wp-admin (Sep 7 per the draft's own metadata vs. Aug 31 per the original brief — see above).
 

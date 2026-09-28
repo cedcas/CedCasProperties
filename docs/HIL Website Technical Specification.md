@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-09-27 (added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-09-27 (evening — [GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -199,7 +199,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - Per-property testimonials with "Show More" pagination
 - Privacy policy, Terms of Service, **standalone /faq page** (14 questions, FAQPage JSON-LD, [src/lib/faqs.ts](../src/lib/faqs.ts) is single source of truth) and **/about page** (host bio for E-E-A-T with Person JSON-LD anchored to LocalBusiness)
 - SEO: dynamic `robots.ts` and `sitemap.ts`, per-page canonicals, full schema.org coverage — see [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md)
-- Google Analytics (G-2SV2PXYB7T)
+- Google Analytics (G-2SV2PXYB7T) — production host only, never on `/admin` ([DEC-021](HIL_DECISIONS.md); see [GA4 Analytics Events](#ga4-analytics-events-gtagjs))
 
 ### Admin Panel (`/admin`)
 - Protected by NextAuth JWT session with role-based access control
@@ -1179,34 +1179,82 @@ Added 2026-08-08 (`0c0133e`, `d1a98ef`). Running spec and per-event rationale:
 `G-2SV2PXYB7T`, fired on both `haveninlipa.com` and `blog.haveninlipa.com`.
 **No GTM.**
 
+### Where GA4 runs — the gate ([DEC-021](HIL_DECISIONS.md), 2026-09-27)
+
+Rules live in one pure, unit-tested module,
+[src/lib/analytics-config.ts](../src/lib/analytics-config.ts):
+
+| Rule | Function | Detail |
+|---|---|---|
+| Production host only | `isAnalyticsHost(hostname)` | Exact-match allowlist `haveninlipa.com`, `www.haveninlipa.com`, checked **in the browser at runtime**. `dev.haveninlipa.com` (a Vercel Preview deployment on a custom domain), `*.vercel.app`, localhost and LAN machine names (e.g. `cpc-m5-mbp-2026`) send nothing. |
+| Not a preview build | `resolveAnalyticsContext` | Also requires `NEXT_PUBLIC_VERCEL_ENV !== "preview"`. A secondary check: if Vercel doesn't expose the var it is `undefined` and the hostname rule still decides. |
+| Never on admin | `isTrackedPath(pathname)` | `false` for `/admin` and everything under it (incl. `/admin/login`) and `/api/*`. `/administrator`, `/admins` etc. are **not** matched (segment-exact). |
+| DebugView opt-in | `readDebugParam` | `?ga_debug=1` turns GA on for the tab (sessionStorage `hil_ga_debug`) on **any** host, with `debug_mode: true` on config and events; `?ga_debug=0` turns it off. Default off. Never enables `/admin`. |
+
+Browser wiring:
+
+- [src/components/Analytics.tsx](../src/components/Analytics.tsx), mounted once in the
+  root layout, replaced the old inline `<Script id="gtag-init">`. It renders the gtag.js
+  `<Script strategy="lazyOnload">` **only** when the host is allowed and the path is
+  tracked, so an `/admin` page load never fetches gtag.js at all. The host decision uses
+  `useSyncExternalStore` with a `false` server snapshot — decided in the browser, never at
+  build/render time, so the root layout stays static.
+- **Client-side navigation:** once gtag.js is loaded on a public page it stays in memory,
+  so an SPA hop into `/admin` would otherwise send an enhanced-measurement history
+  `page_view`. `syncGaDisable()` sets gtag's official kill switch
+  `window['ga-disable-G-2SV2PXYB7T']` from the path **during render** and in a
+  `popstate` listener. ⚠️ Gotcha: Next pushes the new URL from a `useInsertionEffect`
+  (`HistoryUpdater` in `next/dist/client/components/app-router.js`), which runs before any
+  `useLayoutEffect`/`useEffect` — an effect-only toggle would lose that race. A `useEffect`
+  re-asserts the committed path after any abandoned render.
+- `ensureGtag()` installs the standard `dataLayer` stub (`push(arguments)` — gtag.js needs
+  the `Arguments` object, not an array) and queues `js` + `config` once. Events tracked
+  before gtag.js arrives now **queue** instead of being dropped (the old helper returned
+  early until the library loaded).
+- `/pay/[token]` is guest-facing (the charge-payment link emailed to a guest), so it
+  stays tracked — but the token is a bearer credential, so `config` overrides
+  `page_location` to `…/pay/[token]` (`redactPageLocation`).
+
+### Internal-traffic marker (owner/staff devices)
+
+Any `/admin/*` page other than `/admin/login` can only render for a signed-in user
+(middleware redirects the rest), so rendering one sets `localStorage.hil_internal = "1"`
+(`isInternalMarkerPath` → `markInternalDevice`). On public pages that device's `config`
+carries `traffic_type: "internal"`, and `track()` adds it to every event too (belt and
+braces — `config` params apply to the page's hits, and a marker set mid-page is applied
+with `gtag('set', …)`). GA is **not** disabled for the device: tagging is reversible and
+only takes effect once the GA4 **Internal Traffic** data filter is set Active (Owner, GA4
+UI). Clear it on a device with `?hil_internal=0`.
+
 ### The `track()` helper — [src/lib/analytics.ts](../src/lib/analytics.ts)
 
-Every event goes through it. Two jobs: guard on `window.gtag` (loaded
-`lazyOnload`, so it may not exist yet), and stamp `debug_mode: true` on any
-hostname outside `PROD_HOSTS`, which keeps dev traffic visible in GA4 DebugView
-but out of reports via the Developer Traffic data filter.
+Every event goes through it. It reads the gate fresh on every call
+(`readAnalyticsContext()`) and is a **no-op** when GA is disabled or `window.gtag` is
+absent — the booking flow, contact form and click tracker never depend on GA being
+there. When enabled it adds `traffic_type: "internal"` (marked device) and/or
+`debug_mode: true` (debug opt-in) via `buildEventParams`. The old behaviour — send from
+any host, stamp `debug_mode` off `PROD_HOSTS` — is gone: it relied on the Developer
+Traffic filter, which was never Active, so dev/preview hits (incl. 4 test
+`booking_confirmed` on 2026-08-09) reached the reports.
 
-```ts
-const PROD_HOSTS = ["haveninlipa.com", "blog.haveninlipa.com"];
-```
-
-> ⚠️ This is an **exact-match allowlist**. Any production hostname not on it gets
-> flagged as developer traffic and silently dropped from reports — a failure that
-> looks fine in DebugView while reports stay empty. Verified 2026-08-08 that
-> `www.haveninlipa.com` redirects to the apex, so the list is correct. **Revisit
-> if the site is ever served on a new hostname.**
-
-`window.gtag` is typed in [src/types/gtag.d.ts](../src/types/gtag.d.ts) — the
-repo's only `declare global` block.
+`window.gtag` and the `ga-disable-*` key are typed in
+[src/types/gtag.d.ts](../src/types/gtag.d.ts).
 
 ### Events
 
 | Event | Fires on | Key event | Params |
 |---|---|---|---|
 | `booking_confirmed` | "Booking Received!" screen, [BookingForm.tsx](../src/components/booking/BookingForm.tsx) | ✅ | `property`, `value`, `currency`, `transaction_id` |
-| `generate_lead` | contact form success, [ContactForm.tsx](../src/components/sections/ContactForm.tsx) | ✅ | `form_subject`, `form_location` |
+| `generate_lead` | contact form success, [ContactForm.tsx](../src/components/sections/ContactForm.tsx) — the site's **only** lead form | ✅ (to be marked in GA4 UI — Owner) | `form_subject`, `form_location`, `lead_source` (`contact_form`) |
 | `book_click` | booking-submit CTAs | ❌ | `property` |
 | `check_availability` | property card + sticky bar | ❌ | `property` |
+| `stay_match_arrival` | landing from a Stay Match link (blog plugin v1.0.2+), [Analytics.tsx](../src/components/Analytics.tsx) | ❌ | `destination` (`property`\|`book`), `post_slug`, `property` |
+
+Not lead events, by design: the `/ambassadors` application (a partner signup, not a guest
+lead) and the chatbot's Messenger handoff (`m.me`, an outbound link GA4 enhanced
+measurement records as `click`). `form_start`/`form_submit` are GA4 enhanced-measurement
+auto events, not ours — leave them. **`generate_lead` still needs marking as a key event in
+the GA4 UI (Owner).**
 
 `book_click` and `check_availability` are intent signals, **deliberately not key
 events** — marking them as such would mix button clicks into the conversion count
@@ -1283,11 +1331,35 @@ they are GA4 reserved names.
 on `traffic_type` from IP rules and is inert unless those are defined. A filter
 left in *Testing* state excludes nothing; it only labels data for preview.
 
-Caveat: the filter only covers events carrying `debug_mode`, i.e. those routed
-through `track()`. Automatic events (`page_view`, `scroll`) from dev are sent by
-gtag itself without the flag and still count as sessions. Fixing that would mean
-moving `debug_mode` from the event to the `gtag('config', …)` call on non-prod
-hosts.
+Since 2026-09-27 (DEC-021) non-production hosts send **nothing**, so the Developer filter
+only matters for the explicit `?ga_debug=1` opt-in, which sets `debug_mode` on `config`
+(covering `page_view`/`scroll` too) as well as on events. As of 2026-09-27 neither the
+Developer filter nor the **Internal Traffic** filter (which keys on `traffic_type =
+internal`, set by the marker above) is Active — both are Owner steps in the GA4 UI.
+
+### `stay_match_arrival` — landing-side Stay Match confirmation
+
+The blog's `stay_match_click` depends entirely on a GA4 beacon leaving the blog page as it
+unloads; referrers are origin-only and the same posts also carry plain in-article links,
+so a Stay Match click can't be told apart from any other blog → property visit. From
+plugin v1.0.2 (pending WordPress deploy — see
+[Blog spec → Stay Match](HIL%20Blog%20Technical%20Specification.md)) every Stay Match
+href carries `?hil_sm=<property|book>&hil_sm_post=<post_slug>`. On arrival
+`reportStayMatchArrival()` fires `stay_match_arrival` once through `track()`, then strips
+both params with `history.replaceState(null, "", …)` (the `null` state is what lets the
+Next router adopt the URL; other params and the hash are kept). Parsing is pure and tested
+in [src/lib/stay-match-arrival.ts](../src/lib/stay-match-arrival.ts): unknown
+destinations and non-slug `post_slug` values are dropped, not sent.
+
+- **Not UTMs, deliberately** — UTMs would start a new GA4 session and overwrite the real
+  source (organic/Facebook) of the blog → main-site journey in the same property.
+- **SEO-safe:** `/properties/[slug]` and `/properties/[slug]/book` emit absolute
+  self-canonicals (`generateMetadata` → `alternates.canonical`); robots.txt and the
+  sitemap are untouched.
+- Gotcha: the params are stripped at hydration, normally before lazy gtag.js processes
+  `config`, so the landing `page_view` usually reports the clean URL; if gtag.js is already
+  loaded first, `page_location` may include them (harmless).
+- The main-site code is inert until the plugin ships.
 
 ---
 
@@ -1352,7 +1424,7 @@ Poppins and Open_Sans also use `display: "swap"` — they're body-text fonts, no
 
 ### Google Analytics — `lazyOnload`
 
-GTM/gtag is loaded via `next/script` with `strategy="lazyOnload"` in [layout.tsx](../src/app/layout.tsx) — runs after `window.load`. Trade-off: a few seconds of missing pageview data on bounced visitors, in exchange for the script not affecting LCP/TBT.
+gtag.js is loaded via `next/script` with `strategy="lazyOnload"` from [Analytics.tsx](../src/components/Analytics.tsx) (mounted in [layout.tsx](../src/app/layout.tsx); production host + tracked paths only — DEC-021) — runs after `window.load`. No GTM. Trade-off: a few seconds of missing pageview data on bounced visitors, in exchange for the script not affecting LCP/TBT.
 
 Because of this, anything calling `gtag` must tolerate its absence — see
 [GA4 Analytics Events](#ga4-analytics-events-gtagjs) for the guarded helper.
