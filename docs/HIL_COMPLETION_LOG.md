@@ -12,6 +12,18 @@ Status: **Run done and verified live. Route-removal PR opened against `main`, no
 
 ---
 
+## 2026-09-28 — Checkout-abandonment alerts + GA4 `add_payment_info` (DEC-022)
+
+Area: Website | Analytics
+
+Status: **Live on production.** PR #32 merged as `cbfd123`; Vercel Production deployment `6702940894` `success`. Verified on the live site: `/api/cron/checkout-abandonment` → 401 without the secret, `POST /api/checkout-attempts {}` → 400, and the booking-page bundle contains the new call. `dev` was fast-forwarded to `cbfd123` right after. **Owner end-to-end test passed 2026-09-28**: the payment screen was left open without tapping "I Paid", and the "Checkout not completed" email arrived. The GA4 funnel was set up as `/book` page view → `add_payment_info` → `booking_confirmed`. `add_payment_info` data is still pending GA4 processing and real guest traffic.
+
+Why: booking #140. The guest paid by GCash at 11:15 AM PHT and tapped "I Paid" 53 minutes later, so the Owner saw a payment with no booking. First checked as a possible PR #23 regression and ruled out: GCash never touches the Stripe path. A temporary DEC-012 seed route was prepared (PR #29), but it was closed unmerged when the guest completed the booking themselves.
+
+What: `CheckoutAttempt` table, `POST /api/checkout-attempts`, `/api/bookings` link, `/api/cron/checkout-abandonment` (Vercel Cron `*/5`; GitHub `*/15` backstop), admin alert email, GA4 `add_payment_info` (funnel step, not a key event). 16 new tests (1,218 total on `main`); CI Build/Lint/Type Check/Unit Tests all green. PR #31 (a cherry-pick of the GA4 gating) was closed as redundant, because PR #30 had already released it. Detail: [Website spec → Checkout-Abandonment Alerts](HIL%20Website%20Technical%20Specification.md#checkout-abandonment-alerts).
+
+---
+
 ## 2026-09-28 — Release PR: `dev` into `main` (PRs #24–#28 + reconcile production-only fixes)
 
 Area: Website | Release

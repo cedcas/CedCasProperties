@@ -495,7 +495,7 @@ The earlier implicit behavior "a Stripe booking with a PaymentIntent id is auto-
 ## DEC-021 — GA4 runs only on the production hostname and never on admin routes; owner devices are tagged internal, not excluded
 
 Date: 2026-09-27
-Status: Active — implemented on branch `fix/analytics-tracking` (PR against `dev`); **not yet merged or deployed**
+Status: Active — merged into `dev` (PR #25), released to `main` via PR #30 (`41d666a`), **live on production** 2026-09-28
 Area: Website | SEO | Cross-Workstream
 
 ### Decision
@@ -551,6 +551,29 @@ into Testing in the UI, while hits that were never sent can't be recovered.
 ### Supersedes
 The 2026-08-08 `track()` behaviour ("send from every host; stamp `debug_mode` off
 `PROD_HOSTS` and rely on the Developer filter") in the Website spec → GA4 Analytics Events.
+
+---
+
+## DEC-022 — Unfinished checkouts are recorded before the booking exists and alerted after 10 minutes via Vercel Cron; `add_payment_info` is a funnel step, not a key event
+
+Date: 2026-09-28
+Status: Active — PR #32 (`cbfd123`), **live on production** 2026-09-28
+Area: Website | Analytics
+
+### Decision
+When a guest reaches the payment screen (any method), the site writes a `CheckoutAttempt` (guest contact, stay, method, server-quoted total). `/api/bookings` links it to the booking it produced. An attempt with no booking after **10 minutes of inactivity** triggers **one** admin email per guest/stay. It is only an alert: **no dates are held** and no booking is created. The trigger is **Vercel Cron every 5 minutes** (`vercel.json`); GitHub Actions is a backstop only. GA4 gets `add_payment_info` on the same screen, as a funnel step. **It is not marked as a key event.**
+
+### Reason
+Booking #140 (2026-09-27): the guest paid by GCash at 11:15 AM PHT but tapped "I Paid" 53 minutes later. For that hour the Owner had a payment with no booking, no guest identity and no held dates. **Alert only after 10 minutes, not on every QR view (Owner choice):** normal bookings stay quiet. **Why not hold dates at the QR screen:** abandoned checkouts would block inventory and need expiry logic. The Owner chose the alert-only option. **Why Vercel Cron:** the repo's GitHub schedules deliver ~12% of `*/15` slots, with gaps of up to 3.5 h (see `sync-external-calendars.yml`). The Owner now has a paid Vercel plan that allows 5-minute schedules. **Why not a key event:** a key event counts as a conversion, so every abandoned checkout would inflate conversions. Abandonment is the *gap* between `add_payment_info` and `booking_confirmed`. The GA4 funnel starts at the `/book` page view, not at `book_click`, which also fires on the "I've Paid" button.
+
+### Implications
+- `CheckoutAttempt` holds guest PII: 30-day purge, no PII sent to GA4. Alert recipient is `customerservice@haveninlipa.com`.
+- New time-sensitive cron jobs should use Vercel Cron in `vercel.json`. The three existing jobs still run on GitHub Actions / cron-job.org and could migrate later. That is not done.
+- Keep `dev` merged up with `main`: building a branch that lacks the model makes the production-style `prisma db push` fail, rather than drop the table.
+- Possible later upgrade (not built): hold dates at the QR screen with a short expiry, if alerts prove insufficient.
+
+### Supersedes
+None
 
 ---
 
