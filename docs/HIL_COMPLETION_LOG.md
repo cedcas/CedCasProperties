@@ -23,6 +23,9 @@ Reworked the wedding money page for the venue/destination-intent queries it was 
 ### Pending
 Owner review/merge; after the production deploy: GSC URL Inspection + Request Indexing, re-measure ~4 weeks later. Details: [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md) → `/weddings-accommodation` → SEO rework.
 
+### Follow-up, same day — drive-time consistency fix (commit `db0cdbc`, same branch/PR)
+Owner fact-check answered 2026-09-27: from Bella Vita, SM City Lipa ≈ 7 km / 20 min by car, Casa Marikit ≈ 10 km / 30 min, both traffic-dependent. Superseded "5 / 5–10 / five to ten minutes to SM Lipa", "Casa Marikit is a short drive away" and the August sheet's 45-min Casa Marikit figure. Changed: `src/lib/faqs.ts` (family + distance FAQs), `src/app/weddings-accommodation/page.tsx` ("about" on the drive-time table and distance FAQ, traffic caveat, SM Lipa re-confirmation note, Casa Marikit comment), `prisma/property-content/b34-content.ts` + `mickey-content.ts` (seed source only — SM Lipa/Casa Marikit moved to an "About 20 to 30 minutes by car" band; description, segment, amenity and FAQ phrases). New guard `src/lib/__tests__/drive-time-claims.test.ts`; weddings test +3 cases. Lint/tsc clean, tests 705/705. **Production DB property text unchanged** (no seed/script run) — needs an Owner-approved correction; `scripts/fix-property-content.ts` does not detect these phrases as written.
+
 ---
 
 ## 2026-09-27 — Stripe payment verification: server-side pricing + PaymentIntent checks (PR #23)

@@ -1,6 +1,6 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
+> **Last updated:** 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
 > `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
 > §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
 > cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
@@ -336,6 +336,13 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   `/weddings-accommodation` → SEO rework. **Re-measure ~4 weeks after the production
   deploy** against this baseline (note the deploy date when it happens; do not compare
   against the pre-deploy window).
+  - *Drive-time fact-check resolved 2026-09-27 (Owner):* from Bella Vita, SM City Lipa is
+    about 7 km / 20 minutes by car and Casa Marikit about 10 km / 30 minutes; times vary
+    with traffic. Applied on the same branch to the weddings table/FAQ ("about" + traffic
+    caveat), `src/lib/faqs.ts` (`/faq` `FAQPage` JSON-LD) and the property seed-source
+    text. Not yet on production; the property pages' DB text and any published blog post
+    repeating an older figure (e.g. article #22's "Casa Marikit 10 to 15 minutes", article
+    #11's "5-minute drive" to SM Lipa) need separate Owner-side fixes.
 
 ---
 
