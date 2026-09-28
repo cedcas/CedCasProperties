@@ -1,20 +1,22 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-19 end of day (§3, §7, §8, §19 only — `hil-seo`/Yoast cutover
-> executed and verified, `SEO-DEC-026`). Earlier stamp: 2026-09-17 (created earlier the same day — SEO/content governance
-> consolidation, see [DEC-018](../About%20HIL/HIL_DECISIONS.md) and
+> **Last updated:** 2026-09-27 (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
+> §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
+> cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
+> (§3, §7, §8, §19 only — `hil-seo`/Yoast cutover executed and verified, `SEO-DEC-026`). Earlier stamp: 2026-09-17 (created earlier the same day — SEO/content governance
+> consolidation, see [DEC-018](HIL_DECISIONS.md) and
 > [content/seo/README.md](../content/seo/README.md) — then updated same day once the
 > Owner confirmed two items originally flagged as open/unverified: the Airbnb sibling
-> cross-link unlink (§19–20) and the PinasBNB boundary (§1, [DEC-019](../About%20HIL/HIL_DECISIONS.md)))
+> cross-link unlink (§19–20) and the PinasBNB boundary (§1, [DEC-019](HIL_DECISIONS.md)))
 >
 > **This is a focused governance document** — it separates verified facts from decisions,
 > plans, assumptions, and open questions, and states approval gates explicitly. It is
-> **not** a duplicate of [HIL SEO Technical Specification.md](../About%20HIL/HIL%20SEO%20Technical%20Specification.md)
-> (the "how the implementation works" spec, in `About HIL/`) — read both; they answer
+> **not** a duplicate of [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md)
+> (the "how the implementation works" spec, in `docs/` since 2026-09-27) — read both; they answer
 > different questions. Current whole-product status is
-> [HIL_PROJECT_STATUS.md](../About%20HIL/HIL_PROJECT_STATUS.md); durable decisions
+> [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md); durable decisions
 > (`DEC-###` and the migrated `SEO-DEC-###` series) are in
-> [HIL_DECISIONS.md](../About%20HIL/HIL_DECISIONS.md).
+> [HIL_DECISIONS.md](HIL_DECISIONS.md).
 >
 > **⚠️ This document's creation does not authorize new SEO implementation, publishing,
 > Yoast changes, cache purges, or production changes of any kind.** It records the state
@@ -30,7 +32,7 @@
   repository (`github.com/cedcas/CedCasProperties`), Vercel-hosted, MySQL on Hostinger.
   Owns booking, payments, admin, and all SEO/structured-data implementation for the
   rental app itself (sitemap, canonicals, JSON-LD — see
-  [HIL SEO Technical Specification.md](../About%20HIL/HIL%20SEO%20Technical%20Specification.md)).
+  [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md)).
 - **`blog.haveninlipa.com`** — WordPress 7.0.4, Yoast SEO (free, mid-cutover — see §3),
   LiteSpeed Cache, Site Kit by Google, EWWW Image Optimizer, YARPP, Redirection,
   Hostinger-hosted. WordPress core/uploads/DB are **not** in this repository; only custom
@@ -38,13 +40,13 @@
   `hil-seo` cutover plugin's `.zip` build artifacts, tracked in `content/seo/runs/`) —
   `blog/` itself is gitignored (deployed separately, per `.gitignore`). The two sites
   integrate **only through public REST APIs** (`GET /api/properties.json` on the main
-  site; WordPress's own REST API for content operations) — [DEC-011](../About%20HIL/HIL_DECISIONS.md).
+  site; WordPress's own REST API for content operations) — [DEC-011](HIL_DECISIONS.md).
 - **`haven-in-lipa.pinasbnb.pro`** — a PinasBNB-owned comparison/pilot application.
   HIL is PinasBNB's customer-zero/living-demo property. **Not found in HIL's own
   pre-existing documentation** at the time of the 2026-09-17 migration (nothing in
   `About HIL/` or `HIL_DECISIONS.md` corroborated it independently), but **the Owner
   confirmed both facts the same day** — recorded as
-  [DEC-019](../About%20HIL/HIL_DECISIONS.md).
+  [DEC-019](HIL_DECISIONS.md).
 
 ### Durable decisions
 - **Domain/booking/comparison boundaries are preserved exactly as they were before this
@@ -67,18 +69,18 @@
 ### Verified facts
 - Main-site routes are enumerated in `src/app/sitemap.ts` and are stable; recent additions
   (`/properties`, `/staycation`, `/weddings-accommodation`) followed the
-  build → repoint → redirect sequencing rule ([DEC-010](../About%20HIL/HIL_DECISIONS.md)).
+  build → repoint → redirect sequencing rule ([DEC-010](HIL_DECISIONS.md)).
 - Blog permalinks have **not** always been stable historically — the 2026-08-15 blog
   content audit found 7 dead slugs across 6 articles from prior unlogged renames (full
-  slug map in [HIL Blog Technical Specification.md](../About%20HIL/HIL%20Blog%20Technical%20Specification.md)
+  slug map in [HIL Blog Technical Specification.md](HIL%20Blog%20Technical%20Specification.md)
   → Blog content audit). The Redirection plugin is now installed specifically to prevent
   recurrence.
 
 ### Planned / in progress
-- Article #6 → `/staycation` consolidation ([SEO-DEC-007](../About%20HIL/HIL_DECISIONS.md)):
+- Article #6 → `/staycation` consolidation ([SEO-DEC-007](HIL_DECISIONS.md)):
   build and in-repo repoint done; WordPress-side repoint of the remaining linking posts and
   the 301 redirect itself are **still open** as of the last recorded status — see
-  [HIL_PROJECT_STATUS.md](../About%20HIL/HIL_PROJECT_STATUS.md) Active Gate/In Progress.
+  [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md) Active Gate/In Progress.
   This migration does not advance or close that item.
 
 ### Deferred / not authorized by this migration
@@ -149,13 +151,22 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   dedicated Editor Application Password; **creating** a new post is **always** saved as a
   draft — `WP_ALLOW_PUBLISH=false` is enforced in config. Analysts never publish; the Owner
   adds images, removes placeholders, reviews, schedules, and publishes.
+- **Amended 2026-09-27 (`SEO-DEC-029`, decided by Cedric):** once Cedric approves a batch,
+  its new articles are scheduled as WordPress `future` posts at **08:00 `Asia/Manila`** and
+  verified via REST (publish date, category, SEO fields). This replaces drafts-only for
+  **approved batches only** — anything not approved still defaults to draft, and the
+  `SEO-DEC-006` content freeze (§12) still applies separately. First used in one-time form
+  for #38–41 (posts 847–850) on 2026-09-25 with `WP_ALLOW_PUBLISH=false` left in place.
+  Workflow detail: [HIL Blog Technical Specification.md](HIL%20Blog%20Technical%20Specification.md)
+  → Publishing workflow.
 - The Analyst (Claude, in the SEO Analyst role) never edits, deploys to, or otherwise
   touches either codebase directly through a repository (`SEO-DEC-009`) — the one
   exception is the content-operations REST API access above, which is not codebase access.
 
 ### Durable decision (this migration)
 - The above permission model is **unchanged** by this consolidation. Analysts still never
-  publish; `WP_ALLOW_PUBLISH=false` remains enforced and documented.
+  publish; `WP_ALLOW_PUBLISH=false` remains enforced and documented. *(2026-09-27: amended
+  only for Owner-approved batches by `SEO-DEC-029` — see above.)*
 
 ---
 
@@ -166,7 +177,7 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   by `normalizePricingProse()` inside `generateMetadata` so the rendered `<meta>` always
   reflects live pricing — seeded text and rendered output can legitimately differ; diff
   against View Source, not the DB row (see
-  [HIL SEO Technical Specification.md](../About%20HIL/HIL%20SEO%20Technical%20Specification.md)).
+  [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md)).
 - **Blog:** title/meta description now render from the `hil-seo` plugin's meta module
   once turned on (§3), not from Yoast, for all 34 backfilled posts. Meta description
   matched Yoast exactly pre-cutover for 17/34 posts; the other 14 differ only by the
@@ -236,10 +247,10 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 ### Verified facts
 - Main-site JSON-LD is owned entirely by `src/lib/property-schema.ts` and the per-page
   builders documented in
-  [HIL SEO Technical Specification.md](../About%20HIL/HIL%20SEO%20Technical%20Specification.md)
+  [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md)
   — `VacationRental`/`FAQPage`/`LocalBusiness`/`ItemList`/`Person`, deliberately no
-  `Offer`/`EventVenue`/`Event` (see [DEC-008](../About%20HIL/HIL_DECISIONS.md),
-  [DEC-009](../About%20HIL/HIL_DECISIONS.md)).
+  `Offer`/`EventVenue`/`Event` (see [DEC-008](HIL_DECISIONS.md),
+  [DEC-009](HIL_DECISIONS.md)).
 - `/weddings-accommodation` and `/staycation` carry `FAQPage` schema only, by durable
   decision (`DEC-008`) — no venue-implying schema, matching the page's positioning as
   accommodation for a wedding party, not a venue (`SEO-DEC-003`).
@@ -295,6 +306,12 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 - Content freeze on new articles (#30+) takes effect 2026-09-15 (`SEO-DEC-006`) —
   measurement window, not a new gate, timed to read whether main-domain click share (1.9%
   at last recorded status) and the #1 refresh moved.
+  - *Expanded 2026-09-27:* the window measures whether the August 2026 booking-intent
+    changes raise main-site click share (1.9% baseline). Edits to existing posts and to
+    already-scheduled posts are not blocked. Articles #38–41 (posts 847–850) were a
+    one-time Owner authorisation and did **not** lift the freeze. Status **Active**, no end
+    date: Cedric decides at the early-October 2026 re-baseline, after GSC monitoring ends
+    2026-10-03 (`SEO-DEC-027`).
 
 ---
 
@@ -318,7 +335,7 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 - **`stay_match_click` is unconfirmed as of the last recorded diagnostic session
   (2026-08-26)**, even after a `v1.0.1` navigation-timing fix. Two console diagnostics were
   handed off and not yet run/reported — see
-  [HIL Blog Technical Specification.md](../About%20HIL/HIL%20Blog%20Technical%20Specification.md)
+  [HIL Blog Technical Specification.md](HIL%20Blog%20Technical%20Specification.md)
   → Stay Match. **This migration does not run, validate, or resolve this.**
 - Confidence-gate thresholds (≥0.7/≥0.4) are an untuned first pass, expected to be retuned
   after ~1 month of click-by-confidence-band data — not due until after #28/#29 accrue data.
@@ -360,8 +377,16 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   reference point for all subsequent diffs.
 - Standing post-deploy verification cadence: URL Inspection + Request Indexing for new/
   changed URLs; 30/90-day GSC re-pulls diffed against baseline.
-- GSC resubmission (post-`hil-seo`-cutover) is queued behind steps 1–3 of the Yoast
-  closeout sequence (§3) — **not yet performed**.
+- ~~GSC resubmission (post-`hil-seo`-cutover) is queued behind steps 1–3 of the Yoast
+  closeout sequence (§3) — **not yet performed**.~~ *Superseded — per
+  [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md) (last updated 2026-09-27):* the cutover
+  sequence is done and `wp-sitemap.xml` is in GSC — the first read said "Couldn't fetch"
+  while stale caches served a redirect. **Still open (Owner):** confirm GSC shows the new
+  sitemap as **Success** and remove the old `sitemap_index.xml` entry; **SEO Analyst:** one
+  crawl cycle with no Coverage regression. Monitoring runs through **2026-10-03**; the
+  Active Gate closes when both are true.
+- GSC/GA4 read-only access for the analytics service account was granted and confirmed
+  working on 2026-09-27 (per `HIL_PROJECT_STATUS.md` / `HIL_COMPLETION_LOG.md`).
 - Redundant `www.haveninlipa.com/sitemap.xml` GSC submission flagged for removal, not yet
   actioned as of the last recorded Product Owner Watch Items list.
 
@@ -425,7 +450,7 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 ### Verified facts
 - Production releases follow: local development → GitHub feature branch → PR → merge to
   `main` → Vercel auto-deploy. **A merge to `main` is not a deploy** — verify the live URL
-  and the Vercel deployments API independently ([DEC-006](../About%20HIL/HIL_DECISIONS.md)).
+  and the Vercel deployments API independently ([DEC-006](HIL_DECISIONS.md)).
 - CI (`Lint`, `Type Check`, `Unit Tests`, `Build`) runs on every PR as of the 2026-09-07
   repair (PR #18) — confirmed green on that PR, both push- and PR-triggered.
 - `main` has **no branch protection or rulesets** as of the last recorded status — a
@@ -473,7 +498,7 @@ a future session absent new contrary evidence.
 **The PinasBNB customer-zero / `haven-in-lipa.pinasbnb.pro` relationship (§1) — flagged, then confirmed.**
 Not found in HIL's own prior documentation at migration time; the Owner confirmed both
 the customer-zero/living-demo framing and the comparison-app boundary the same day —
-recorded as [DEC-019](../About%20HIL/HIL_DECISIONS.md). Also now settled, not open.
+recorded as [DEC-019](HIL_DECISIONS.md). Also now settled, not open.
 
 No other discrepancy of this kind was found between the mandate and HIL's existing record,
 though §14 and §16 above still flag facts asserted by the mandate (Clarity/GTM presence;
