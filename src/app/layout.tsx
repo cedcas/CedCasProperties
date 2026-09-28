@@ -1,11 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { Suspense } from "react";
-import Script from "next/script";
 import { Montserrat, Poppins, Open_Sans } from "next/font/google";
 import { runQrIntegrityCheck } from "@/lib/qr-integrity-check";
 import ChatWidgetServer from "@/components/chat/ChatWidgetServer";
 import ChatWidgetGate from "@/components/chat/ChatWidgetGate";
 import AnalyticsClickTracker from "@/components/AnalyticsClickTracker";
+import Analytics from "@/components/Analytics";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -164,14 +164,9 @@ export default function RootLayout({
         </ChatWidgetGate>
         {/* Turns [data-analytics] CTAs into GA4 events (book_click, check_availability) */}
         <AnalyticsClickTracker />
-        {/* Google Analytics — deferred until after window load */}
-        <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-2SV2PXYB7T"
-          strategy="lazyOnload"
-        />
-        <Script id="gtag-init" strategy="lazyOnload">
-          {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-2SV2PXYB7T');`}
-        </Script>
+        {/* Google Analytics — production host only, never /admin (DEC-021);
+            gtag.js deferred until after window load */}
+        <Analytics />
       </body>
     </html>
   );
