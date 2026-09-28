@@ -16,8 +16,9 @@ import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
  *   Mickey in Lipa — Sleeps 7, check-in 2026-09-28, check-out 2026-09-29.
  *
  * Contact details (email/phone) and the default guest count come from the guest's most
- * recent prior booking. Price is the server quote for a GCash booking (no Stripe fee),
- * the same computation /api/bookings uses.
+ * recent prior booking. Price is the server quote for a GCash booking (no Stripe fee)
+ * with promo KIEL-400 applied — the same computation /api/bookings uses — and must equal
+ * the ₱2,100 the Owner actually received, or nothing is written.
  *
  * Created as "pending", exactly like a normal GCash booking. The Owner then sets it to
  * Confirmed in /admin/bookings, which runs the usual confirmation path (guest email,
@@ -34,6 +35,9 @@ const CHECK_IN = "2026-09-28";
 const CHECK_OUT = "2026-09-29";
 /** null = use the guest count from the prior booking. Set a number if the Owner says otherwise. */
 const GUESTS_OVERRIDE: number | null = null;
+const DISCOUNT_CODE = "KIEL-400";
+/** What the Owner received via GCash. The server quote must match exactly. */
+const EXPECTED_TOTAL = 2100;
 const NOTES = "Manual entry by admin — guest paid via GCash directly without completing the online booking flow.";
 
 async function buildPlan() {
@@ -76,10 +80,17 @@ async function buildPlan() {
       checkIn: CHECK_IN,
       checkOut: CHECK_OUT,
       guests,
+      discountCode: DISCOUNT_CODE,
       paymentMethod: "gcash",
     });
     if (!result.ok) issues.push(`Quote failed: ${result.error}`);
-    else quote = result.quote;
+    else {
+      quote = result.quote;
+      // computeBookingQuote silently drops a code that is inactive, used up, or not valid
+      // for this property — surface that instead of quietly booking at full price.
+      if (quote.discountCode !== DISCOUNT_CODE) issues.push(`Promo ${DISCOUNT_CODE} was not applied (inactive, used up, or not valid for this property)`);
+      if (quote.total !== EXPECTED_TOTAL) issues.push(`Quote total ₱${quote.total} does not match the ₱${EXPECTED_TOTAL} received`);
+    }
 
     const found = await getPropertyConflicts({
       propertyId: property.id,
@@ -114,7 +125,10 @@ export async function GET() {
       guestsSource: GUESTS_OVERRIDE !== null ? "override" : "prior booking",
       nightlyTotal: plan.quote?.nightlyTotal ?? null,
       extraGuestFee: plan.quote?.extraGuestFee ?? null,
+      discountCode: plan.quote?.discountCode ?? null,
+      discountAmount: plan.quote?.discountAmount ?? null,
       totalPrice: plan.quote?.total ?? null,
+      expectedTotal: EXPECTED_TOTAL,
       paymentMethod: "gcash",
       status: "pending",
       notes: NOTES,
@@ -154,10 +168,18 @@ export async function POST() {
       totalPrice: quote.total,
       nightlyTotal: quote.nightlyTotal,
       extraGuestFee: quote.extraGuestFee > 0 ? quote.extraGuestFee : null,
+      discountCode: quote.discountCode,
+      discountAmount: quote.discountAmount > 0 ? quote.discountAmount : null,
       paymentMethod: "gcash",
       status: "pending",
       notes: NOTES,
     },
+  });
+
+  // Count the promo use, same as /api/bookings.
+  await prisma.discountCode.update({
+    where: { code: DISCOUNT_CODE },
+    data: { usageCount: { increment: 1 } },
   });
 
   // Shared inventory: block the same nights on sibling listings (same as /api/bookings).
@@ -170,7 +192,7 @@ export async function POST() {
     action: `Manual booking: created #${booking.id} for ${GUEST_NAME} at "${property.name}" ${CHECK_IN} → ${CHECK_OUT} (GCash paid directly)`,
     module: "bookings",
     target: `booking-${booking.id}`,
-    metadata: { sourcePriorBookingId: prior.id, guests: quote.guestCount, totalPrice: quote.total },
+    metadata: { sourcePriorBookingId: prior.id, guests: quote.guestCount, discountCode: DISCOUNT_CODE, totalPrice: quote.total },
   });
 
   return NextResponse.json({
