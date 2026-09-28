@@ -77,13 +77,13 @@ const SHARED_PRICING = (rate: string): PricingNotes => ({
 });
 
 // Bella Vita sits in Lipa City; these are the same city-wide landmarks the
-// other two listings reference. Verify drive-times from Bella Vita specifically.
+// other two listings reference. SM Lipa (~20 min / ~7 km) and Casa Marikit
+// (~30 min / ~10 km) owner-confirmed from Bella Vita 2026-09-27; the rest still
+// need verifying from Bella Vita specifically.
 const SHARED_NEIGHBORHOOD: NeighborhoodGroup[] = [
   {
     radiusLabel: "5 to 10 minutes by car",
     places: [
-      "SM Lipa (mall, supermarket, pharmacy, food court)",
-      "Casa Marikit Restaurant",
       "Cafe de Lipa",
       "Mary Mediatrix Medical Center",
       "Lipa Medix Medical Center",
@@ -95,6 +95,13 @@ const SHARED_NEIGHBORHOOD: NeighborhoodGroup[] = [
       "San Sebastian Cathedral",
       "Beegee's Lomi House",
       "Carmelite Monastery",
+    ],
+  },
+  {
+    radiusLabel: "About 20 to 30 minutes by car",
+    places: [
+      "SM Lipa (mall, supermarket, pharmacy, food court) — about 20 minutes",
+      "Casa Marikit Restaurant — about 30 minutes",
     ],
   },
   {
@@ -130,7 +137,7 @@ const SHARED_FAQS_TAIL: PropertyFaq[] = [
   {
     question: "Can we cook in the house?",
     answer:
-      "Yes. Full kitchen with stove, fridge, and cookware, plus a large dining area. Bring groceries from SM Lipa, five to ten minutes away.",
+      "Yes. Full kitchen with stove, fridge, and cookware, plus a large dining area. Bring groceries from SM Lipa, about 20 minutes away by car.",
   },
   {
     question: "What is the extra-guest fee?",
@@ -168,7 +175,7 @@ export const SLEEPS_7: PropertySeoContent = {
     },
     {
       title: "Kids who love a themed stay",
-      body: "Mickey-inspired décor, photo-worthy spaces, and a day bed plus floor mattresses make this a fun, low-stress base for a family weekend. SM Lipa is five to ten minutes away for diaper and snack runs, and the gated subdivision is safe to walk around in.",
+      body: "Mickey-inspired décor, photo-worthy spaces, and a day bed plus floor mattresses make this a fun, low-stress base for a family weekend. SM Lipa is about 20 minutes away by car for diaper and snack runs, and the gated subdivision is safe to walk around in.",
       internalLinkLabel: "Read our family staycation guide",
       internalLinkUrl:
         "https://blog.haveninlipa.com/family-staycation-lipa-city-batangas/",
@@ -226,7 +233,7 @@ export const SLEEPS_7: PropertySeoContent = {
         "Garage parking for one small/compact car",
         "Gated Bella Vita subdivision with village security",
         "Close to cafés, restaurants, and sari-sari stores",
-        "5 to 10 minutes to SM Lipa, restaurants, hospitals",
+        "About 20 minutes by car to SM Lipa",
       ],
     },
   ],
@@ -276,7 +283,7 @@ export const SLEEPS_11: PropertySeoContent = {
   heroSummary:
     "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱4,200 per night (covers 9 guests; an extra per-guest fee for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "Bring the whole family. This 2-bedroom configuration of Mickey in Lipa is designed around how families actually travel — the master bedroom plus a themed bunk room means parents enjoy privacy while the kids get a fun space of their own, all under one roof.\n\nThe entire two-floor house is yours: master bedroom with a queen bed, a themed bunk room for the kids, a living room with a day bed, a full kitchen, a large dining area, and a garage. Mickey-inspired décor throughout, dedicated fiber up to 520 Mbps, and a quiet gated subdivision five to ten minutes from SM Lipa.\n\nWhether it's a family reunion, a birthday weekend, or a staycation away from Manila, this setup keeps everyone together for family meals, movie nights, and celebrations. For larger groups, the full-house configuration opens a second bunk room and sleeps up to 15.",
+    "Bring the whole family. This 2-bedroom configuration of Mickey in Lipa is designed around how families actually travel — the master bedroom plus a themed bunk room means parents enjoy privacy while the kids get a fun space of their own, all under one roof.\n\nThe entire two-floor house is yours: master bedroom with a queen bed, a themed bunk room for the kids, a living room with a day bed, a full kitchen, a large dining area, and a garage. Mickey-inspired décor throughout, dedicated fiber up to 520 Mbps, and a quiet gated subdivision about 20 minutes by car from SM Lipa.\n\nWhether it's a family reunion, a birthday weekend, or a staycation away from Manila, this setup keeps everyone together for family meals, movie nights, and celebrations. For larger groups, the full-house configuration opens a second bunk room and sleeps up to 15.",
   bestForSegments: [
     {
       title: "Families who want a kids' room",
@@ -346,7 +353,7 @@ export const SLEEPS_11: PropertySeoContent = {
         "Garage parking for one small/compact car",
         "Gated Bella Vita subdivision with village security",
         "Close to cafés, restaurants, and sari-sari stores",
-        "5 to 10 minutes to SM Lipa, restaurants, hospitals",
+        "About 20 minutes by car to SM Lipa",
       ],
     },
   ],
@@ -396,7 +403,7 @@ export const SLEEPS_15: PropertySeoContent = {
   heroSummary:
     "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber up to 520 Mbps, and garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, five to ten minutes from SM Lipa and a short drive from Taal and Tagaytay.",
+    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber up to 520 Mbps, and garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, about 20 minutes by car from SM Lipa and a short drive from Taal and Tagaytay.",
   bestForSegments: [
     {
       title: "Reunions and multi-generation trips",
@@ -467,7 +474,7 @@ export const SLEEPS_15: PropertySeoContent = {
         "Garage parking for one small/compact car",
         "Gated Bella Vita subdivision with village security",
         "Close to cafés, restaurants, and sari-sari stores",
-        "5 to 10 minutes to SM Lipa, restaurants, hospitals",
+        "About 20 minutes by car to SM Lipa",
       ],
     },
   ],

@@ -12,6 +12,30 @@ Status: **Committed on branch `chore/remove-manual-fix-route` (PR against `dev`,
 
 ---
 
+## 2026-09-27 — `/weddings-accommodation` SEO rework for Lipa wedding-destination / venue intent
+
+Area: SEO | Website
+
+Status: **Merged into `dev` via PR #26 (merge `d236376`, 2026-09-27). Not on `main`, not deployed.**
+
+### Outcome
+Reworked the wedding money page for the venue/destination-intent queries it was already surfacing for (GSC Aug 28–Sep 24 2026: 324 impr, pos 19.8, 1 click; `wedding destination in lipa` 175 impr, `wedding venue in lipa` 96 impr) without claiming to be a venue (`SEO-DEC-030`; DEC-008/SEO-DEC-003 unchanged).
+
+### Material Changes
+- `src/app/weddings-accommodation/page.tsx`: title `Lipa Wedding Destination Homes, Sleeps {range}` (DB range, ≤ 60 chars rendered, number-free fallback) and "we're not the venue" meta description; OG + new Twitter metadata; new H1 plus a plain not-a-venue line and a top `/properties` CTA; H2s reordered (destination → churches/venues → where the party stays → houses → cost → booking → FAQ → CTA); FAQ 7 → 9 (venue question reworded with a flat "No.", Lipa-as-destination, distance FAQ generated from the owner-verified `DRIVE_TIMES`, entourage-capacity FAQ from `deriveHouses()`); blog pilgrimage-guide link removed in favour of `/properties`.
+- New `src/lib/__tests__/weddings-accommodation-page.test.ts` (DB-free; 30 cases across the 3 TZ projects).
+
+### Verification
+`npm run lint` clean, `npx tsc --noEmit` clean, `npm test` 681/681 (was 651). Production not touched; no schema change.
+
+### Pending
+Owner review/merge; after the production deploy: GSC URL Inspection + Request Indexing, re-measure ~4 weeks later. Details: [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md) → `/weddings-accommodation` → SEO rework.
+
+### Follow-up, same day — drive-time consistency fix (commit `db0cdbc`, same branch/PR)
+Owner fact-check answered 2026-09-27: from Bella Vita, SM City Lipa ≈ 7 km / 20 min by car, Casa Marikit ≈ 10 km / 30 min, both traffic-dependent. Superseded "5 / 5–10 / five to ten minutes to SM Lipa", "Casa Marikit is a short drive away" and the August sheet's 45-min Casa Marikit figure. Changed: `src/lib/faqs.ts` (family + distance FAQs), `src/app/weddings-accommodation/page.tsx` ("about" on the drive-time table and distance FAQ, traffic caveat, SM Lipa re-confirmation note, Casa Marikit comment), `prisma/property-content/b34-content.ts` + `mickey-content.ts` (seed source only — SM Lipa/Casa Marikit moved to an "About 20 to 30 minutes by car" band; description, segment, amenity and FAQ phrases). New guard `src/lib/__tests__/drive-time-claims.test.ts`; weddings test +3 cases. Lint/tsc clean, tests 705/705. **Production DB property text unchanged** (no seed/script run) — needs an Owner-approved correction; `scripts/fix-property-content.ts` does not detect these phrases as written.
+
+---
+
 ## 2026-09-27 — Analytics tracking fixes: GA4 production/admin gate, internal-traffic tagging, Stay Match landing confirmation
 
 Area: Website / SEO / Analytics

@@ -71,11 +71,11 @@ export const TWO_BR: PropertySeoContent = {
   heroSummary:
     "A two-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — built for families, barkadas, and group trips. Sleeps up to 9 across two private bedrooms, a full kitchen for cooking real meals, fast WiFi, Netflix, and parking inside the village. From ₱2,800 per night. Twenty-one verified guest reviews and counting. One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This isn't a hotel suite and it isn't a generic Airbnb. It's a real two-bedroom unit in a quiet residential village — the kind of place a Manila family rents for a weekend, leaves with everyone in a better mood, and books again.\n\nTwo private bedrooms mean parents and kids (or two couples on a barkada trip) get real sleep. The full kitchen means breakfast happens on your schedule and you don't burn ₱2,000 every morning at a hotel restaurant. The fiber WiFi, up to 340 Mbps, means everyone streams Netflix on different devices without the buffering arguments. Parking is in a garage that fits a full-size SUV.\n\nLipa City sits at about 300 meters elevation — cool air, quiet streets, real food. The unit is a short drive to SM Lipa and Casa Marikit. Most guests don't go back to Manila on Sunday wishing they had a third night. They just rebook for the next month.",
+    "This isn't a hotel suite and it isn't a generic Airbnb. It's a real two-bedroom unit in a quiet residential village — the kind of place a Manila family rents for a weekend, leaves with everyone in a better mood, and books again.\n\nTwo private bedrooms mean parents and kids (or two couples on a barkada trip) get real sleep. The full kitchen means breakfast happens on your schedule and you don't burn ₱2,000 every morning at a hotel restaurant. The fiber WiFi, up to 340 Mbps, means everyone streams Netflix on different devices without the buffering arguments. Parking is in a garage that fits a full-size SUV.\n\nLipa City sits at about 300 meters elevation — cool air, quiet streets, real food. SM City Lipa is about 20 minutes away by car and Casa Marikit about 30, depending on traffic. Most guests don't go back to Manila on Sunday wishing they had a third night. They just rebook for the next month.",
   bestForSegments: [
     {
       title: "Families with kids",
-      body: "Two bedrooms, one kitchen, one garage that fits a full-size SUV. Bunk the kids together, parents in their own room. The living area gives the toddler somewhere to play that isn't your bedroom. Stove and fridge mean snacks and milk on demand. SM Lipa for diaper runs is 5 minutes away. Mary Mediatrix and Lipa Medix hospitals are within 10 minutes for peace of mind.",
+      body: "Two bedrooms, one kitchen, one garage that fits a full-size SUV. Bunk the kids together, parents in their own room. The living area gives the toddler somewhere to play that isn't your bedroom. Stove and fridge mean snacks and milk on demand. SM Lipa for diaper runs is about 20 minutes away by car. Mary Mediatrix and Lipa Medix hospitals are within 10 minutes for peace of mind.",
       internalLinkLabel: "Read our family staycation guide",
       internalLinkUrl:
         "https://blog.haveninlipa.com/family-staycation-lipa-city-batangas/",
@@ -140,7 +140,7 @@ export const TWO_BR: PropertySeoContent = {
         "Garage parking inside the gated village, fits a full-size SUV",
         "24-hour village security",
         "Walking distance to a sari-sari store and a small bakery",
-        "5 to 10 minutes to SM Lipa, restaurants, hospitals",
+        "About 20 minutes by car to SM Lipa; hospitals within 10 minutes",
       ],
     },
   ],
@@ -148,8 +148,6 @@ export const TWO_BR: PropertySeoContent = {
     {
       radiusLabel: "5 minutes by car",
       places: [
-        "SM Lipa (mall, grocery, pharmacy, food court)",
-        "Casa Marikit Restaurant",
         "Cafe de Lipa",
         "Mary Mediatrix Medical Center",
         "Lipa Medix Medical Center",
@@ -161,6 +159,13 @@ export const TWO_BR: PropertySeoContent = {
         "San Sebastian Cathedral",
         "Beegee's Lomi House",
         "Carmelite Monastery",
+      ],
+    },
+    {
+      radiusLabel: "About 20 to 30 minutes by car",
+      places: [
+        "SM Lipa (mall, grocery, pharmacy, food court) — about 20 minutes",
+        "Casa Marikit Restaurant — about 30 minutes",
       ],
     },
     {
@@ -198,7 +203,7 @@ export const TWO_BR: PropertySeoContent = {
     {
       question: "Is the unit good for families with toddlers?",
       answer:
-        "Yes — full kitchen for snacks and milk on demand, baby-safe living area, SM Lipa five minutes away for diapers and supplies, and hospitals within 10 minutes. The unit has a loft accessed by an internal staircase, so for crawlers and very young toddlers we recommend a stair gate. Message us before booking and we'll advise based on your dates.",
+        "Yes — full kitchen for snacks and milk on demand, baby-safe living area, SM Lipa about 20 minutes away by car for diapers and supplies, and hospitals within 10 minutes. The unit has a loft accessed by an internal staircase, so for crawlers and very young toddlers we recommend a stair gate. Message us before booking and we'll advise based on your dates.",
     },
     {
       question: "How many guests can sleep here comfortably?",
@@ -260,7 +265,7 @@ export const ONE_BR: PropertySeoContent = {
   heroSummary:
     "A one-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — designed for couples, solo digital nomads, and small group stays. Sleeps up to 5, full kitchen, fiber WiFi up to 340 Mbps (speed-tested), Netflix Premium, solar-powered backup, and parking inside the village. From ₱1,800 per night. Thirty-two verified guest reviews. One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the unit guests rebook. Couples on weekend getaways, remote workers logging Manila hours from a quieter address, single travelers who want a real apartment instead of a hotel room. The 1BR has a way of getting under people's skin — they come for one weekend and start asking about monthly rates.\n\nThe bedroom is genuinely restful. The kitchen is fully equipped, not symbolic. The WiFi runs at up to 340 Mbps tested speeds, and during brownouts the solar backup keeps essentials running. The village is gated, quiet by 9 PM, and a five-minute drive from SM Lipa for groceries.\n\nIt's not a luxury suite. It's a comfortable, well-equipped private home. That turns out to be exactly what most people actually want.",
+    "This is the unit guests rebook. Couples on weekend getaways, remote workers logging Manila hours from a quieter address, single travelers who want a real apartment instead of a hotel room. The 1BR has a way of getting under people's skin — they come for one weekend and start asking about monthly rates.\n\nThe bedroom is genuinely restful. The kitchen is fully equipped, not symbolic. The WiFi runs at up to 340 Mbps tested speeds, and during brownouts the solar backup keeps essentials running. The village is gated, quiet by 9 PM, and about 20 minutes by car from SM Lipa for groceries.\n\nIt's not a luxury suite. It's a comfortable, well-equipped private home. That turns out to be exactly what most people actually want.",
   bestForSegments: [
     {
       title: "Couples on a weekend getaway",
@@ -339,7 +344,7 @@ export const ONE_BR: PropertySeoContent = {
         "Garage parking inside the gated village, fits a full-size SUV",
         "24-hour security",
         "Walking distance to a sari-sari, small bakery, tricycle stop",
-        "5 minutes by car to SM Lipa, restaurants, hospitals",
+        "About 20 minutes by car to SM Lipa; hospitals within 10 minutes",
       ],
     },
   ],
@@ -347,8 +352,6 @@ export const ONE_BR: PropertySeoContent = {
     {
       radiusLabel: "5 minutes by car",
       places: [
-        "SM Lipa (mall, supermarket, pharmacy, food court)",
-        "Casa Marikit Restaurant",
         "Cafe de Lipa",
         "Mary Mediatrix Medical Center",
       ],
@@ -359,6 +362,13 @@ export const ONE_BR: PropertySeoContent = {
         "San Sebastian Cathedral",
         "Beegee's Lomi House",
         "Carmelite Monastery",
+      ],
+    },
+    {
+      radiusLabel: "About 20 to 30 minutes by car",
+      places: [
+        "SM Lipa (mall, supermarket, pharmacy, food court) — about 20 minutes",
+        "Casa Marikit Restaurant — about 30 minutes",
       ],
     },
     {

@@ -1,6 +1,7 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-27 evening (§13/§14 only — GA4 gating DEC-021, `stay_match_click` finding, `stay_match_arrival`, open GA4-UI steps; code on branch `fix/analytics-tracking`, PR against `dev`, not yet merged/deployed). Earlier 2026-09-27: (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
+> **Last updated:** 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
+> `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§13/§14 — GA4 gating DEC-021, `stay_match_click` finding, `stay_match_arrival`, open GA4-UI steps; PR #25, merged into `dev`); (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
 > §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
 > cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
 > (§3, §7, §8, §19 only — `hil-seo`/Yoast cutover executed and verified, `SEO-DEC-026`). Earlier stamp: 2026-09-17 (created earlier the same day — SEO/content governance
@@ -274,6 +275,13 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 - Anchor-text naming drift exists on 36 repointed `/staycation` links ("vs. Airbnb"
   phrasing vs. current page copy) — flagged, low priority, not fixed as of the last
   recorded status.
+- **Money-page off-topic link fixed (2026-09-27, PR against `dev`, not yet live):**
+  `/weddings-accommodation` linked out to the blog's pilgrimage guide
+  (`/lipa-pilgrimage-guide/`) from its churches section — a discovery-content exit on a
+  booking-intent page, against the `SEO-DEC-005` pivot. Removed; the churches section now
+  links `/properties`, and the page carries a primary `/properties` CTA near the top plus
+  the existing `/staycation`, property-page, `/faq` and `/#contact` links. Pinned by
+  `src/lib/__tests__/weddings-accommodation-page.test.ts`.
 - Cross-surface link auditing gap: the `mt-maculot` dead-slug case was only caught because
   it was referenced from the *main app's* `bestForSegments` copy, not from any blog
   article — a purely blog-side audit would have missed it. Any future link audit should
@@ -312,6 +320,29 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
     one-time Owner authorisation and did **not** lift the freeze. Status **Active**, no end
     date: Cedric decides at the early-October 2026 re-baseline, after GSC monitoring ends
     2026-10-03 (`SEO-DEC-027`).
+
+- **`/weddings-accommodation` rework for venue/destination intent (2026-09-27,
+  `SEO-DEC-030`) — branch `seo/weddings-accommodation-rework`, PR against `dev`; not
+  merged, not deployed.** Target queries and baseline (GSC, Aug 28–Sep 24 2026, from the
+  HIL PM's 2026-09-27 review): the page — **324 impressions, avg position 19.8, 1 click**;
+  `wedding destination in lipa` 175 impr, pos 18.1 (147 on this page at ~p20; the
+  romantic-getaway blog post also ranks ~p21); `wedding venue in lipa` 96 impr, pos 15.8
+  (93 on this page at ~p16); `intimate wedding venue lipa` 55 impr, pos 35. New title
+  `Lipa Wedding Destination Homes, Sleeps {range}` (DB range; ≤ 60 chars rendered), new
+  meta description saying "we're not the venue", H1/H2s restructured around Lipa as a
+  wedding destination → churches/venues → where the party stays → cost → booking → FAQ;
+  FAQ 7 → 9 (JSON-LD from the same array, still `FAQPage` only). Implementation detail:
+  [HIL SEO Technical Specification.md](HIL%20SEO%20Technical%20Specification.md) →
+  `/weddings-accommodation` → SEO rework. **Re-measure ~4 weeks after the production
+  deploy** against this baseline (note the deploy date when it happens; do not compare
+  against the pre-deploy window).
+  - *Drive-time fact-check resolved 2026-09-27 (Owner):* from Bella Vita, SM City Lipa is
+    about 7 km / 20 minutes by car and Casa Marikit about 10 km / 30 minutes; times vary
+    with traffic. Applied on the same branch to the weddings table/FAQ ("about" + traffic
+    caveat), `src/lib/faqs.ts` (`/faq` `FAQPage` JSON-LD) and the property seed-source
+    text. Not yet on production; the property pages' DB text and any published blog post
+    repeating an older figure (e.g. article #22's "Casa Marikit 10 to 15 minutes", article
+    #11's "5-minute drive" to SM Lipa) need separate Owner-side fixes.
 
 ---
 
@@ -432,6 +463,9 @@ after Sep 3 ≈ 15 by ≈ 14 users. `stay_match_click` fired only on 2026-08-27 
   Active Gate closes when both are true.
 - GSC/GA4 read-only access for the analytics service account was granted and confirmed
   working on 2026-09-27 (per `HIL_PROJECT_STATUS.md` / `HIL_COMPLETION_LOG.md`).
+- **Owner, after the `/weddings-accommodation` rework reaches production (§12):** URL
+  Inspection + Request Indexing for `https://haveninlipa.com/weddings-accommodation`. Not
+  yet due — the change is a PR against `dev`, not merged or deployed.
 - Redundant `www.haveninlipa.com/sitemap.xml` GSC submission flagged for removal, not yet
   actioned as of the last recorded Product Owner Watch Items list.
 
