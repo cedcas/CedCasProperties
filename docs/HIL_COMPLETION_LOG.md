@@ -4,11 +4,19 @@
 
 ---
 
+## 2026-09-28 — Production drive-time correction run; temporary route removed
+
+Area: Website | Content
+
+Status: **Run done and verified live. Route-removal PR opened against `main`, not merged.** At 2026-09-28 00:11 CT the Owner ran the temporary DEC-012 route `/api/admin/dev/fix-drive-times` on production. It went live with release PR #30 (`41d666a`). GET dry run: planHash `db895ae4f17708a6`, 20 field changes across 5 properties, matching the expected list in the 2026-09-27 entry below. POST: `success: true`, 20 written, and the post-write re-check passed. The Owner then checked all 5 live listings: SM Lipa shows about 20 min and Casa Marikit about 30 min, in the new "About 20 to 30 minutes by car" group. Follow-up PR deletes `src/app/api/admin/dev/fix-drive-times/` and the route-only POST gate (`checkApplyRequest` / `DRIVE_TIME_CONFIRM` and their tests) from `src/lib/drive-time-fixes.ts`. It keeps `planDriveTimeFixes` and the CLI pass in `scripts/fix-property-content.ts`. See the DEC-016 addendum.
+
+---
+
 ## 2026-09-28 — Release PR: `dev` into `main` (PRs #24–#28 + reconcile production-only fixes)
 
 Area: Website | Release
 
-Status: **Release PR open against `main`, not merged, not deployed.** Branch `release/dev-to-main-2026-09-28` = latest `origin/dev` (after PR #28) plus a normal (no-rebase) merge of `origin/main`. The merge had no conflicts. `main`'s production-only work (#19–#21 manual-fix route added, fixed and removed; #22 Guest Messages UTC booking dates + jsdom tests; #23 server-side Stripe PaymentIntent verification; merge commits for #13–#18) is now in `dev`'s history. Every file touched by #22/#23 is byte-identical to `main`, and `src/app/api/admin/dev/manual-fix/` stays deleted. Going live: the analytics changes (DEC-021, active only on the production hostname), the `/weddings-accommodation` rework (SEO-DEC-030) + drive-time copy, the drive-time correction lib/script pass + TEMPORARY `/api/admin/dev/fix-drive-times` route (DEC-012; delete after the Owner's run), and docs/, content/seo, tools/seo additions. `prisma/schema.prisma` is identical to `main`, and no dependency, workflow or Vercel config changes. Lint/tsc clean, 1170/1170 tests, `prisma generate && next build` OK with a placeholder `DATABASE_URL`.
+Status: **Merged and live as PR #30 (`41d666a`), 2026-09-28.** Branch `release/dev-to-main-2026-09-28` = latest `origin/dev` (after PR #28) plus a normal (no-rebase) merge of `origin/main`. The merge had no conflicts. `main`'s production-only work (#19–#21 manual-fix route added, fixed and removed; #22 Guest Messages UTC booking dates + jsdom tests; #23 server-side Stripe PaymentIntent verification; merge commits for #13–#18) is now in `dev`'s history. Every file touched by #22/#23 is byte-identical to `main`, and `src/app/api/admin/dev/manual-fix/` stays deleted. Going live: the analytics changes (DEC-021, active only on the production hostname), the `/weddings-accommodation` rework (SEO-DEC-030) + drive-time copy, the drive-time correction lib/script pass + TEMPORARY `/api/admin/dev/fix-drive-times` route (DEC-012; delete after the Owner's run), and docs/, content/seo, tools/seo additions. `prisma/schema.prisma` is identical to `main`, and no dependency, workflow or Vercel config changes. Lint/tsc clean, 1170/1170 tests, `prisma generate && next build` OK with a placeholder `DATABASE_URL`.
 
 ---
 

@@ -2,11 +2,9 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
-  DRIVE_TIME_CONFIRM,
   DRIVE_TIME_FIELDS,
   DRIVE_TIME_RULES,
   applyDriveTimeRulesToField,
-  checkApplyRequest,
   findStaleDriveTimeExcerpts,
   isStaleDriveTimeSentence,
   planDriveTimeFixes,
@@ -233,29 +231,6 @@ describe("drive-time-fixes", () => {
       const edited = preRows();
       edited[0] = { ...edited[0], description: `${edited[0].description} (edited)` };
       expect(planDriveTimeFixes(edited).planHash).not.toBe(a);
-    });
-  });
-
-  describe("checkApplyRequest (temporary route POST gate)", () => {
-    const hash = "0123456789abcdef";
-    it("accepts only the exact confirm string plus the current hash", () => {
-      expect(checkApplyRequest({ confirm: DRIVE_TIME_CONFIRM, planHash: hash }, hash)).toEqual({ ok: true });
-    });
-    it.each([
-      [null],
-      ["APPLY-DRIVE-TIMES"],
-      [{}],
-      [{ confirm: "apply-drive-times", planHash: hash }],
-      [{ confirm: DRIVE_TIME_CONFIRM }],
-      [{ confirm: DRIVE_TIME_CONFIRM, planHash: "" }],
-    ])("rejects %j with 400", (body) => {
-      const r = checkApplyRequest(body, hash);
-      expect(r.ok).toBe(false);
-      if (!r.ok) expect(r.status).toBe(400);
-    });
-    it("rejects a stale hash with 409", () => {
-      const r = checkApplyRequest({ confirm: DRIVE_TIME_CONFIRM, planHash: "ffffffffffffffff" }, hash);
-      expect(r).toMatchObject({ ok: false, status: 409 });
     });
   });
 });
