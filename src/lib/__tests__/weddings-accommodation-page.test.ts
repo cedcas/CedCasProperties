@@ -34,6 +34,7 @@ vi.mock("@/lib/listings", async (importActual) => ({
 }));
 
 import WeddingsAccommodationPage, { generateMetadata } from "@/app/weddings-accommodation/page";
+import { faqs as siteFaqs } from "@/lib/faqs";
 
 // Shape of the live five (two houses) — values are fixtures, not claims about live rates.
 const listing = (id: number, slug: string, name: string, bedrooms: number, maxGuests: number) => ({
@@ -172,5 +173,28 @@ describe("/weddings-accommodation capacity (DB-derived)", () => {
   it("puts the DB-derived occupancy range in the title", async () => {
     withDb();
     expect(String((await generateMetadata()).title)).toBe("Lipa Wedding Destination Homes, Sleeps 7–15");
+  });
+});
+
+describe("/weddings-accommodation drive times (owner-confirmed 2026-09-27)", () => {
+  it("the SM Lipa row reads about 20 minutes, and the page says times vary with traffic", async () => {
+    withoutDb();
+    const html = await renderPage();
+    expect(html).toMatch(/>SM Lipa<\/span>.*?<td[^>]*>about 20 minutes<\/td>/);
+    expect(html).toMatch(/vary with the time of\s+day and traffic/);
+  });
+
+  it("the distance FAQ (and so its JSON-LD) carries the qualified times and the traffic caveat", async () => {
+    withoutDb();
+    const blocks = jsonLdBlocks(await renderPage());
+    const distance = (blocks[0].mainEntity as { name: string; acceptedAnswer: { text: string } }[]).find(
+      (q) => q.name === "How far are your homes from Lipa's churches and venues?",
+    );
+    expect(distance?.acceptedAnswer.text).toContain("Palazzo Antonio about 30 minutes");
+    expect(distance?.acceptedAnswer.text).toContain("traffic");
+  });
+
+  it("the site FAQ no longer says SM Lipa is 5–10 minutes away", () => {
+    for (const f of siteFaqs) expect(f.a).not.toMatch(/5[–-]10 minutes (?:to|away)?.{0,20}SM|SM Lipa is 5/);
   });
 });

@@ -50,7 +50,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "Are your properties good for families with kids?",
-    a: "Yes. The Spacious 2-Bedroom (B34) is family-built: two private bedrooms, a full kitchen, and a baby-safe living area — note it has a loft reached by an internal staircase, so if you're traveling with crawlers or very young toddlers, message us about the layout first. Mickey in Lipa (B38) was designed specifically for families and groups, with themed bunk rooms that kids love. SM Lipa is 5–10 minutes away for supplies, and hospitals are within 10 minutes.",
+    a: "Yes. The Spacious 2-Bedroom (B34) is family-built: two private bedrooms, a full kitchen, and a baby-safe living area — note it has a loft reached by an internal staircase, so if you're traveling with crawlers or very young toddlers, message us about the layout first. Mickey in Lipa (B38) was designed specifically for families and groups, with themed bunk rooms that kids love. SM City Lipa is about 20 minutes away by car for supplies, and hospitals are within 10 minutes.",
     links: [{ phrase: "Spacious 2-Bedroom (B34)", href: "/properties/spacious-2-bedroom" }],
   },
 
@@ -62,7 +62,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "How far is Haven in Lipa from Manila and nearby landmarks?",
-    a: "About one hour from Manila via SLEX and the STAR Tollway. From the property, it's roughly 5–10 minutes to SM Lipa for groceries and shopping, and under 10 minutes to major hospitals (Mary Mediatrix, Lipa Medix). Casa Marikit is a short drive away.",
+    a: "About one hour from Manila via SLEX and the STAR Tollway. From the property, it's about 7 km (roughly 20 minutes by car) to SM City Lipa for groceries and shopping, and under 10 minutes to major hospitals (Mary Mediatrix, Lipa Medix). Casa Marikit is about 10 km away, roughly 30 minutes by car. Drive times vary with the time of day and traffic.",
   },
 
   // ── Booking and Payment ──────────────────────────────────────────────

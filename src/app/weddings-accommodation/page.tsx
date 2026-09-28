@@ -50,13 +50,17 @@ export const dynamic = "force-dynamic";
 
 /**
  * Drive times confirmed with the owner on 2026-08-16 — real times, not map
- * estimates, which is the page's whole advantage. **Do not adjust, round, or
- * supplement these from a map.**
+ * estimates, which is the page's whole advantage. SM Lipa re-confirmed by the
+ * owner 2026-09-27: about 7 km, about 20 minutes. "About" because times vary with
+ * the time of day and traffic. **Do not adjust, round, or supplement these from
+ * a map.**
  *
- * Five venues were deliberately dropped as 45–50 minutes out or ambiguous in
- * identity: Casa Marikit, Villa Marasigan, Cintai Corito's Garden, Villa Natura
- * Taal, and M Farm / The Farm at San Benito (40 min *and* two businesses appear
- * to share the name). Do not add them back.
+ * Five venues were deliberately left out of the table: Casa Marikit (owner,
+ * 2026-09-27: about 10 km, about 30 minutes by car — accurate, but not one of
+ * this page's venues), Villa Marasigan, Cintai Corito's Garden and Villa Natura
+ * Taal (45–50 minutes out or ambiguous in identity), and M Farm / The Farm at
+ * San Benito (40 min *and* two businesses appear to share the name). Do not add
+ * them back without an owner content decision.
  */
 const DRIVE_TIMES: {
   place: string;
@@ -67,10 +71,10 @@ const DRIVE_TIMES: {
   kind: "church" | "venue" | "errand";
 }[] = [
   { place: "Mary Mediatrix of All Grace Parish", time: "under 10 minutes", emphasis: true, kind: "church" },
-  { place: "Our Lady of Mount Carmel", time: "10 minutes", emphasis: true, kind: "church" },
-  { place: "Metropolitan Cathedral of Saint Sebastian", time: "15 minutes", emphasis: true, kind: "church" },
-  { place: "Palazzo Antonio", note: "hotel, resort and convention venue", time: "30 minutes", emphasis: false, kind: "venue" },
-  { place: "SM Lipa", note: "for the thing somebody forgot", time: "20 minutes", emphasis: false, kind: "errand" },
+  { place: "Our Lady of Mount Carmel", time: "about 10 minutes", emphasis: true, kind: "church" },
+  { place: "Metropolitan Cathedral of Saint Sebastian", time: "about 15 minutes", emphasis: true, kind: "church" },
+  { place: "Palazzo Antonio", note: "hotel, resort and convention venue", time: "about 30 minutes", emphasis: false, kind: "venue" },
+  { place: "SM Lipa", note: "for the thing somebody forgot", time: "about 20 minutes", emphasis: false, kind: "errand" },
 ];
 
 /** The layout's title template suffix, and the rendered-title budget before SERPs truncate. */
@@ -234,7 +238,7 @@ export default async function WeddingsAccommodationPage() {
     },
     {
       q: "How far are your homes from Lipa's churches and venues?",
-      a: `By car: ${listSentence(weddingPlaces, "and")}. Those are real driving times verified with the owner, not map estimates. If your venue isn't listed, ask and we'll tell you honestly how far it is.`,
+      a: `By car: ${listSentence(weddingPlaces, "and")}. Those are real driving times verified with the owner, not map estimates; they vary with the time of day and traffic. If your venue isn't listed, ask and we'll tell you honestly how far it is.`,
     },
     {
       q: "Can the bridal party get ready at the house?",
@@ -392,7 +396,9 @@ export default async function WeddingsAccommodationPage() {
               </p>
               <p className="text-[13.5px] text-charcoal/55">
                 <i className="fa-solid fa-circle-check text-forest mr-1.5" />
-                Verified with the owner, 2026-08-16 — real driving times, not map estimates.
+                Verified with the owner, 2026-08-16 — real driving times, not map estimates
+                (SM Lipa, about 7&nbsp;km, re-confirmed 2026-09-27). Times vary with the time of
+                day and traffic.
               </p>
             </div>
 
