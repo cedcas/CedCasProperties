@@ -486,6 +486,77 @@ The earlier implicit behavior "a Stripe booking with a PaymentIntent id is auto-
 
 ---
 
+## DEC-021 — GA4 runs only on the production hostname and never on admin routes; owner devices are tagged internal, not excluded
+
+Date: 2026-09-27
+Status: Active — implemented on branch `fix/analytics-tracking` (PR against `dev`); **not yet merged or deployed**
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+On `haveninlipa.com` (this repo), GA4 (`G-2SV2PXYB7T`) loads and sends only when:
+(1) the browser's `location.hostname` is on an exact allowlist (`haveninlipa.com`,
+`www.haveninlipa.com`), checked at runtime, and not a Vercel preview build
+(`NEXT_PUBLIC_VERCEL_ENV !== "preview"`, a secondary check); and (2) the path is not
+`/admin` or anything under it (or `/api`). gtag.js is not even fetched on admin page
+loads, and `window['ga-disable-G-2SV2PXYB7T']` covers client-side navigation into admin.
+`track()` is a no-op otherwise. A device that renders a signed-in admin page is marked
+(`localStorage.hil_internal`) and its public-page hits carry `traffic_type: "internal"`.
+It is tagged, not blocked. `/pay/[token]` stays tracked, with the token redacted. The only
+way to send from a non-production host is an explicit `?ga_debug=1` (DebugView, flagged
+`debug_mode`). Rules: `src/lib/analytics-config.ts`; wiring: `src/components/Analytics.tsx`,
+`src/lib/analytics.ts`.
+
+### Reason
+The 2026-09-27 GA4 review found admin sessions (52 "Organic Search" sessions landing on
+`/admin/*`/`/pay/*`), dev/preview/local hosts (7 sessions), and 4 test `booking_confirmed`
+events (2026-08-09, `dev.` + a local machine) in the reports. The previous design sent
+from every host and only stamped `debug_mode` on custom events off-production, which
+relied on a GA4 Developer filter that was never Active and never covered automatic
+`page_view`s. Why a hostname allowlist rather than `NEXT_PUBLIC_VERCEL_ENV === "production"`
+alone: `dev.haveninlipa.com` is a Vercel Preview deployment on a custom subdomain, and
+the env var depends on Vercel exposing system env vars to the client bundle. A hostname
+check in the browser is correct even when env vars are missing or wrong. Why tag the owner
+instead of disabling GA for them: GA4's Internal Traffic filter can be switched on, off or
+into Testing in the UI, while hits that were never sent can't be recovered.
+
+### Implications
+- Owner GA4-UI steps (not code): set the **Internal Traffic** and **Developer** data
+  filters Active; mark `generate_lead` (and `booking_confirmed`) as key events.
+- Any new production hostname must be added to `ANALYTICS_HOSTS`, or GA silently goes dark
+  there. Any new owner-only route tree must be added to `isTrackedPath`.
+- GA4 data between 2026-08-09 and this deploy still contains admin/dev/test traffic.
+  Segment by hostname/page path when reading it.
+- `blog.haveninlipa.com` (WordPress) is outside this repo and this decision. Stay Match
+  v1.0.2 applies the same tag-don't-drop idea to editor previews there.
+- **Test bookings stay unlabeled in the DB.** Non-production test bookings are now out of
+  GA4 automatically, and owner tests on production carry `traffic_type: internal`. No
+  `test_booking` event param was added, because no explicit non-schema signal exists at
+  booking time beyond the same internal marker. Proper labeling needs a schema change,
+  proposed below.
+
+### Open proposal — `Booking.isTest` (needs Owner approval; NOT implemented)
+- **Field:** `isTest Boolean @default(false)` on `Booking`. No index needed at current volume.
+- **Default / backfill:** `false`, so every existing booking stays "real". No automatic
+  backfill. The Owner flags known test bookings by hand.
+- **Where set:** an Admin-only "Test booking" toggle on `/admin/bookings/[id]`, saved
+  through the existing `PATCH /api/admin/bookings/[id]`. Deliberately no heuristics
+  (guest name/email patterns).
+- **What it excludes:** revenue/lifetime-value figures (`src/lib/customers.ts`, the
+  customer pages, booking-list totals) and any future revenue or ambassador-reward report
+  (rewards are not computed in code today). It does **not** change availability: a pending/confirmed test booking still
+  blocks dates until cancelled, for double-booking safety (DEC-002). Emails and SMS
+  behave as for any booking.
+- **Migration:** additive, non-destructive column. It would reach production through the
+  Vercel-build `prisma db push` (still the only path — see the open "remove `prisma db
+  push` from the production build" item) and reach the dev DB separately (DEC-013). It would
+  also give the pending hourly-fee workflow test a clean way to mark its throwaway booking.
+
+### Supersedes
+The 2026-08-08 `track()` behaviour ("send from every host; stamp `debug_mode` off
+`PROD_HOSTS` and rely on the Developer filter") in the Website spec → GA4 Analytics Events.
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

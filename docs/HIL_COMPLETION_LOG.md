@@ -28,6 +28,20 @@ Owner fact-check answered 2026-09-27: from Bella Vita, SM City Lipa ≈ 7 km / 2
 
 ---
 
+## 2026-09-27 — Analytics tracking fixes: GA4 production/admin gate, internal-traffic tagging, Stay Match landing confirmation
+
+Area: Website / SEO / Analytics
+
+Status: **Committed on branch `fix/analytics-tracking`; PR against `dev` to be opened. Not merged, not deployed.** The Stay Match v1.0.2 plugin is an artifact only and needs an Owner upload to WordPress.
+
+- **Why:** the 2026-09-27 GA4 review found admin sessions (52 "Organic Search" landings on `/admin/*`/`/pay/*`), dev/preview/local-host sessions (7), and 4 test `booking_confirmed` events (2026-08-09) in the reports. It also found `stay_match_click` at 0 and `generate_lead` not marked as a key event.
+- **What:** GA4 loads and sends only on `haveninlipa.com`/`www.` (runtime hostname allowlist, not a preview build), never on `/admin/*`, including after SPA navigation (`ga-disable-G-2SV2PXYB7T`). `track()` is a no-op otherwise. Owner/staff devices get `traffic_type: internal`. `/pay/[token]` stays tracked with the token redacted from `page_location`. DebugView opt-in via `?ga_debug=1`. New `stay_match_arrival` landing event, fed by non-UTM `?hil_sm=&hil_sm_post=` params that plugin v1.0.2 appends (`content/seo/runs/092726/`). `generate_lead` confirmed as the only lead event (contact form) and given `lead_source`. Decision: [DEC-021](HIL_DECISIONS.md). How it works: [Website spec → GA4 Analytics Events](HIL%20Website%20Technical%20Specification.md).
+- **`stay_match_click` finding:** no defect in v1.0.1 that would suppress real readers' clicks. With ~14 real viewers, 0 clicks is plausible. The pagePath-`/` views/clicks are inferred (not proven) to be editor previews. The measurement is unverifiable from the blog alone, hence the landing-side event. Detail: [HIL_SEO_SPECIFICATION.md §13](HIL_SEO_SPECIFICATION.md).
+- **Tests:** suite 651 → 867 (new `analytics-config`, `analytics-track`, `analytics-component` (jsdom), `stay-match-arrival`). `npm run lint`, `tsc --noEmit` and `npm test` clean. `npm run build:app` not run in this session. **No schema change.** `Booking.isTest` is proposed in DEC-021, pending Owner approval.
+- **Owner steps (GA4 UI / WordPress):** set the Internal Traffic and Developer data filters Active; mark `generate_lead` as a key event; upload Stay Match v1.0.2; decide on the `Booking.isTest` proposal.
+
+---
+
 ## 2026-09-27 — Stripe payment verification: server-side pricing + PaymentIntent checks (PR #23)
 
 Area: Website

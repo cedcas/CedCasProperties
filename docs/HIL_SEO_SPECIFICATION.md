@@ -1,7 +1,7 @@
 # Haven in Lipa — SEO Specification
 
 > **Last updated:** 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
-> `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
+> `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§13/§14 — GA4 gating DEC-021, `stay_match_click` finding, `stay_match_arrival`, open GA4-UI steps; PR #25, merged into `dev`); (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
 > §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
 > cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
 > (§3, §7, §8, §19 only — `hil-seo`/Yoast cutover executed and verified, `SEO-DEC-026`). Earlier stamp: 2026-09-17 (created earlier the same day — SEO/content governance
@@ -358,16 +358,44 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   as before. Currently enrolled: article #27 only; #28/#29 deliberately left unenrolled
   (multi-audience hub articles).
 - Funnel: `stay_match_view` → `stay_match_click` (destination: property|book) →
+  `stay_match_arrival` (main site, from plugin v1.0.2 — see below) →
   `check_availability` → `book_click` → `booking_confirmed` (main site). `booking_confirmed`
   carries `value`/`currency`/`transaction_id`/`property` (Listing dimension), so revenue
   attributes per property landing page.
 
-### Open items (not closed by this migration)
-- **`stay_match_click` is unconfirmed as of the last recorded diagnostic session
-  (2026-08-26)**, even after a `v1.0.1` navigation-timing fix. Two console diagnostics were
-  handed off and not yet run/reported — see
-  [HIL Blog Technical Specification.md](HIL%20Blog%20Technical%20Specification.md)
-  → Stay Match. **This migration does not run, validate, or resolve this.**
+### `stay_match_click` records 0 — finding (2026-09-27)
+GA4 facts (HIL PM review, Aug 20–Sep 27; this repo has no GA access): `stay_match_view`
+26 events Sep 3–26, of which ~11 are on pagePath `/` from one user; real article views
+after Sep 3 ≈ 15 by ≈ 14 users. `stay_match_click` fired only on 2026-08-27 (8 events,
+1 user, pagePath `/` — the debugging session).
+- **Proven:** the click event *can* fire (Aug 27). The live v1.0.1 widget and footer
+  script match the source; gtag is a plain theme-head snippet with no LiteSpeed JS delay.
+  Code review of v1.0.1 found **no defect that would suppress clicks for real readers**:
+  the `event_callback` + 500 ms fallback is gtag's documented exit-tracking pattern.
+  Minor robustness gaps only (a text-node `e.target` would throw on `closest()`;
+  non-primary/modified clicks and `defaultPrevented` weren't handled) — fixed in v1.0.2.
+- **Inferred, not proven:** the pagePath-`/` views and clicks are editor **previews**.
+  Unpublished/scheduled posts render at `/?p=<id>[&preview=true]`, where
+  `is_singular('post')` is true, and GA4's `pagePath` drops the query string, so they report
+  as `/`. Check: the `page_location` dimension (full URL) for those events should show
+  `?p=`/`preview=true`. v1.0.2 tags such views (and logged-in editors) `traffic_type:
+  internal` + `debug_mode`.
+- **Inferred:** with ~14 real viewers, 0 clicks is statistically unremarkable (e.g. at a
+  5–7% card CTR the chance of zero clicks is roughly 35–50%). **Root cause of "0" = small
+  real sample plus a measurement that can't be verified**, because it depends entirely on
+  a beacon leaving the blog page as it unloads; referrers are origin-only and the same
+  posts have plain in-article links to the same properties.
+- **Fix (in this repo):** landing-side `stay_match_arrival` on the main site, fed by
+  non-UTM `?hil_sm=&hil_sm_post=` params that plugin v1.0.2 appends; the main site strips
+  them on arrival. Property pages have absolute self-canonicals; robots/sitemap unaffected.
+  Plugin v1.0.2 is an artifact at `content/seo/runs/092726/` — **Owner uploads it to
+  WordPress**; the main-site side is harmless without it.
+
+### Open items
+- Owner: deploy Stay Match v1.0.2 (`content/seo/runs/092726/Stay_Match_v1.0.2_Deploy_Note.md`).
+  From then, read Stay Match performance as `stay_match_arrival` ÷ `stay_match_view` (real,
+  non-internal views only); keep `stay_match_click` as a secondary signal.
+- Optional one-off check in GA4: `page_location` of the pagePath-`/` `stay_match_*` events.
 - Confidence-gate thresholds (≥0.7/≥0.4) are an untuned first pass, expected to be retuned
   after ~1 month of click-by-confidence-band data — not due until after #28/#29 accrue data.
 
@@ -382,7 +410,22 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 - GSC was unaffected by the CSP gap (server-side collection).
 - `booking_confirmed` and `generate_lead` exist as GA4 events but were not yet confirmed
   marked as GA4 "key events," and the Developer-Traffic filter was not yet confirmed
-  Active, as of the last recorded Product Owner Watch Items list.
+  Active, as of the last recorded Product Owner Watch Items list. The 2026-09-27 PM review
+  confirmed the Developer-Traffic filter is **not active** and `generate_lead` is **not**
+  a key event.
+- 2026-09-27 PM review: 52 "Organic Search" sessions Sep 3–26 landed on `/admin/*` or
+  `/pay/*` (the owner reaching admin via Google), 7 sessions came from `dev.haveninlipa.com`
+  and a local machine hostname, and the 4 `booking_confirmed` of 2026-08-09 were test
+  bookings from `dev.` and the local machine — test and real bookings were
+  indistinguishable in GA4.
+- **Main-site gate, [DEC-021](HIL_DECISIONS.md) (2026-09-27, PR against `dev`, not yet
+  deployed):** GA4 loads and sends only on `haveninlipa.com`/`www.` (runtime hostname
+  allowlist, not a preview build), never on `/admin/*`, including after SPA navigation
+  (`ga-disable-G-2SV2PXYB7T`). Devices that open the signed-in admin panel carry
+  `traffic_type: internal`. `/pay/[token]` stays tracked with the token redacted. Explicit
+  DebugView opt-in: `?ga_debug=1`. Implementation: Website spec → GA4 Analytics Events.
+  Data from before the deploy still contains admin/dev/test traffic — filter by hostname
+  and page path when reading Aug 9 – deploy date.
 - GA4 collection on the apex domain (`haveninlipa.com`, not `dev.`) has **only ever been
   confirmed on `dev.haveninlipa.com`** as of the last recorded status — not independently
   re-verified by this migration.
@@ -395,9 +438,11 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 ### Open questions
 - Is Clarity or GTM actually deployed anywhere on HIL? Not found in `About HIL/` or the
   migrated SEO artifacts. Confirm with the Owner before assuming either exists.
-- Confirm GA4 events in DebugView; mark `booking_confirmed` + `generate_lead` as key
-  events; flip the Developer-Traffic filter Active; verify apex-domain collection — all
-  still open Product Owner Watch Items as of the last recorded status.
+- Confirm GA4 events in DebugView (use `?ga_debug=1` once DEC-021 is live); mark
+  `booking_confirmed` + `generate_lead` as key events; set the **Internal Traffic** and
+  **Developer-Traffic** data filters Active; verify apex-domain collection — Owner GA4-UI
+  steps, still open. Note `dev.haveninlipa.com` no longer sends anything after DEC-021, so
+  "collection verified on dev" can no longer be re-checked there without `?ga_debug=1`.
 
 ---
 

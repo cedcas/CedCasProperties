@@ -28,8 +28,13 @@ export default function ContactForm() {
       });
       setStatus(res.ok ? "success" : "error");
       if (res.ok) {
-        // Track before the reset below — it clears form.subject.
-        track("generate_lead", { form_subject: form.subject, form_location: "contact_section" });
+        // Track before the reset below — it clears form.subject. This is the site's
+        // only lead form, so `generate_lead` (GA4 recommended name) fires only here.
+        track("generate_lead", {
+          form_subject: form.subject,
+          form_location: "contact_section",
+          lead_source: "contact_form",
+        });
         setForm({ name: "", email: "", phone: "", subject: "", message: "" });
       }
     } catch {
