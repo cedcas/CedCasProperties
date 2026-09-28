@@ -58,13 +58,24 @@ export const dynamic = "force-dynamic";
  * Taal, and M Farm / The Farm at San Benito (40 min *and* two businesses appear
  * to share the name). Do not add them back.
  */
-const DRIVE_TIMES: { place: string; note?: string; time: string; emphasis: boolean }[] = [
-  { place: "Mary Mediatrix of All Grace Parish", time: "under 10 minutes", emphasis: true },
-  { place: "Our Lady of Mount Carmel", time: "10 minutes", emphasis: true },
-  { place: "Metropolitan Cathedral of Saint Sebastian", time: "15 minutes", emphasis: true },
-  { place: "Palazzo Antonio", note: "hotel, resort and convention venue", time: "30 minutes", emphasis: false },
-  { place: "SM Lipa", note: "for the thing somebody forgot", time: "20 minutes", emphasis: false },
+const DRIVE_TIMES: {
+  place: string;
+  note?: string;
+  time: string;
+  emphasis: boolean;
+  /** Where a wedding can happen (quoted in the distance FAQ) vs. an errand stop. */
+  kind: "church" | "venue" | "errand";
+}[] = [
+  { place: "Mary Mediatrix of All Grace Parish", time: "under 10 minutes", emphasis: true, kind: "church" },
+  { place: "Our Lady of Mount Carmel", time: "10 minutes", emphasis: true, kind: "church" },
+  { place: "Metropolitan Cathedral of Saint Sebastian", time: "15 minutes", emphasis: true, kind: "church" },
+  { place: "Palazzo Antonio", note: "hotel, resort and convention venue", time: "30 minutes", emphasis: false, kind: "venue" },
+  { place: "SM Lipa", note: "for the thing somebody forgot", time: "20 minutes", emphasis: false, kind: "errand" },
 ];
+
+/** The layout's title template suffix, and the rendered-title budget before SERPs truncate. */
+const TITLE_SUFFIX = " | Haven in Lipa";
+const TITLE_MAX = 60;
 
 /** "A, B, or C" — the list form the copy uses throughout. */
 function listSentence(items: string[], conjunction = "or"): string {
@@ -97,18 +108,27 @@ export async function generateMetadata(): Promise<Metadata> {
     ? `${big.configurations[0].maxGuests}–${big.maxGuests}`
     : null;
 
-  // The draft's title is 76 characters with the layout's "| Haven in Lipa"
-  // suffix. The occupancy range renders from the DB, so a configuration change
-  // can't leave a wrong span in the SERP; without a database we serve the
-  // number-free variant rather than a claim we can't stand behind.
-  const title = range
-    ? `Where Your Wedding Party Stays in Lipa — Whole Homes for ${range}`
-    : "Where Your Wedding Party Stays in Lipa";
+  // Targets "wedding destination in Lipa" / "wedding venue in Lipa" searches
+  // (GSC, Aug 28–Sep 24 2026) without claiming to be a venue: the title says
+  // destination + homes, the description says "not the venue" outright.
+  // The layout appends " | Haven in Lipa"; the rendered title stays within
+  // TITLE_MAX. The occupancy range renders from the DB, so a configuration change
+  // can't leave a wrong span in the SERP; without a database — or if a wider
+  // range would overflow — we serve the number-free variant rather than a claim
+  // we can't stand behind or a truncated one.
+  const rangedTitle = range ? `Lipa Wedding Destination Homes, Sleeps ${range}` : null;
+  const title =
+    rangedTitle && rangedTitle.length + TITLE_SUFFIX.length <= TITLE_MAX
+      ? rangedTitle
+      : "Lipa Wedding Destination Stays Near Venues";
 
   const description = range
-    ? `Getting married in Lipa? Your venue seats everyone and sleeps nobody. Private whole homes for ${range} guests, minutes from the city's wedding venues. Booked direct.`
-    : "Getting married in Lipa? Your venue seats everyone and sleeps nobody. Private whole homes for your entourage, minutes from the city's wedding venues. Booked direct.";
+    ? `Planning a wedding in Lipa? We’re not the venue — we’re where the wedding party stays: whole homes for ${range} guests near Lipa’s churches and venues.`
+    : "Planning a wedding in Lipa? We’re not the venue — we’re where the wedding party and guests stay: whole homes near Lipa’s churches and venues. Book direct.";
 
+  // Page-level openGraph/twitter objects REPLACE the root layout's rather than
+  // merging with them, so siteName and the share image are restated here.
+  const shareImage = "/brand-assets/Logo.png";
   return {
     title,
     description,
@@ -121,6 +141,14 @@ export async function generateMetadata(): Promise<Metadata> {
       description,
       type: "website",
       url: "/weddings-accommodation",
+      siteName: "Haven in Lipa",
+      images: [{ url: shareImage, width: 1200, height: 630, alt: "Haven in Lipa — wedding party accommodation in Lipa City" }],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description,
+      images: [shareImage],
     },
   };
 }
@@ -190,11 +218,23 @@ export default async function WeddingsAccommodationPage() {
   /* ── FAQ ───────────────────────────────────────────────────────────────────
      Answers stay plain strings so the FAQPage JSON-LD `text` value is link-free;
      `links` only affect the rendered HTML (same contract as src/lib/faqs.ts).
-     The first answer is a flat "No" on purpose — see the positioning rule. */
+     The first answer is a flat "No" on purpose — see the positioning rule.
+     The same array feeds the visible list and the JSON-LD, so they cannot drift. */
+  const weddingPlaces = DRIVE_TIMES.filter((d) => d.kind !== "errand").map(
+    (d) => `${d.place} ${d.time}`,
+  );
   const faqs: { q: string; a: string; links?: FaqLink[] }[] = [
     {
-      q: "Can we hold the ceremony or reception there?",
-      a: "No. We're accommodation, not a venue — no ceremony space, no reception capacity, no catering. Book your venue, then book us for where everyone sleeps.",
+      q: "Is Haven in Lipa a wedding venue?",
+      a: "No. We're accommodation, not a venue — you can't hold the ceremony or reception at our houses: no ceremony space, no reception capacity, no catering. We're the whole homes the wedding party and guests stay in. Book your venue, then book us for where everyone sleeps.",
+    },
+    {
+      q: "Is Lipa a good wedding destination?",
+      a: "For a church wedding, yes. Lipa is called the Little Rome of the Philippines for its many churches, monasteries and shrines, and most weddings here are church weddings. It's also about one hour from central Manila, traffic permitting, so guests from the city can drive down for the weekend.",
+    },
+    {
+      q: "How far are your homes from Lipa's churches and venues?",
+      a: `By car: ${listSentence(weddingPlaces, "and")}. Those are real driving times verified with the owner, not map estimates. If your venue isn't listed, ask and we'll tell you honestly how far it is.`,
     },
     {
       q: "Can the bridal party get ready at the house?",
@@ -208,10 +248,10 @@ export default async function WeddingsAccommodationPage() {
 
   if (hasInventory) {
     faqs.push({
-      q: "How many people can you actually sleep?",
+      q: "Can the whole entourage stay together?",
       a: twoHouses
-        ? `Up to ${bigHouse.maxGuests} in the big house and up to ${secondHouse.maxGuests} in the second — ${capacity} in total, across two houses a two-minute walk apart.`
-        : `Up to ${capacity} people in total, across ${numberWord(houses.length)} ${plural(houses.length, "house")} in Lipa City. The largest sleeps up to ${bigHouse.maxGuests}.`,
+        ? `Up to ${bigHouse.maxGuests} under one roof in the big house, and up to ${secondHouse.maxGuests} more in the second — ${capacity} in total, across two houses a two-minute walk apart in the same village. Tell us your headcount and we'll tell you straight whether we fit.`
+        : `Up to ${capacity} people in total, across ${numberWord(houses.length)} ${plural(houses.length, "house")} in Lipa City. The largest sleeps up to ${bigHouse.maxGuests} under one roof. Tell us your headcount and we'll tell you straight whether we fit.`,
     });
   }
 
@@ -286,13 +326,13 @@ export default async function WeddingsAccommodationPage() {
               style={{ color: "#3B5323" }}
             >
               <span className="block w-7 h-0.5 rounded bg-forest" />
-              Weddings
+              Lipa wedding accommodation
             </span>
             <h1
               className="font-serif font-semibold text-charcoal leading-tight mb-6"
               style={{ fontSize: "clamp(2rem,4vw,2.8rem)" }}
             >
-              Where Your Wedding Party Stays in Lipa
+              Getting Married in Lipa? Here&rsquo;s Where Your Wedding Party Stays
             </h1>
             <div className={`${prose} space-y-4`}>
               <p>Every wedding in Lipa has the same gap in the plan.</p>
@@ -307,12 +347,110 @@ export default async function WeddingsAccommodationPage() {
                 {bigHouse ? ` — up to ${bigHouse.maxGuests} people under one roof` : ""}, minutes
                 from where you&rsquo;re getting married.
               </p>
+              {/* The positioning rule, stated where a "wedding venue" searcher lands. */}
+              <p>
+                {lead("To be clear: we are not a wedding venue.")} No ceremonies, no receptions, no
+                catering. We&rsquo;re where the wedding party and your guests stay.
+              </p>
             </div>
+            <Link
+              href="/properties"
+              className="mt-6 inline-flex items-center justify-center gap-2 px-6 py-3 min-h-[44px] rounded-full text-[13px] font-semibold border-2 border-forest bg-forest text-white hover:bg-[#2d4820] hover:border-[#2d4820] transition-all duration-250"
+            >
+              See the homes and check dates <i className="fa-solid fa-arrow-right text-[11px]" aria-hidden="true" />
+            </Link>
           </div>
 
-          {/* ── The problem ───────────────────────────────────────────────── */}
+          {/* ── Lipa as a wedding destination ──────────────────────────────
+              Facts only from what this page already verified: Little Rome, church
+              weddings, the owner-verified drive times below, and the "about one hour
+              from central Manila" wording shared with /staycation and /faq. */}
           <section className="mb-16">
-            <h2 className={h2}>The problem nobody solves for you</h2>
+            <h2 className={h2}>Why couples choose Lipa as a wedding destination</h2>
+            <div className={`${prose} space-y-4`}>
+              <p>
+                Lipa is called the {lead("Little Rome of the Philippines")} — it has more churches,
+                monasteries and shrines than a city this size has any right to, and most weddings
+                here are church weddings. That&rsquo;s the wedding you&rsquo;re probably planning.
+              </p>
+              <p>
+                It&rsquo;s also close enough for the guest list: {lead("about one hour from central Manila")},
+                traffic permitting. Which means most of your guests can drive down for the weekend,
+                and the question stops being &ldquo;can they come&rdquo; and becomes &ldquo;where do
+                they all stay.&rdquo;
+              </p>
+            </div>
+          </section>
+
+          {/* ── Churches and venues ───────────────────────────────────────── */}
+          <section className="mb-16">
+            <h2 className={h2}>Near Lipa&rsquo;s wedding churches and venues</h2>
+            <div className={`${prose} space-y-4 mb-6`}>
+              <p>
+                This is where our houses sit relative to the churches most Lipa weddings happen
+                in, and to Palazzo Antonio, a hotel, resort and convention venue.
+              </p>
+              <p className="text-[13.5px] text-charcoal/55">
+                <i className="fa-solid fa-circle-check text-forest mr-1.5" />
+                Verified with the owner, 2026-08-16 — real driving times, not map estimates.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto rounded-[16px] bg-white mb-6" style={{ boxShadow: "0 2px 16px rgba(0,0,0,.05)" }}>
+              <table className="w-full text-[14.5px] border-collapse">
+                <thead>
+                  <tr className="text-left text-charcoal/50 text-[12px] uppercase tracking-[.1em]">
+                    <th scope="col" className="font-semibold px-6 py-4">Where you&rsquo;re getting married</th>
+                    <th scope="col" className="font-semibold px-6 py-4">From our houses</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {DRIVE_TIMES.map((row) => (
+                    <tr key={row.place} className="border-t border-black/[.05]">
+                      <td className="px-6 py-4 text-charcoal/70">
+                        <span className={row.emphasis ? "font-semibold text-charcoal" : ""}>{row.place}</span>
+                        {row.note && <span className="text-charcoal/45 text-[13px]"> ({row.note})</span>}
+                      </td>
+                      <td className={`px-6 py-4 ${row.emphasis ? "font-semibold text-charcoal" : "text-charcoal/70"}`}>
+                        {row.time}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className={`${prose} space-y-4`}>
+              <p>
+                {lead("Three churches within fifteen minutes.")} That is the difference between a morning
+                where everyone gets ready together and leaves once, and a morning spent driving
+                between hotels.
+              </p>
+              <p>
+                If your venue isn&rsquo;t on this list, ask — we&rsquo;ll tell you honestly how far
+                it is, including when the answer is &ldquo;far enough that you&rsquo;d rather stay
+                closer to it.&rdquo;
+              </p>
+              <p>
+                {lead("Moving a group.")} Parking is inside the village gates. Tell us the schedule
+                and we&rsquo;ll advise on timing and where vehicles can wait.
+              </p>
+              {/* Replaced the blog pilgrimage-guide link (off-topic for a booking-intent
+                  page) with the money page the reader actually needs next. */}
+              <p className="text-[14px] text-charcoal/60 border-l-2 border-gold/50 pl-4">
+                Know the church? Every home, how many it sleeps and its rate are on{" "}
+                <Link href="/properties" className="text-forest hover:underline font-medium">
+                  our homes page
+                </Link>
+                .
+              </p>
+            </div>
+          </section>
+
+          {/* ── Where the wedding party and guests stay ─────────────────────── */}
+          <section className="mb-16">
+            <h2 className={h2}>Where the wedding party and guests stay</h2>
+            <h3 className={h3}>The problem nobody solves for you</h3>
             <div className={`${prose} space-y-4`}>
               <p>
                 Search for wedding accommodation in Lipa and you&rsquo;ll get hotels or you&rsquo;ll
@@ -338,11 +476,7 @@ export default async function WeddingsAccommodationPage() {
                 out by twelve the next morning, which is exactly when nobody wants to be packing.
               </p>
             </div>
-          </section>
-
-          {/* ── What a whole house changes ────────────────────────────────── */}
-          <section className="mb-16">
-            <h2 className={h2}>What a whole house changes</h2>
+            <h3 className={`${h3} mt-8`}>What a whole house changes</h3>
             <div className={`${prose} space-y-4`}>
               <p>
                 {lead("Everyone under one roof the night before.")} The part people actually
@@ -361,42 +495,6 @@ export default async function WeddingsAccommodationPage() {
               <p>
                 {lead("One booking, one payment, one set of house rules.")} Not seven reservations
                 under seven names.
-              </p>
-            </div>
-          </section>
-
-          {/* ── The cost ──────────────────────────────────────────────────── */}
-          <section className="mb-16">
-            <h2 className={h2}>The cost, honestly</h2>
-            <div className={`${prose} space-y-4`}>
-              <p>Nobody in this market publishes this comparison, so here it is.</p>
-              {/* The hotel side stays QUALITATIVE. No figure has been supplied that
-                  we can check, and an invented comparison number would undermine
-                  the one thing this page is selling. */}
-              <p>
-                A party of twelve in hotel rooms means {lead("six rooms at double occupancy")}. At
-                typical Lipa mid-range rates that&rsquo;s a real nightly figure per room, times six,
-                times however many nights — plus breakfast per head if it isn&rsquo;t included.
-              </p>
-              {flagship && (
-                <p>
-                  The{" "}
-                  <Link href={`/properties/${flagship.slug}`} className="text-forest hover:underline font-medium">
-                    {flagshipName}
-                  </Link>{" "}
-                  {lead(`sleeps up to ${flagship.maxGuests}`)} at{" "}
-                  {lead(`${flagshipFrom ? "from " : ""}${flagshipRate} a night`)}
-                  {flagshipFrom
-                    ? `, covering ${flagship.includedGuests} ${plural(flagship.includedGuests, "guest")}, with a flat per-guest fee beyond that`
-                    : ", all guests included in the nightly rate"}
-                  . One booking. One total. A kitchen instead of six breakfast bills.
-                </p>
-              )}
-              <p>
-                {lead("Two nights beats one.")} Book the night before <em>and</em> the night of. The
-                reception ends late, and nobody should be driving home or checking out at noon on
-                four hours&rsquo; sleep. The second night is usually the cheapest good decision in
-                the whole plan.
               </p>
             </div>
           </section>
@@ -540,72 +638,38 @@ export default async function WeddingsAccommodationPage() {
             </section>
           )}
 
-          {/* ── Churches ──────────────────────────────────────────────────── */}
+          {/* ── The cost ──────────────────────────────────────────────────── */}
           <section className="mb-16">
-            <h2 className={h2}>Three churches within fifteen minutes</h2>
-            <div className={`${prose} space-y-4 mb-6`}>
-              <p>
-                Lipa is called the {lead("Little Rome of the Philippines")} — it has more churches,
-                monasteries and shrines than a city this size has any right to, and most weddings
-                here are church weddings. That&rsquo;s the wedding you&rsquo;re probably planning,
-                and this is where our houses sit relative to it.
-              </p>
-              <p className="text-[13.5px] text-charcoal/55">
-                <i className="fa-solid fa-circle-check text-forest mr-1.5" />
-                Verified with the owner, 2026-08-16 — real driving times, not map estimates.
-              </p>
-            </div>
-
-            <div className="overflow-x-auto rounded-[16px] bg-white mb-6" style={{ boxShadow: "0 2px 16px rgba(0,0,0,.05)" }}>
-              <table className="w-full text-[14.5px] border-collapse">
-                <thead>
-                  <tr className="text-left text-charcoal/50 text-[12px] uppercase tracking-[.1em]">
-                    <th scope="col" className="font-semibold px-6 py-4">Where you&rsquo;re getting married</th>
-                    <th scope="col" className="font-semibold px-6 py-4">From our houses</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {DRIVE_TIMES.map((row) => (
-                    <tr key={row.place} className="border-t border-black/[.05]">
-                      <td className="px-6 py-4 text-charcoal/70">
-                        <span className={row.emphasis ? "font-semibold text-charcoal" : ""}>{row.place}</span>
-                        {row.note && <span className="text-charcoal/45 text-[13px]"> ({row.note})</span>}
-                      </td>
-                      <td className={`px-6 py-4 ${row.emphasis ? "font-semibold text-charcoal" : "text-charcoal/70"}`}>
-                        {row.time}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
+            <h2 className={h2}>What it costs, honestly</h2>
             <div className={`${prose} space-y-4`}>
+              <p>Nobody in this market publishes this comparison, so here it is.</p>
+              {/* The hotel side stays QUALITATIVE. No figure has been supplied that
+                  we can check, and an invented comparison number would undermine
+                  the one thing this page is selling. */}
               <p>
-                Three churches inside a quarter of an hour. That is the difference between a morning
-                where everyone gets ready together and leaves once, and a morning spent driving
-                between hotels.
+                A party of twelve in hotel rooms means {lead("six rooms at double occupancy")}. At
+                typical Lipa mid-range rates that&rsquo;s a real nightly figure per room, times six,
+                times however many nights — plus breakfast per head if it isn&rsquo;t included.
               </p>
+              {flagship && (
+                <p>
+                  The{" "}
+                  <Link href={`/properties/${flagship.slug}`} className="text-forest hover:underline font-medium">
+                    {flagshipName}
+                  </Link>{" "}
+                  {lead(`sleeps up to ${flagship.maxGuests}`)} at{" "}
+                  {lead(`${flagshipFrom ? "from " : ""}${flagshipRate} a night`)}
+                  {flagshipFrom
+                    ? `, covering ${flagship.includedGuests} ${plural(flagship.includedGuests, "guest")}, with a flat per-guest fee beyond that`
+                    : ", all guests included in the nightly rate"}
+                  . One booking. One total. A kitchen instead of six breakfast bills.
+                </p>
+              )}
               <p>
-                If your venue isn&rsquo;t on this list, ask — we&rsquo;ll tell you honestly how far
-                it is, including when the answer is &ldquo;far enough that you&rsquo;d rather stay
-                closer to it.&rdquo;
-              </p>
-              <p>
-                {lead("Moving a group.")} Parking is inside the village gates. Tell us the schedule
-                and we&rsquo;ll advise on timing and where vehicles can wait.
-              </p>
-              <p className="text-[14px] text-charcoal/60 border-l-2 border-gold/50 pl-4">
-                If you&rsquo;re building the day around Lipa&rsquo;s churches, our{" "}
-                <a
-                  href="https://blog.haveninlipa.com/lipa-pilgrimage-guide/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-forest hover:underline font-medium"
-                >
-                  Lipa pilgrimage guide
-                </a>{" "}
-                covers Carmel and the Cathedral in detail.
+                {lead("Two nights beats one.")} Book the night before <em>and</em> the night of. The
+                reception ends late, and nobody should be driving home or checking out at noon on
+                four hours&rsquo; sleep. The second night is usually the cheapest good decision in
+                the whole plan.
               </p>
             </div>
           </section>
