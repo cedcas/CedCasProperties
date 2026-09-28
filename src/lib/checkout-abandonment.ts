@@ -13,7 +13,8 @@ import { formatStayDate } from "@/lib/dates";
  * inactivity gets exactly one admin email.
  *
  * Driven by /api/cron/checkout-abandonment. Alert latency = ABANDON_AFTER_MINUTES plus the
- * trigger interval (cron-job.org, every 5 min; GitHub Actions is only a backstop).
+ * trigger interval (Vercel Cron, every 5 min via vercel.json; GitHub Actions is only a
+ * backstop).
  */
 
 export const ABANDON_AFTER_MINUTES = 10;

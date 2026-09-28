@@ -2,16 +2,17 @@ name: Checkout Abandonment Alerts
 
 # REDUNDANT BACKSTOP ONLY — not the primary mechanism.
 #
-# The primary trigger is cron-job.org calling the endpoint every 5 minutes (configured
-# outside this repo). GitHub throttles short-interval schedules on shared runners and
-# skips most slots, so on its own this would deliver alerts hours late.
+# The primary trigger is Vercel Cron every 5 minutes (vercel.json). GitHub throttles
+# short-interval schedules on shared runners and skips most slots, so on its own this
+# would deliver alerts hours late — it only covers a Vercel Cron outage, and
+# workflow_dispatch gives a manual trigger.
 #
 # Concurrent runs are safe: each alert is claimed in the DB (CheckoutAttempt.alertedAt)
 # before the email is sent. See src/lib/checkout-abandonment.ts.
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 concurrency:

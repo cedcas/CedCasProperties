@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { processAbandonedCheckouts } from "@/lib/checkout-abandonment";
 
-// Primary trigger: cron-job.org every 5 min (configured outside this repo, like the
-// external-calendar pre-warmer). .github/workflows/checkout-abandonment.yml is a backstop
-// only — GitHub throttles short-interval schedules. Safe to run concurrently: each alert
-// is claimed in the DB before it is sent. See src/lib/checkout-abandonment.ts.
+// Primary trigger: Vercel Cron every 5 min (vercel.json; production deployment only —
+// Vercel sends "Authorization: Bearer $CRON_SECRET"). .github/workflows/
+// checkout-abandonment.yml is a backstop only. Safe to run concurrently: each alert is
+// claimed in the DB before it is sent. See src/lib/checkout-abandonment.ts.
 
 export const dynamic = "force-dynamic";
 
