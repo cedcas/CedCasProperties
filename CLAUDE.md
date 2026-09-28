@@ -17,7 +17,7 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 | Framework | Next.js 16 (App Router), React 19, TypeScript |
 | Styling | Tailwind CSS v4 |
 | ORM | Prisma 5 |
-| Database | MySQL (Hostinger, `srv1284.hstgr.io`) |
+| Database | MySQL (Hostinger, `[redacted: DB host, stored in Vercel env]`) |
 | Auth | NextAuth v5 beta (JWT sessions) |
 | File Storage | Vercel Blob (property images) |
 | Email | Hostinger SMTP (`customerservice@haveninlipa.com`) |
@@ -42,7 +42,7 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob storage token |
 | `SMTP_HOST` | Hostinger SMTP host (`smtp.hostinger.com`) |
 | `SMTP_PORT` | Hostinger SMTP port (`465`) |
-| `SMTP_USER` | Hostinger email address (`customerservice@haveninlipa.com`) |
+| `SMTP_USER` | Hostinger email address ([redacted: stored in Vercel env]) |
 | `SMTP_PASS` | Hostinger email password |
 
 ---
@@ -223,11 +223,11 @@ not to create a division of labor.
 
 1. **Product and HIL Operations Owner** (Cedric) — final say on scope, publishing,
    pricing/policy facts, and every Owner-only action tracked in
-   `About HIL/HIL_PROJECT_STATUS.md` (Airbnb sibling cross-link unlink, GBP/GA4 console
+   `docs/HIL_PROJECT_STATUS.md` (Airbnb sibling cross-link unlink, GBP/GA4 console
    confirmations, WordPress scheduling/publishing, designating a safe test booking,
    `main` branch protection). Claude never takes an Owner-only action on Cedric's behalf.
 2. **WordPress / Blog Engineer** — `blog.haveninlipa.com`: WordPress core configuration,
-   the Yoast → `hil-seo` cutover (`About HIL/HIL_DECISIONS.md` → Migrated SEO Decisions,
+   the Yoast → `hil-seo` cutover (`docs/HIL_DECISIONS.md` → Migrated SEO Decisions,
    `SEO-DEC-019`–`025`), LiteSpeed Cache / Site Kit / EWWW / YARPP / Redirection plugin
    behavior, and this repo's custom plugin *source* (`blog/plugin/hil-expose-focuskw.php`,
    `hil-stay-match.php`, `hil-seo`'s packaged builds in `content/seo/runs/`). **Never
@@ -235,16 +235,19 @@ not to create a division of labor.
    theme — don't import theme-layer conventions from other projects.
 3. **Vercel / Application Engineer** — the Next.js app: booking flow, admin panel,
    Prisma/MySQL, Vercel deploys, CI (`.github/workflows/`). Owns the Hard Constraints
-   implicit in `About HIL/HIL_DECISIONS.md` (DEC-001 through DEC-017).
+   implicit in `docs/HIL_DECISIONS.md` (DEC-001 through DEC-017).
 4. **Technical SEO Engineer** — URL/permalink structure, redirects, canonicals,
    robots/noindex behavior, sitemaps, and schema/JSON-LD correctness across **both**
    `haveninlipa.com` and `blog.haveninlipa.com`. Owns the technical sections of
-   `docs/HIL_SEO_SPECIFICATION.md` and `About HIL/HIL SEO Technical Specification.md`.
+   `docs/HIL_SEO_SPECIFICATION.md` and `docs/HIL SEO Technical Specification.md`.
 5. **SEO Content Workflow Engineer** — blog briefs, outlines, on-page copy, internal
    linking, Stay Match intent enrollment (`_hil_stay_intent`) — gated by the direct
-   WordPress editing rule (`SEO-DEC-009`/`SEO-DEC-010`: modify stays published, create is
-   always a draft, `WP_ALLOW_PUBLISH=false`) and never ahead of an approval gate recorded
-   in `docs/HIL_SEO_SPECIFICATION.md`.
+   WordPress editing rule (`SEO-DEC-009`/`SEO-DEC-010`: modify stays published; a new post
+   is a draft by default, `WP_ALLOW_PUBLISH=false`) — amended 2026-09-27 by `SEO-DEC-029`:
+   once Cedric approves a batch, its posts are scheduled as WordPress `future` posts at
+   08:00 `Asia/Manila` and verified via REST (date, category, SEO fields); anything not
+   approved stays a draft, and the `SEO-DEC-006` content freeze still applies separately.
+   Never ahead of an approval gate recorded in `docs/HIL_SEO_SPECIFICATION.md`.
 6. **Accessibility and QA Engineer** — manual browser/keyboard verification (e.g. the
    still-open `/faq` check in `HIL_PROJECT_STATUS.md`), image alt text coverage, mobile
    layout/CLS regressions (e.g. the sticky booking bar). HIL has no formally adopted
@@ -255,11 +258,12 @@ not to create a division of labor.
    PII/payment-terminology rules (`SEO-DEC-013`–`018`), and the sensitive-data
    restrictions documented in `content/seo/README.md`.
 8. **Deployment and Release Engineer** — the standing reminder that **a merge to `main`
-   is not a deploy** ([DEC-006](About%20HIL/HIL_DECISIONS.md)) — verify the live URL and
+   is not a deploy** ([DEC-006](docs/HIL_DECISIONS.md)) — verify the live URL and
    the Vercel deployments API, not just the merge. Owns the CI/production build
-   separation ([DEC-017](About%20HIL/HIL_DECISIONS.md)) and the open branch-protection gap
+   separation ([DEC-017](docs/HIL_DECISIONS.md)) and the open branch-protection gap
    on `main`.
-9. **Technical Documentation Owner** — keeps `About HIL/*`, `docs/HIL_SEO_SPECIFICATION.md`,
+9. **Technical Documentation Owner** — keeps the layered docs in `docs/` (including
+   `docs/HIL_SEO_SPECIFICATION.md`), the remaining reference material in `About HIL/`,
    and `content/seo/` internally consistent and current. Owns the Session Wrap-up
    Protocol below.
 
@@ -272,7 +276,7 @@ of these dimensions.
 
 | Dimension | Check |
 |---|---|
-| Application/web behavior | Does this respect the architecture recorded in `About HIL/HIL_DECISIONS.md` (DEC-001–017)? Any change to booking, availability, pricing, or admin logic reviewed against the relevant `DEC-###`? |
+| Application/web behavior | Does this respect the architecture recorded in `docs/HIL_DECISIONS.md` (DEC-001–017)? Any change to booking, availability, pricing, or admin logic reviewed against the relevant `DEC-###`? |
 | WordPress/blog behavior | Any Yoast/`hil-seo`/LiteSpeed/plugin-state change? Does it stay inside the approved cutover sequence in `docs/HIL_SEO_SPECIFICATION.md` §3 — no unauthorized step skipped or reordered? |
 | SEO | Any URL, redirect, canonical, meta, robots, or schema change on either site? Does it stay inside `docs/HIL_SEO_SPECIFICATION.md`'s approval gates? |
 | Content | Any guest-facing wording change? Does it respect the compliance-sensitive boundaries in `SEO-DEC-013`–`018` (payment terminology, deposit/ID silence, no arrival-procedure detail, no rebooking-offer language)? |
@@ -282,37 +286,37 @@ of these dimensions.
 | Testing/validation | Have relevant checks run (`npm run lint`, typecheck, `npm test`, `npm run build:app`)? For a booking/payment change, has it been verified against a safe, non-real-guest path? |
 | Deployment/release state | Does the reply distinguish "committed" from "merged to `main`" from "confirmed live" (DEC-006)? Is a manual Owner step being handed off explicitly? |
 | Documentation/governance | Does `HIL_PROJECT_STATUS.md`, `HIL_DECISIONS.md`, `HIL_COMPLETION_LOG.md`, `HIL Commits.md`, or `docs/HIL_SEO_SPECIFICATION.md` need updating per the rules in this file? |
-| HIL/PinasBNB boundary impact | Does this touch anything that could blur `haveninlipa.com` / `blog.haveninlipa.com` and `haven-in-lipa.pinasbnb.pro`'s separation, or misrepresent HIL as an independent external PinasBNB customer? HIL is PinasBNB's customer-zero/living-demo property, confirmed by the Owner ([DEC-019](About%20HIL/HIL_DECISIONS.md)) — a settled fact, not to be relitigated, but still respect the boundary (no merge, no shared DNS/booking system). |
+| HIL/PinasBNB boundary impact | Does this touch anything that could blur `haveninlipa.com` / `blog.haveninlipa.com` and `haven-in-lipa.pinasbnb.pro`'s separation, or misrepresent HIL as an independent external PinasBNB customer? HIL is PinasBNB's customer-zero/living-demo property, confirmed by the Owner ([DEC-019](docs/HIL_DECISIONS.md)) — a settled fact, not to be relitigated, but still respect the boundary (no merge, no shared DNS/booking system). |
 
 ## Documentation & Context Loading (read this first)
 
-The HIL technical record in `About HIL/` is a **layered documentation system** (est. 2026-09-06). Load progressively — never pull in a larger historical source when a smaller authoritative one already answers the question:
+The HIL technical record in `docs/` is a **layered documentation system** (est. 2026-09-06; moved from the gitignored `About HIL/` into git-tracked `docs/` on 2026-09-27 so PRs update it — the old `About HIL/` copies of these eight files are superseded). Reference material (guides, briefs, diagrams, test plans, punch list) stays in `About HIL/`. Load progressively — never pull in a larger historical source when a smaller authoritative one already answers the question:
 
-1. Read [HIL_PROJECT_STATUS.md](About%20HIL/HIL_PROJECT_STATUS.md) — current state, what's in progress, blocked, next.
-2. Read [HIL_DECISIONS.md](About%20HIL/HIL_DECISIONS.md) — durable *why* behind the architecture, so you don't re-litigate a settled decision.
-3. Read only the relevant section(s) of the applicable spec — [Website](About%20HIL/HIL%20Website%20Technical%20Specification.md) / [SEO](About%20HIL/HIL%20SEO%20Technical%20Specification.md) / [Blog](About%20HIL/HIL%20Blog%20Technical%20Specification.md) — for *how* the current system works. Read Blog/SEO specs only when the task crosses those boundaries.
-4. Check [HIL_COMPLETION_LOG.md](About%20HIL/HIL_COMPLETION_LOG.md) only if you need historical confirmation that something already shipped.
-5. Inspect GitHub/code/[HIL Commits.md](About%20HIL/HIL%20Commits.md) only when needed to resolve ambiguity, validate current implementation, or do the requested work — this does not license skipping source-code inspection when implementation safety requires it.
+1. Read [HIL_PROJECT_STATUS.md](docs/HIL_PROJECT_STATUS.md) — current state, what's in progress, blocked, next.
+2. Read [HIL_DECISIONS.md](docs/HIL_DECISIONS.md) — durable *why* behind the architecture, so you don't re-litigate a settled decision.
+3. Read only the relevant section(s) of the applicable spec — [Website](docs/HIL%20Website%20Technical%20Specification.md) / [SEO](docs/HIL%20SEO%20Technical%20Specification.md) / [Blog](docs/HIL%20Blog%20Technical%20Specification.md) — for *how* the current system works. Read Blog/SEO specs only when the task crosses those boundaries.
+4. Check [HIL_COMPLETION_LOG.md](docs/HIL_COMPLETION_LOG.md) only if you need historical confirmation that something already shipped.
+5. Inspect GitHub/code/[HIL Commits.md](docs/HIL%20Commits.md) only when needed to resolve ambiguity, validate current implementation, or do the requested work — this does not license skipping source-code inspection when implementation safety requires it.
 
-The index at [HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md) lists all five layers with full paths.
+The index at [HIL Technical Specification.md](docs/HIL%20Technical%20Specification.md) lists all five layers with full paths.
 
 ## Session Wrap-up Protocol
 
 **Trigger phrase:** when the user says **"We're done for today"** (or a close variant), run these actions — no other input needed:
 
-1. **Update the docs in `About HIL/`** — these are the durable technical record; keep them in sync with the code. The SEO developer has **live read access to `About HIL/*`**, so an update here reaches them without any extra sharing step. Note the folder is **gitignored** (`.gitignore:47`) — it is intentionally not versioned, so nothing here appears in a commit or PR. Order matters — update in this sequence so `HIL_PROJECT_STATUS.md` reflects the final state:
+1. **Update the layered docs in `docs/`** — these are the durable technical record; keep them in sync with the code. Since 2026-09-27 they are **git-tracked** (moved out of the gitignored `About HIL/`), so doc updates go through a commit/PR like any other change — include them in the same PR as the code they describe where practical. `docs/` sits in the same Dropbox working copy, so the SEO developer's live read access still reaches it once the change is pulled. Order matters — update in this sequence so `HIL_PROJECT_STATUS.md` reflects the final state:
 
-   a. **[HIL Commits.md](About%20HIL/HIL%20Commits.md)** — append **every commit pushed to `main` since the last logged hash**, newest at the top, with its **Type** (`HIL Website` / `HIL Blog` / `HIL SEO`, or a combination). Get them with `git log --oneline <last-logged-hash>..main`. Include the *why* in parentheses, not just the subject line. Flag merge commits with their `git revert -m 1 <hash>` rollback.
-   b. **The relevant focused spec** — [Website](About%20HIL/HIL%20Website%20Technical%20Specification.md), [SEO](About%20HIL/HIL%20SEO%20Technical%20Specification.md), or [Blog](About%20HIL/HIL%20Blog%20Technical%20Specification.md) — only if the current *implementation* changed. Add/update only the sections this session touched. Don't rewrite a whole file — surgically update the affected sections, include `src/...` paths, and record gotchas/false positives, not just what shipped. Refresh that document's `> **Last updated:**` stamp. This file describes **how the system works now** — not a status log; if something is a completed phase or a queued next step, it belongs in (c) or (d) below instead.
-   c. **[HIL_DECISIONS.md](About%20HIL/HIL_DECISIONS.md)** — only if a durable, cross-session decision was actually made this session (not every implementation choice — see the file's own header for what qualifies). Add a new `DEC-NNN` entry.
-   d. **[HIL_COMPLETION_LOG.md](About%20HIL/HIL_COMPLETION_LOG.md)** — add a concise entry if a meaningful work package/feature was completed this session. Don't log every commit — group into the logical feature.
-   e. **[HIL_PROJECT_STATUS.md](About%20HIL/HIL_PROJECT_STATUS.md)** — update **last**, so it reflects the final current state: move finished items to Recently Completed, update In Progress / Blocked / Next, and re-set the Active Gate if it changed. Keep it under ~100 lines — this file must never accumulate history.
-   f. [HIL Technical Specification.md](About%20HIL/HIL%20Technical%20Specification.md) normally needs no change — only touch it if a whole new spec document is added or retired. ⛔ **Do not add a `## Recent Commits` block to it** — that block was deliberately retired.
+   a. **[HIL Commits.md](docs/HIL%20Commits.md)** — append **every commit pushed to `main` since the last logged hash**, newest at the top, with its **Type** (`HIL Website` / `HIL Blog` / `HIL SEO`, or a combination). Get them with `git log --oneline <last-logged-hash>..main`. Include the *why* in parentheses, not just the subject line. Flag merge commits with their `git revert -m 1 <hash>` rollback.
+   b. **The relevant focused spec** — [Website](docs/HIL%20Website%20Technical%20Specification.md), [SEO](docs/HIL%20SEO%20Technical%20Specification.md), or [Blog](docs/HIL%20Blog%20Technical%20Specification.md) — only if the current *implementation* changed. Add/update only the sections this session touched. Don't rewrite a whole file — surgically update the affected sections, include `src/...` paths, and record gotchas/false positives, not just what shipped. Refresh that document's `> **Last updated:**` stamp. This file describes **how the system works now** — not a status log; if something is a completed phase or a queued next step, it belongs in (c) or (d) below instead.
+   c. **[HIL_DECISIONS.md](docs/HIL_DECISIONS.md)** — only if a durable, cross-session decision was actually made this session (not every implementation choice — see the file's own header for what qualifies). Add a new `DEC-NNN` entry.
+   d. **[HIL_COMPLETION_LOG.md](docs/HIL_COMPLETION_LOG.md)** — add a concise entry if a meaningful work package/feature was completed this session. Don't log every commit — group into the logical feature.
+   e. **[HIL_PROJECT_STATUS.md](docs/HIL_PROJECT_STATUS.md)** — update **last**, so it reflects the final current state: move finished items to Recently Completed, update In Progress / Blocked / Next, and re-set the Active Gate if it changed. Keep it under ~100 lines — this file must never accumulate history.
+   f. [HIL Technical Specification.md](docs/HIL%20Technical%20Specification.md) normally needs no change — only touch it if a whole new spec document is added or retired. ⛔ **Do not add a `## Recent Commits` block to it** — that block was deliberately retired.
 
 2. **Save a "session handoff" memory**
    - Write a `project`-type memory named `session-handoff.md` (overwrite any previous one — only the latest matters).
    - Body should answer: *what did we ship, what's half-done, what's queued next, any gotchas in the working tree* (uncommitted changes, migrations not yet run on prod, etc.).
-   - Also note the deploy state: whether the session's work has been committed/pushed, **whether it is actually live on production** (a merge to `main` is not a deploy — see [DEC-006](About%20HIL/HIL_DECISIONS.md)), and what manual steps still need doing — seed scripts, GSC indexing requests, WordPress-side edits, owner fact-checks.
+   - Also note the deploy state: whether the session's work has been committed/pushed, **whether it is actually live on production** (a merge to `main` is not a deploy — see [DEC-006](docs/HIL_DECISIONS.md)), and what manual steps still need doing — seed scripts, GSC indexing requests, WordPress-side edits, owner fact-checks.
 
 Both actions are part of the same "end of session" commit — don't ask for confirmation, just do them when the trigger phrase appears.
 
@@ -320,7 +324,7 @@ Both actions are part of the same "end of session" commit — don't ask for conf
 
 ## Upcoming Features (Planned)
 
-See [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for dated pointers to in-progress feature plans, and [HIL Punch List.md](About%20HIL/HIL%20Punch%20List.md) (pre-launch, mostly historical — the site has since launched) for the original launch checklist. High-priority items from the original roadmap, status as of 2026-09-06 (see [HIL_COMPLETION_LOG.md](About%20HIL/HIL_COMPLETION_LOG.md) for when/how the shipped ones landed):
+See [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for dated pointers to in-progress feature plans, and [HIL Punch List.md](About%20HIL/HIL%20Punch%20List.md) (pre-launch, mostly historical — the site has since launched) for the original launch checklist. High-priority items from the original roadmap, status as of 2026-09-06 (see [HIL_COMPLETION_LOG.md](docs/HIL_COMPLETION_LOG.md) for when/how the shipped ones landed):
 1. ✅ **Stripe** as 3rd payment option (with 6% fee notice) — shipped
 2. ✅ **Discount Code System** (fixed PHP or percentage) — shipped
 3. ✅ **Daily Rate Flexibility** (weekday/weekend + date overrides) — shipped
