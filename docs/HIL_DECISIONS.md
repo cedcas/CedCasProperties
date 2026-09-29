@@ -577,6 +577,29 @@ None
 
 ---
 
+## DEC-023 — Footer credit brand standard: Powered by NetCoreSolutions.com, no GeneratePress branding
+
+Date: 2026-09-29
+Status: Active. Main site: PR against `dev` (branch `feat/netcore-footer-credit`), not merged. Blog: change prepared for WP admin, not applied.
+Area: Website | Blog | Brand
+
+### Decision
+Owner brand standard for all of Cedric's sites, effective 2026-09-29: every site carries a subtle footer credit reading **"Powered by NetCoreSolutions.com"**. Only the text `NetCoreSolutions.com` is a link, to `https://netcoresolutions.com`, and the brand is always written as one word with no spaces. The credit sits at the bottom of the footer as a small second line under the copyright, with the same visual weight as the copyright text. It is not a badge, logo or banner; TribeMedSpa.com is the reference. No GeneratePress branding anywhere: footer, theme metadata or visible UI.
+
+### Reason
+A consistent, low-key attribution across every property the Owner runs, without competing with the site's own brand or conversion elements.
+
+### Implications
+- **Main site:** `src/components/layout/Footer.tsx`, bottom row. The credit is a second `<p>` in the same `text-[12.5px] text-white/55` block as the copyright. The link uses the Privacy link's hover (`hover:text-white/85`) and opens with `target="_blank" rel="noopener"`. The constant `NETCORE_CREDIT_URL` is guarded by `src/lib/__tests__/footer-credit.test.ts`. Every public page that renders `<Footer />` gets it. It is deliberately **not** on `/admin/*` (Owner-only UI, no public footer) or on `/pay/[token]` (a noindex, single-purpose bearer-link payment screen with no site footer, where an extra outbound link is a distraction).
+- **Blog:** the custom `haveninlipa-blog` theme's `footer.php` gets the same second line inside the `.footer-bottom` copyright `<p>`, using the existing `.footer-bottom a` styles, so no new CSS. Applied by the Chief of Staff in WP admin (see the completion log). The live `footer.php` has drifted from the Dropbox source, so edit the live file rather than reinstalling the old source.
+- **GeneratePress:** as of 2026-09-29 there is no GeneratePress branding in the repo (the only old mention was a `CLAUDE.md` note, reworded; the remaining mentions are these decision records and a test that asserts its absence) and none on the live blog (homepage, post, 404, `/wp-json` name/description, theme `style.css`). `/wp-content/themes/generatepress/` returns 404. Re-check whenever a theme changes.
+- A new site, or a footer rewrite, must keep this credit. Do not make it more prominent (no logo, no larger type, no accent colour) without an Owner decision.
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

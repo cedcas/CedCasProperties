@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-29 — Footer credit brand standard (DEC-023): "Powered by NetCoreSolutions.com"
+
+Area: Website | Blog | Brand
+
+Status: **Main site: PR against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
+
+- **Main site:** `src/components/layout/Footer.tsx` has a second line under the copyright in the same `text-[12.5px] text-white/55` block: "Powered by NetCoreSolutions.com". Only the domain links to `https://netcoresolutions.com` (`target="_blank" rel="noopener"`, `hover:text-white/85` like Privacy). It is on every public page that renders `<Footer />` (home, properties, property, book, staycation, weddings, about, FAQ, ambassadors, privacy, terms). It is deliberately not on `/admin/*` or on `/pay/[token]`, a noindex payment screen with no site footer. New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks the text, the single link, the attributes, the styling and that there is no GeneratePress.
+- **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), reworded. Nothing in `content/seo`. None on the live blog, and `/wp-content/themes/generatepress/` returns 404.
+- **Blog theme:** the source is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/`. Its `style.css` and `main.css` are byte-identical to live, but live `footer.php` has drifted (Quick Links, and legal links hardcoded to haveninlipa.com). The primary route is therefore a Theme File Editor find/replace on the live `footer.php`. The change adds `<br>Powered by <a …>NetCoreSolutions.com</a>` inside the `.footer-bottom` copyright `<p>`, uses the existing `.footer-bottom a` styles and needs no CSS. There is also an optional v1.0.1 zip built from the source with the known live footer edits folded in, for use only after checking it against live. Instructions: HIL PM box `/workspace/hil-blog-theme/APPLY.md`, including LiteSpeed purge, Hostinger CDN flush and a logged-out check.
+
+---
+
 ## 2026-09-28 — Production drive-time correction run; temporary route removed
 
 Area: Website | Content

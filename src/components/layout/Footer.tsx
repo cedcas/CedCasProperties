@@ -10,6 +10,9 @@ type WpPost = {
 
 type BlogLink = { label: string; href: string };
 
+/** Footer credit required on every Cedric site (DEC-023). */
+export const NETCORE_CREDIT_URL = "https://netcoresolutions.com";
+
 const STATIC_BLOG_LINKS: BlogLink[] = [
   { label: "15 Things to Do in Lipa",    href: "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/" },
   { label: "Best Restaurants in Lipa",   href: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/" },
@@ -174,7 +177,21 @@ export default async function Footer() {
         </div>
 
         <div className="py-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[12.5px] text-white/55">&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
+          <div className="text-[12.5px] text-white/55">
+            <p>&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
+            {/* Brand standard DEC-023: subtle second line, only the domain is a link. */}
+            <p className="mt-1">
+              Powered by{" "}
+              <a
+                href={NETCORE_CREDIT_URL}
+                target="_blank"
+                rel="noopener"
+                className="hover:text-white/85 transition-colors duration-200"
+              >
+                NetCoreSolutions.com
+              </a>
+            </p>
+          </div>
           <div className="flex gap-5">
             <Link href="/privacy" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
             <Link href="/terms" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Terms of Service</Link>

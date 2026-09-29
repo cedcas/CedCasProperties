@@ -1,6 +1,6 @@
 # Haven in Lipa — Blog Technical Specification
 
-> **Last updated:** 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
+> **Last updated:** 2026-09-29 (new [Theme](#theme-haveninlipa-blog) section: custom theme source location, live-vs-source drift, footer credit DEC-023 prepared for WP admin). Earlier: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
 >
 > This spec covers the WordPress blog at `blog.haveninlipa.com` and how the main rental app integrates with it. Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); SEO / structured data lives in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).
 >
@@ -17,6 +17,14 @@
 **Superseded 2026-09-19 (SEO-DEC-026 / SEO-DEC-027):** the custom **`hil-seo` plugin (v1.1.5)** is the sole SEO output on `blog.haveninlipa.com`. **Yoast SEO is deactivated but kept installed** for rollback (deletion needs separate Owner approval). The blog sitemap is WordPress core's **`/wp-sitemap.xml`** (`/sitemap_index.xml` 301s to it; the virtual robots.txt carries one `Sitemap: …/wp-sitemap.xml` line). Still separate from the rental app's `sitemap.ts`. Governance detail: `docs/HIL_SEO_SPECIFICATION.md` §3.
 
 ---
+
+## Theme (`haveninlipa-blog`)
+
+- **Theme:** custom `haveninlipa-blog`, "HavenInLipa Blog" v1.0.0 (Author: HavenInLipa), not GeneratePress or any third-party parent theme. There is no GeneratePress anywhere on the live site: `/wp-content/themes/generatepress/` returns 404, and homepage, post, 404, `/wp-json` and theme `style.css` were all checked on 2026-09-29.
+- **Source:** not in this repo. The only copy is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/` (+ `haveninlipa-blog.zip`, dated 2026-04-07). `style.css` and `assets/css/main.css` are byte-identical to live.
+- **Drift:** live `footer.php` has been edited in WP since then. The Quick Links fallback now has /properties, /#why and FAQ, and the legal links are hardcoded to `https://haveninlipa.com/privacy` and `/terms`; the Dropbox source still uses `get_privacy_policy_url()` / `home_url('/terms')`. **Reinstalling the Dropbox zip would revert those edits.** Change the theme with small edits to the live files in Appearance → Theme File Editor, or first export the live theme and make that the new source.
+- **Footer:** `footer.php` is hardcoded: brand column, Quick Links (fallback array unless a `footer-1` menu is assigned), a Contact column from the `footer-col-3` widget area (a Block widget live), and `.footer-bottom` with the copyright `<p>` and `.footer-bottom__links` nav. Styles are in `assets/css/main.css` (`.footer-bottom` ~line 945; mobile stacks and centres it at ≤768px).
+- **Footer credit (DEC-023):** second line inside the copyright `<p>`: `<br>Powered by <a href="https://netcoresolutions.com" target="_blank" rel="noopener">NetCoreSolutions.com</a>`. It reuses the `.footer-bottom a` styles, so no CSS is needed. Prepared 2026-09-29 for the Chief of Staff to apply in WP admin (exact find/replace + optional 1.0.1 zip in the completion log). **Not applied yet.**
 
 ## Blog Integration (WordPress)
 
