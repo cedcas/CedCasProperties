@@ -13,9 +13,11 @@ vi.mock("next/image", () => ({
 import Footer, { NETCORE_CREDIT_URL } from "@/components/layout/Footer";
 
 /**
- * DEC-023 brand standard: every public page footer carries a subtle
- * "Powered by NetCoreSolutions.com" line where only the domain is a link to
- * https://netcoresolutions.com, and no GeneratePress branding appears anywhere.
+ * DEC-023 brand standard, copied from the live tribemedspa.com footer (2026-09-29):
+ * `© {year} … <br><a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>`
+ * as the left block of the bottom legal row (legal links on the right), 14px in the footer's muted
+ * gray (HIL: white/55), no underline until hover/focus-visible, row stacks + centers at <=768px.
+ * No GeneratePress branding.
  */
 async function renderFooter(): Promise<string> {
   // Force the static blog-link fallback; no network in tests.
@@ -24,31 +26,47 @@ async function renderFooter(): Promise<string> {
   return renderToStaticMarkup(el);
 }
 
+const CREDIT_A = /<a [^>]*href="https:\/\/netcoresolutions\.com"[^>]*>([^<]*)<\/a>/g;
+
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("Footer credit (DEC-023)", () => {
-  it("renders 'Powered by NetCoreSolutions.com' with only the domain linked", async () => {
+  it("links the whole 'Powered by NetCoreSolutions.com' phrase, once, to netcoresolutions.com", async () => {
     const html = await renderFooter();
-    const links = [...html.matchAll(/<a [^>]*href="https:\/\/netcoresolutions\.com"[^>]*>([^<]*)<\/a>/g)];
+    const links = [...html.matchAll(CREDIT_A)];
     expect(links).toHaveLength(1);
-    expect(links[0][1]).toBe("NetCoreSolutions.com");
-    expect(html).toMatch(/Powered by <a [^>]*href="https:\/\/netcoresolutions\.com"/);
+    expect(links[0][1]).toBe("Powered by NetCoreSolutions.com");
     expect(NETCORE_CREDIT_URL).toBe("https://netcoresolutions.com");
+    // Like the reference: a plain link, no target/rel.
+    expect(links[0][0]).not.toMatch(/target=|rel=/);
   });
 
-  it("opens in a new tab with rel=noopener and matches the subtle copyright styling", async () => {
+  it("sits directly under the copyright line, left of the legal links", async () => {
     const html = await renderFooter();
+    const row = html.match(/<div class="py-5 [^"]*">([\s\S]*?)<\/div><\/div><\/footer>/);
+    expect(row).not.toBeNull();
+    const [creditBlock, legal] = row![1].split('<div class="flex gap-5">');
+    expect(creditBlock).toMatch(/All rights reserved\.<br\/><a [^>]*href="https:\/\/netcoresolutions\.com"/);
+    expect(legal).toContain('href="/privacy"');
+    expect(legal).toContain('href="/terms"');
+  });
+
+  it("is 14px muted white/55, underlined only on hover/focus, and stacks + centers at <=768px", async () => {
+    const html = await renderFooter();
+    const rowClass = html.match(/<div class="(py-5 [^"]*)">/)![1].split(" ");
+    expect(rowClass).toEqual(
+      expect.arrayContaining(["flex", "flex-wrap", "items-center", "justify-between", "text-[14px]", "text-white/55"])
+    );
+    expect(rowClass).toEqual(expect.arrayContaining(["max-[769px]:flex-col", "max-[769px]:text-center"]));
     const tag = html.match(/<a [^>]*href="https:\/\/netcoresolutions\.com"[^>]*>/)![0];
-    expect(tag).toContain('target="_blank"');
-    expect(tag).toContain('rel="noopener"');
-    expect(tag).toContain("hover:text-white/85");
-    // Credit sits in the same 12.5px / white-55 block as the copyright line.
-    const block = html.match(/<div class="text-\[12\.5px\] text-white\/55">([\s\S]*?)<\/div>/);
-    expect(block).not.toBeNull();
-    expect(block![1]).toContain("All rights reserved.");
-    expect(block![1]).toContain("NetCoreSolutions.com");
+    const cls = tag.match(/class="([^"]*)"/)![1].split(" ");
+    expect(cls).toEqual(
+      expect.arrayContaining(["no-underline", "hover:underline", "focus-visible:underline", "hover:text-white/85"])
+    );
+    // Base size/colour are inherited from the row (same muted gray as the copyright).
+    expect(cls.filter((c) => c.startsWith("text-") && !c.includes(":"))).toEqual([]);
   });
 
   it("writes the brand as one word with no spaces and never mentions GeneratePress", async () => {

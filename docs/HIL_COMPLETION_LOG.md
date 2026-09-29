@@ -8,11 +8,23 @@
 
 Area: Website | Blog | Brand
 
-Status: **Main site: PR against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
+Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
 
-- **Main site:** `src/components/layout/Footer.tsx` has a second line under the copyright in the same `text-[12.5px] text-white/55` block: "Powered by NetCoreSolutions.com". Only the domain links to `https://netcoresolutions.com` (`target="_blank" rel="noopener"`, `hover:text-white/85` like Privacy). It is on every public page that renders `<Footer />` (home, properties, property, book, staycation, weddings, about, FAQ, ambassadors, privacy, terms). It is deliberately not on `/admin/*` or on `/pay/[token]`, a noindex payment screen with no site footer. New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks the text, the single link, the attributes, the styling and that there is no GeneratePress.
-- **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), reworded. Nothing in `content/seo`. None on the live blog, and `/wp-content/themes/generatepress/` returns 404.
-- **Blog theme:** the source is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/`. Its `style.css` and `main.css` are byte-identical to live, but live `footer.php` has drifted (Quick Links, and legal links hardcoded to haveninlipa.com). The primary route is therefore a Theme File Editor find/replace on the live `footer.php`. The change adds `<br>Powered by <a …>NetCoreSolutions.com</a>` inside the `.footer-bottom` copyright `<p>`, uses the existing `.footer-bottom a` styles and needs no CSS. There is also an optional v1.0.1 zip built from the source with the known live footer edits folded in, for use only after checking it against live. Instructions: HIL PM box `/workspace/hil-blog-theme/APPLY.md`, including LiteSpeed purge, Hostinger CDN flush and a logged-out check.
+- **Reference:** the live tribemedspa.com footer, fetched 2026-09-29 (details in DEC-023):
+  - the whole phrase "Powered by NetCoreSolutions.com" is one plain link, on a second line under the copyright, on the left of the legal row;
+  - 14px, muted colour, no underline; underline plus a stronger colour on hover/focus-visible;
+  - the row stacks and centres at ≤768px.
+- **Main site:** `src/components/layout/Footer.tsx`, bottom row.
+  - The legal row is now 14px white/55 (was 12.5px): copyright, then the linked credit on the next line, with Privacy/Terms on the right.
+  - The link hovers/focuses to white/85 with an underline.
+  - On mobile it is stacked and centred (`max-[769px]:flex-col text-center`).
+  - It is on every page that renders `<Footer />`, and deliberately not on `/admin/*` or `/pay/[token]`.
+  - New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks link scope, href, no target/rel, placement, 14px/white-55, underline only on hover/focus, the mobile classes and that there is no GeneratePress.
+- **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), now reworded. Nothing in `content/seo`. None on the live blog (homepage, post, 404, `/wp-json`, theme `style.css`), and `/wp-content/themes/generatepress/` returns 404.
+- **Blog theme:** the source is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/`. Its `style.css` and `main.css` are byte-identical to live, but live `footer.php` has drifted (Quick Links, and legal links hardcoded to haveninlipa.com).
+  - Prepared change: `<br><a class="footer-credit" href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` in the `.footer-bottom` copyright `<p>`, plus 4 CSS rules after `.footer-bottom__links` in `main.css` (row 0.875rem; credit `rgba(255,255,255,.5)`, no underline; hover/focus accent plus underline), plus `Version: 1.0.1`.
+  - Primary route: Theme File Editor. Optional zip: `haveninlipa-blog-1.0.1.zip`, built from the source with the live footer edits folded in; use it only after comparing with live.
+  - Instructions are on the HIL PM box at `/workspace/hil-blog-theme/APPLY.md`, including the LiteSpeed purge, Hostinger CDN flush and a logged-out check.
 
 ---
 

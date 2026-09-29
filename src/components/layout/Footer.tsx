@@ -10,7 +10,7 @@ type WpPost = {
 
 type BlogLink = { label: string; href: string };
 
-/** Footer credit required on every Cedric site (DEC-023). */
+/** Footer credit required on every Cedric site (DEC-023; reference: live tribemedspa.com footer). */
 export const NETCORE_CREDIT_URL = "https://netcoresolutions.com";
 
 const STATIC_BLOG_LINKS: BlogLink[] = [
@@ -176,25 +176,24 @@ export default async function Footer() {
 
         </div>
 
-        <div className="py-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="text-[12.5px] text-white/55">
-            <p>&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
-            {/* Brand standard DEC-023: subtle second line, only the domain is a link. */}
-            <p className="mt-1">
-              Powered by{" "}
-              <a
-                href={NETCORE_CREDIT_URL}
-                target="_blank"
-                rel="noopener"
-                className="hover:text-white/85 transition-colors duration-200"
-              >
-                NetCoreSolutions.com
-              </a>
-            </p>
+        {/* Legal row: mirrors the live tribemedspa.com footer (.tms-footer__legal / .tms-footer__credit),
+            DEC-023. Copyright + credit on the left, legal links on the right; 14px in HIL's muted
+            white/55; whole "Powered by NetCoreSolutions.com" is the link, no underline until
+            hover/focus; stacks and centers at <=768px. */}
+        <div className="py-5 flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[769px]:flex-col max-[769px]:text-center">
+          <div>
+            &copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.
+            <br />
+            <a
+              href={NETCORE_CREDIT_URL}
+              className="no-underline hover:underline focus-visible:underline hover:text-white/85 focus-visible:text-white/85 transition-colors duration-200"
+            >
+              Powered by NetCoreSolutions.com
+            </a>
           </div>
           <div className="flex gap-5">
-            <Link href="/privacy" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
-            <Link href="/terms" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Terms of Service</Link>
+            <Link href="/privacy" className="hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-white/85 transition-colors duration-200">Terms of Service</Link>
           </div>
         </div>
       </div>
