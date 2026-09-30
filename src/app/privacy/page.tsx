@@ -2,13 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { socialMetadata } from "@/lib/seo-metadata";
+
+const PAGE_TITLE = "Privacy Policy";
+const PAGE_DESCRIPTION =
+  "How we collect, use, and protect your personal information when you book a stay with us.";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description: "How we collect, use, and protect your personal information when you book a stay with us.",
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
   alternates: {
     canonical: "/privacy",
   },
+  ...socialMetadata({ title: PAGE_TITLE, description: PAGE_DESCRIPTION, path: "/privacy" }),
 };
 
 export default function PrivacyPage() {

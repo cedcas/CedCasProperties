@@ -1,16 +1,21 @@
 import type { Metadata } from "next";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { socialMetadata } from "@/lib/seo-metadata";
 import AmbassadorForm from "@/components/ambassador/AmbassadorForm";
 import { REWARD_TIERS, HOW_TO_JOIN, WHY_JOIN } from "@/lib/ambassador";
 
+const PAGE_TITLE = "Become a Haven in Lipa Ambassador — Share Lipa, Earn Rewards";
+const PAGE_DESCRIPTION =
+  "Join the Haven in Lipa Ambassador Program. Share your exclusive promo code, give your audience 5% off direct bookings, and earn ₱200–₱500 cash rewards on every completed stay.";
+
 export const metadata: Metadata = {
-  title: "Become a Haven in Lipa Ambassador — Share Lipa, Earn Rewards",
-  description:
-    "Join the Haven in Lipa Ambassador Program. Share your exclusive promo code, give your audience 5% off direct bookings, and earn ₱200–₱500 cash rewards on every completed stay.",
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
   alternates: {
     canonical: "/ambassadors",
   },
+  ...socialMetadata({ title: PAGE_TITLE, description: PAGE_DESCRIPTION, path: "/ambassadors" }),
 };
 
 export default function AmbassadorsPage() {
