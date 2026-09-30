@@ -22,10 +22,12 @@ const STAT_ICON_MAP = {
 } as const;
 
 export default function Hero({ propertyCount }: HeroProps) {
+  // No hardcoded fallback: "2" was stale once the Mickey houses went live
+  // (five homes). If the DB count is unavailable, the stat is omitted instead.
   const propertyCountLabel =
     typeof propertyCount === "number" && propertyCount > 0
       ? String(propertyCount)
-      : "2";
+      : null;
 
   return (
     <section className="relative min-h-screen flex flex-col justify-center overflow-hidden">
@@ -124,7 +126,7 @@ export default function Hero({ propertyCount }: HeroProps) {
               { icon: "fa-comment", value: "180+",             label: "Five-Star Reviews" },
               { icon: "fa-award",   value: "3 yrs",            label: "Superhost"         },
             ] as const
-          ).map(({ icon, value, label }) => {
+          ).filter(({ value }) => value !== null).map(({ icon, value, label }) => {
             const StatIcon = STAT_ICON_MAP[icon];
             return (
               <div key={label} className="flex items-center gap-2.5">
