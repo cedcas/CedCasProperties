@@ -1,6 +1,6 @@
 # Haven in Lipa — SEO Technical Specification
 
-> **Last updated:** 2026-09-28 (on-site funnel gains GA4 `add_payment_info` between the `/book` page view and `booking_confirmed` — funnel step only, not a key event, [DEC-022](HIL_DECISIONS.md); live via PR #32). Prior: 2026-09-27, later (`/weddings-accommodation` drive-time consistency fix — SM Lipa ~20 min / ~7 km re-confirmed, Casa Marikit ~30 min / ~10 km, "about" + traffic caveat; same branch/PR). Earlier: 2026-09-27 evening (Verification cadence → GA4 line: DEC-021 host/admin gate, PR #25 merged to `dev`). Earlier: 2026-09-27 (`/weddings-accommodation` SEO rework — title/meta, H1/H2, FAQ 7→9, pilgrimage link removed; PR against `dev`, not yet merged/deployed). Earlier the same day: blog-sitemap wording updated for the 2026-09-19 `hil-seo`/Yoast cutover — `hil-seo` v1.1.5 is the blog's sole SEO output; Yoast deactivated. Prior: 2026-08-31
+> **Last updated:** 2026-09-30 (SEO audit fixes, branch `fix/seo-audit-093026`, not yet merged: page titles/social metadata via `src/lib/seo-metadata.ts`, 1200×630 default share image, gallery on `next/image`, admin "Search Engine Listing" fields — see "Page titles and social metadata" below). Prior: 2026-09-28 (on-site funnel gains GA4 `add_payment_info` between the `/book` page view and `booking_confirmed` — funnel step only, not a key event, [DEC-022](HIL_DECISIONS.md); live via PR #32). Prior: 2026-09-27, later (`/weddings-accommodation` drive-time consistency fix — SM Lipa ~20 min / ~7 km re-confirmed, Casa Marikit ~30 min / ~10 km, "about" + traffic caveat; same branch/PR). Earlier: 2026-09-27 evening (Verification cadence → GA4 line: DEC-021 host/admin gate, PR #25 merged to `dev`). Earlier: 2026-09-27 (`/weddings-accommodation` SEO rework — title/meta, H1/H2, FAQ 7→9, pilgrimage link removed; PR against `dev`, not yet merged/deployed). Earlier the same day: blog-sitemap wording updated for the 2026-09-19 `hil-seo`/Yoast cutover — `hil-seo` v1.1.5 is the blog's sole SEO output; Yoast deactivated. Prior: 2026-08-31
 >
 > This spec covers SEO and structured-data implementation for the rental app (sitemap, canonicals, JSON-LD, the property-page schema builder, image alt text, and conversion measurement). Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); the WordPress blog integration lives in [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md).
 >
@@ -46,6 +46,31 @@ The property-page JSON-LD builder is [src/lib/property-schema.ts](../src/lib/pro
 **robots.txt — `/admin` prefix fix (2026-08-15).** [src/app/robots.ts](../src/app/robots.ts) previously disallowed `/admin/` and `/api/` **with trailing slashes**. robots.txt matching is a plain prefix, so `/admin/` did not cover the bare `/admin` — leaving it crawlable, and it 307s to `/admin/login`, which robots *does* forbid. That is a redirect into disallowed space that Googlebot cannot resolve. Now `disallow: ["/admin", "/api"]`, which covers both forms. **This was not the cause of the GSC "Redirect error"** (that turned out to be a WordPress slug rename on `blog.haveninlipa.com` — see [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md) → Blog content audit), but it is a genuine crawl-hygiene defect fixed on its own merit. Note `/api` remains robots-disallowed while `/api/properties.json` is consumed server-side by WordPress, which does not consult robots.txt — same arrangement as the Airbnb iCal fetch on `/api/calendar/[slug]`.
 
 **Property page template** ([src/app/properties/[slug]/page.tsx](../src/app/properties/[slug]/page.tsx)) — 10 sections, ~1,500–1,800 words per property when fully seeded. Sections render conditionally so the page works fine on partially-seeded properties.
+
+### Page titles and social metadata (2026-09-30 SEO audit, `fix/seo-audit-093026`)
+
+- **One helper for every public page:** [src/lib/seo-metadata.ts](../src/lib/seo-metadata.ts). `socialMetadata({ title, description, path, image? })` returns both `openGraph` and `twitter`: `og:url` = the page's canonical path, `siteName`, and a share image (the page's own, or `DEFAULT_OG_IMAGE`). **Every public page must spread it.** App Router `openGraph`/`twitter` objects do not merge across segments. A page that sets none *inherits* the root's (before this fix, `/faq`, `/about`, `/privacy`, `/terms` and `/ambassadors` all shared as the homepage, with `og:url` = `/`). A page that sets its own *replaces* the root's wholesale, dropping the image (`/properties`, `/staycation`).
+- **Default share image:** `public/brand-assets/og-default.jpg`, a real 1200×630 (logo on cream `#F9F5EE`, tagline, forest bar). The old fallback was the square 1024×1024 `Logo.png` declared as 1200×630, so large-image cards cropped it.
+- **Property pages:**
+  - Title = `stripBrandSuffix(seoTitle)`. Seeded `seoTitle` values end in `| Haven in Lipa`, and the root template appends it again, which produced `… | Haven in Lipa | Haven in Lipa` on all 5 listings.
+  - Share image: `featuredImage`, then `images[0]`, then the default.
+  - **Gotcha:** the root `title.template` does not apply to the homepage (same segment as the layout), so `/`'s title is not double-branded and must keep the brand itself.
+- **Admin "Search Engine Listing" card:** Admin → Properties → Edit (edit only, not create) now has **SEO Title** and **SEO Description** fields, with a character counter.
+  - Soft targets: title 60 characters excluding the auto-appended ` | Haven in Lipa`; description 155.
+  - `PUT /api/admin/properties/[id]` normalizes both with `normalizeSeoField()`: trims and collapses whitespace, blank → `null` (the page falls back to generated copy), 300-character hard cap → 400.
+  - Price tokens such as `₱2,400/night` in the description are still rewritten to the live rate by `normalizePricingProse` at render time.
+  - The seeds still overwrite these fields (see "SEO seed commands"), so admin edits made here must be mirrored into `prisma/property-content/*` to survive a re-seed.
+- **Mickey seed descriptions shortened** to 152–157 characters (they were 166–197 as rendered). The live DB rows are updated through the admin fields above, not a script.
+- **Accepted inconsistency (Owner decision, 2026-09-30):** the main site keeps "about one hour from Manila" (property descriptions, `src/lib/faqs.ts`, `/about`, chatbot, DiscoverLipa), while the blog removed numeric Manila travel times (SEO-DEC-023/028). This is not a defect; do not "fix" it without a new Owner decision.
+
+**Gallery images** — [src/components/ui/PropertyGallery.tsx](../src/components/ui/PropertyGallery.tsx) renders every photo through `next/image` (2026-09-30).
+- The Blob originals are 1–4.6 MB phone JPEGs, and the listing page renders the gallery **twice** (desktop copy + CSS-hidden mobile copy). The old raw `<img>` tags were all fetched eagerly, even in the hidden copy: about 21 MB per listing page and a mobile lab LCP of 5.7 s.
+- Main image: `priority`. Everything else: lazy.
+- Thumbnails request 56/64 px renditions.
+- `sizes` constants are shared by both copies so the priority preload resolves to one URL.
+- The lightbox image uses `width`/`height` only as an aspect hint (`w-auto h-auto max-*`), so clicking the backdrop still closes it.
+- Thumbnail and lightbox controls now have `aria-label`s.
+- Remote host is already allowed in `next.config.ts` (`*.public.blob.vercel-storage.com`). Vercel Image Optimization usage now scales with gallery photo count, so watch it in the Vercel dashboard.
 
 **Image alt text** — [src/components/ui/PropertyGallery.tsx](../src/components/ui/PropertyGallery.tsx) accepts an optional `imageAlts[]` prop parallel to `images[]`; falls back to `${name} vacation rental in ${location}, Batangas — image ${i+1}` when not provided. Replaces the prior "photo 1, photo 2" pattern the audit flagged.
 
