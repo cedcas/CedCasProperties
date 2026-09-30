@@ -10,6 +10,7 @@ import BookingCard from "@/components/ui/BookingCard";
 import StickyBookingBar from "@/components/ui/StickyBookingBar";
 import Testimonials from "@/components/sections/Testimonials";
 import { buildPropertyJsonLd } from "@/lib/property-schema";
+import { socialMetadata, stripBrandSuffix } from "@/lib/seo-metadata";
 import { buildOccupancyNote, normalizePricingProse, sanitizeChargeProse } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +94,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       location: true,
       type: true,
       featuredImage: true,
+      images: true,
       seoTitle: true,
       seoDescription: true,
       pricePerNight: true,
@@ -104,9 +106,14 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     return { alternates: { canonical: `/properties/${slug}` } };
   }
 
-  const title =
+  // Seeded seoTitle values already end in "| Haven in Lipa"; strip it so the
+  // root template appends the brand exactly once (was doubled on every listing).
+  const title = stripBrandSuffix(
     property.seoTitle ||
-    `${property.name} — ${property.type} Vacation Rental in ${property.location}`;
+      `${property.name} — ${property.type} Vacation Rental in ${property.location}`
+  );
+  // Share image: featured → first gallery photo → site default (socialMetadata).
+  const shareImageUrl = property.featuredImage || safeJsonParse<string[]>(property.images, [])[0];
   const description = normalizePricingProse(
     property.seoDescription ||
       (property.description
@@ -121,13 +128,12 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     alternates: {
       canonical: `/properties/${slug}`,
     },
-    openGraph: {
+    ...socialMetadata({
       title,
       description,
-      type: "website",
-      url: `/properties/${slug}`,
-      images: property.featuredImage ? [{ url: property.featuredImage, alt: property.name }] : undefined,
-    },
+      path: `/properties/${slug}`,
+      image: shareImageUrl ? { url: shareImageUrl, alt: property.name } : null,
+    }),
   };
 }
 

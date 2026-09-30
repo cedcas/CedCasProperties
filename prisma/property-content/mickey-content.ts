@@ -159,7 +159,7 @@ export const SLEEPS_7: PropertySeoContent = {
   seoTitle:
     "Mickey-Themed Family Staycation House in Lipa City — Sleeps 7 | Haven in Lipa",
   seoDescription:
-    "Mickey-themed 1-bedroom staycation house in Bella Vita, Lipa City. Sleeps up to 7, full kitchen, fiber up to 520 Mbps, garage parking. From ₱2,400/night. Book direct.",
+    "Mickey-themed 1-bedroom staycation house in Bella Vita, Lipa City. Sleeps 7, full kitchen, fiber up to 520 Mbps, garage. From ₱2,400/night. Book direct.",
   tagline: "Mickey-Themed • Fiber up to 520 Mbps • Sleeps 7 • Garage",
   heroSummary:
     "A private, Mickey-themed staycation house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole house is yours, not a room or a unit. Built for couples, small families, and groups of up to 7. Master bedroom with a queen bed, a day bed and floor mattresses for the kids, a full kitchen, dining area, living room, garage parking, and dedicated fiber internet up to 520 Mbps. From ₱2,400 per night (covers 5 guests; an extra per-guest fee for the 6th and 7th). One hour from Manila via SLEX/STAR Tollway.",
@@ -278,7 +278,7 @@ export const SLEEPS_11: PropertySeoContent = {
   seoTitle:
     "Mickey-Themed Family House in Lipa City — Sleeps 11, Bunk Room | Haven in Lipa",
   seoDescription:
-    "Mickey-themed 2-bedroom family house in Bella Vita, Lipa City. Sleeps up to 11, master bedroom plus a kids' bunk room, full kitchen, fiber up to 520 Mbps, garage. From ₱4,200/night. Book direct.",
+    "Mickey-themed 2-bedroom family house in Bella Vita, Lipa City. Sleeps 11 with a kids' bunk room, full kitchen, fiber, garage. From ₱4,200/night. Book direct.",
   tagline: "Mickey-Themed • Bunk Room • Sleeps 11 • Garage",
   heroSummary:
     "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱4,200 per night (covers 9 guests; an extra per-guest fee for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
@@ -398,7 +398,7 @@ export const SLEEPS_15: PropertySeoContent = {
   seoTitle:
     "Mickey-Themed Full Family House in Lipa City — Sleeps 15 | Haven in Lipa",
   seoDescription:
-    "Mickey-themed full house in Bella Vita, Lipa City for reunions and barkadas. Sleeps up to 15, master plus two bunk rooms, full kitchen, fiber up to 520 Mbps, garage. From ₱7,000/night. Book direct.",
+    "Mickey-themed full house in Bella Vita, Lipa City for reunions and barkadas. Sleeps 15, two bunk rooms, full kitchen, garage. From ₱7,000/night. Book direct.",
   tagline: "Whole House • Two Bunk Rooms • Sleeps 15 • Garage",
   heroSummary:
     "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",

@@ -7,6 +7,7 @@ import FaqAnswer from "@/components/ui/FaqAnswer";
 import type { FaqLink } from "@/lib/faqs";
 import { extraGuestFeeApplies, normalizePricingProse } from "@/lib/occupancy";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
+import { socialMetadata } from "@/lib/seo-metadata";
 import {
   buildShortNames,
   deriveHouses,
@@ -130,9 +131,6 @@ export async function generateMetadata(): Promise<Metadata> {
     ? `Planning a wedding in Lipa? We’re not the venue — we’re where the wedding party stays: whole homes for ${range} guests near Lipa’s churches and venues.`
     : "Planning a wedding in Lipa? We’re not the venue — we’re where the wedding party and guests stay: whole homes near Lipa’s churches and venues. Book direct.";
 
-  // Page-level openGraph/twitter objects REPLACE the root layout's rather than
-  // merging with them, so siteName and the share image are restated here.
-  const shareImage = "/brand-assets/Logo.png";
   return {
     title,
     description,
@@ -140,20 +138,9 @@ export async function generateMetadata(): Promise<Metadata> {
     // canonical — the App Router metadata gotcha that put two /book URLs in the
     // index as duplicate-canonical thin pages (36fa136).
     alternates: { canonical: "/weddings-accommodation" },
-    openGraph: {
-      title,
-      description,
-      type: "website",
-      url: "/weddings-accommodation",
-      siteName: "Haven in Lipa",
-      images: [{ url: shareImage, width: 1200, height: 630, alt: "Haven in Lipa — wedding party accommodation in Lipa City" }],
-    },
-    twitter: {
-      card: "summary_large_image",
-      title,
-      description,
-      images: [shareImage],
-    },
+    // Page-level openGraph/twitter objects REPLACE the root layout's rather than
+    // merging with them; socialMetadata() restates siteName and the share image.
+    ...socialMetadata({ title, description, path: "/weddings-accommodation" }),
   };
 }
 

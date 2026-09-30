@@ -2,13 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
+import { socialMetadata } from "@/lib/seo-metadata";
+
+const PAGE_TITLE = "Terms of Service";
+const PAGE_DESCRIPTION =
+  "Booking terms, cancellation policy, house rules, and payment terms for our short-term rental properties.";
 
 export const metadata: Metadata = {
-  title: "Terms of Service",
-  description: "Booking terms, cancellation policy, house rules, and payment terms for our short-term rental properties.",
+  title: PAGE_TITLE,
+  description: PAGE_DESCRIPTION,
   alternates: {
     canonical: "/terms",
   },
+  ...socialMetadata({ title: PAGE_TITLE, description: PAGE_DESCRIPTION, path: "/terms" }),
 };
 
 export default function TermsPage() {

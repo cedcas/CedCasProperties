@@ -3,6 +3,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
+import { socialMetadata } from "@/lib/seo-metadata";
 import { buildShortNames, getPublicListingCount, getPublicListings, numberWord, plural } from "@/lib/listings";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
@@ -40,13 +41,19 @@ export async function generateMetadata(): Promise<Metadata> {
     ? `${numberWord(count).charAt(0).toUpperCase()}${numberWord(count).slice(1)} short-term rental ${plural(count, "home")}`
     : "Short-term rental homes";
 
+  // The template appends "| Haven in Lipa", so the brand is not repeated here
+  // (was 81 chars with the brand twice — 2026-09-30 SEO audit).
+  const title = "About Our Host Melody & Our Lipa City Homes";
+  const description =
+    `Meet Melody — Batangas-raised, Chicago-based nurse and Airbnb Superhost. ${homes} in Lipa City, Batangas, run with on-the-ground manager Wilma.`;
+
   return {
-    title: "About Haven in Lipa — Your Host Melody & Our Lipa City Properties",
-    description:
-      `Meet Melody — Batangas-raised, Chicago-based nurse and Airbnb Superhost. ${homes} in Lipa City, Batangas, run with on-the-ground manager Wilma.`,
+    title,
+    description,
     alternates: {
       canonical: "/about",
     },
+    ...socialMetadata({ title, description, path: "/about" }),
   };
 }
 

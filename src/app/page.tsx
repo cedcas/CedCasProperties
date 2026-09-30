@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { socialMetadata } from "@/lib/seo-metadata";
 
 export const metadata: Metadata = {
   title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
@@ -11,6 +12,11 @@ export const metadata: Metadata = {
   alternates: {
     canonical: "/",
   },
+  ...socialMetadata({
+    title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
+    description: "Stay in Style, Live in Comfort. Short-term rentals in Lipa City, Batangas — book direct.",
+    path: "/",
+  }),
 };
 
 import Navbar        from "@/components/layout/Navbar";
