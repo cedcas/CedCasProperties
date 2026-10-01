@@ -1,6 +1,6 @@
 # Haven in Lipa — Blog Technical Specification
 
-> **Last updated:** 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
+> **Last updated:** 2026-09-30 (added [Front-end performance and title length](#front-end-performance-and-title-length-2026-09-30): `hil-seo` 1.1.6 title rule, HIL Performance plugin 1.0.2, LiteSpeed/EWWW settings; blog post PageSpeed mobile 65 → 89). Prior: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
 >
 > This spec covers the WordPress blog at `blog.haveninlipa.com` and how the main rental app integrates with it. Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); SEO / structured data lives in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).
 >
@@ -151,6 +151,48 @@ Decided by Cedric 2026-09-27 ([HIL_DECISIONS.md](HIL_DECISIONS.md) → SEO-DEC-0
 2. **Create as scheduled posts via REST.** Using the Editor Application Password, create each approved article with status `future`, scheduled **08:00 `Asia/Manila`** (UTC+8, i.e. `date_gmt` 00:00) on its slot date. Reuse existing categories/tags only — never Uncategorized, never create terms. Featured images carry HIL / HavenInLipa.com branding.
 3. **Verify via REST** (re-fetch each post): status `future`, `date`/`date_gmt`, categories/tags, and the SEO fields via the authenticated `hil-seo` preview. While a post is `future`, the preview canonical shows `…/?p=<id>` — expected; it becomes the slug URL on publish.
 4. **At publish time:** purge LiteSpeed and the Hostinger CDN, then recheck the live URL, canonical and `/wp-sitemap.xml` entry.
+
+---
+
+## Front-end performance and title length (2026-09-30)
+
+All of this is live on `blog.haveninlipa.com`, uploaded or configured by the Owner on 2026-09-30. Measured on `/solo-travel-guide-lipa/` with PageSpeed mobile:
+
+| | Score | First Contentful Paint |
+|---|---|---|
+| Before | 65–67 | 3.9 s |
+| After | 89 (3 of 4 runs; the first run after a purge was 69) | — |
+
+### `hil-seo` 1.1.6: title suffix only when it fits
+- **Rule:** `hil_seo_fit_title()` in `includes/seo-title.php` drops the trailing ` - Haven in Lipa Blog` from post/page `<title>`, `og:title` and `twitter:title` when the full title would exceed 60 characters (filter: `hil_seo_title_max_length`).
+  - It applies to the `hil_seo_title` override as well, because the Yoast backfill stored the suffix inside overrides.
+  - Length is measured on decoded text.
+  - Blog index, archive titles, canonicals and everything else are unchanged.
+- **Result:** all 29 posts lost the suffix. 26 are still over 60 characters on their own text; shortening those is an editorial task through each post's SEO title field.
+- **Source and rollback:** `content/seo/runs/093026/hil-seo-plugin.zip`. Roll back with the 1.1.5 zip in `runs/090726/`.
+
+### HIL Performance plugin (1.0.2): Font Awesome off the critical path
+- **Why:** the theme (`haveninlipa-blog`, source not in this repo) loads the full Font Awesome 6.5.0 CSS from cdnjs, for about 14 icons per page.
+- **What it does:** `content/seo/runs/093026/hil-performance/hil-performance.php` hooks `style_loader_tag` (priority 999) to drop the `font-awesome` handle's `<link>` at print time. It then prints a `data-no-optimize` inline loader (media=print + onload swap) once, at `wp_head` priority 99, with a footer fallback.
+- **Rollback:** deactivate the plugin and purge both caches.
+- **Gotchas found the hard way:**
+  1. **Dequeuing on `wp_enqueue_scripts`@100 is too early.** The theme enqueues Font Awesome later (1.0.0 and 1.0.1 failed this way). Filter the printed tag instead.
+  2. **LiteSpeed CSS Combine also combines `<link>`s inside `<noscript>`.** That is why 1.0.1 removed the noscript fallback.
+  3. **Proof test:** the combined CSS's filename hash (`/wp-content/litespeed/css/<hash>.css`) only changes when the set of combined stylesheets changes. An unchanged hash after a "fix" means the stylesheet is still being combined. After 1.0.2 it went from `bf1f75098…` to `b4fdf9ed…`, and from 155 KB to 52 KB.
+
+### Cache and lazy-load configuration (Owner-set 2026-09-30)
+- **LiteSpeed Cache → Page Optimization:**
+  - **CSS Minify ON** and **CSS Combine ON**, which produces one combined, render-blocking stylesheet.
+  - **Load CSS Asynchronously / UCSS OFF.**
+  - **Lazy Load Images OFF.**
+  - **Add Missing Sizes ON.**
+  - **Font Display Optimization: Swap.**
+  - **Load Google Fonts Asynchronously ON.** This adds LiteSpeed's `webfontloader.min.js`, about 550 ms render-blocking. Measuring ON against OFF is an optional follow-up.
+- **EWWW Image Optimizer** is now the **only** image lazy-loader, with the exclusion `size-haveninlipa-featured`, so the post hero image (the LCP element) loads eagerly with the theme's `fetchpriority="high"`.
+  - The blog had two lazy-loaders (EWWW and LiteSpeed). Excluding the hero in only one of them just hands it to the other.
+- **Gotchas:**
+  - The class to exclude is `size-haveninlipa-featured`. `wp-post-image` would also match related-post thumbnails.
+  - Hostinger's bot protection returns 403 to headless Chrome (local Lighthouse) from a developer machine, and after heavy crawling it also 403s that IP's requests for blog CSS and image files. Measure with pagespeed.web.dev instead. Google's own crawlers and PageSpeed are not affected.
 
 ---
 
