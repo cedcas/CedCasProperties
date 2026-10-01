@@ -161,6 +161,26 @@ function hil_seo_default_social_image_url(): string {
 }
 
 /**
+ * Meta/OG/Twitter description for the blog index: the dedicated
+ * `hil_seo_blog_index_description` setting (WP Admin → HIL SEO), falling back to
+ * the site tagline when it is empty.
+ *
+ * 1.1.7: the tagline alone was 32 characters ("Travel, Stay & Explore Lipa City")
+ * — too short to describe the blog in search results (2026-09-30 SEO audit) —
+ * but it can't simply be lengthened, because the same tagline also builds the
+ * homepage <title> ("<site> - <tagline>"), the WebSite schema description, and
+ * the theme's homepage heading. A separate setting changes only the description.
+ *
+ * @since 1.1.7
+ * @return string
+ */
+function hil_seo_blog_index_description(): string {
+	$custom = trim( (string) get_option( 'hil_seo_blog_index_description', '' ) );
+
+	return '' !== $custom ? $custom : hil_seo_blog_index_tagline();
+}
+
+/**
  * Description, Open Graph and Twitter tags for the blog index and /page/N/,
  * matching what Yoast rendered before the cutover (description = site tagline,
  * og:title = site name, site logo as image). Only runs while Yoast is not active
@@ -171,7 +191,7 @@ function hil_seo_default_social_image_url(): string {
  */
 function hil_seo_print_blog_index_meta(): void {
 	$name        = hil_seo_blog_index_name();
-	$description = hil_seo_blog_index_tagline();
+	$description = hil_seo_blog_index_description();
 	$url         = hil_seo_blog_index_canonical();
 
 	if ( '' !== $description ) {

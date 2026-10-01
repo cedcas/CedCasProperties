@@ -3,7 +3,7 @@ Contributors: haveninlipa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.6
+Stable tag: 1.1.7
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ The screen and the REST route (`/wp-json/hil-seo/v1/cutover`) write through the 
 No content, no post meta, and no term meta is ever deleted by this plugin — not on deactivation, not on uninstall (see `uninstall.php`). Rolling back is: reactivate Yoast, re-enable its schema/social modules if they were disabled, and flip every `hil_seo_cutover` flag back to `false` (or simply deactivate this plugin — deactivation alone stops every gated output hook from firing). See `HIL_Yoast_Migration_and_Rollback_Plan.md` §2 for the full procedure.
 
 == Changelog ==
+
+= 1.1.7 =
+* Added: "Blog homepage meta description" setting on WP Admin → HIL SEO (option `hil_seo_blog_index_description`, Administrator only). The blog homepage and /page/N/ use it for meta, og and Twitter descriptions, falling back to the site tagline when empty. The tagline alone was 32 characters (2026-09-30 SEO audit), but it also builds the homepage <title>, the WebSite schema description and the theme heading, so it can't simply be lengthened. Titles, schema and every other output are unchanged. No change on install until the setting is saved.
 
 = 1.1.6 =
 * Changed: post/page `<title>` (and `og:title` / `twitter:title`, which use the same resolver) drops the trailing " - Haven in Lipa Blog" suffix when the full title would exceed 60 characters (filter: `hil_seo_title_max_length`). Applies to the `hil_seo_title` override as well as the default join. 2026-09-30 SEO audit: 24 of 29 post titles were over 70 characters, up to 132. Blog index, archives, canonicals, descriptions, robots, sitemap and schema are unchanged. No cutover flag, post meta or setting changes on install.
