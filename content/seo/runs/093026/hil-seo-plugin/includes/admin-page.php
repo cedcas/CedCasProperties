@@ -186,6 +186,26 @@ function hil_seo_handle_cutover_post(): void {
 		exit;
 	}
 
+	if ( 'save_blog_index_description' === $action ) {
+		hil_seo_verify_admin_post( 'hil_seo_save_blog_index_description' );
+
+		$raw    = isset( $_POST['blog_index_description'] ) ? (string) wp_unslash( $_POST['blog_index_description'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- sanitized next line.
+		$value  = trim( preg_replace( '/\s+/', ' ', sanitize_text_field( $raw ) ) );
+		$result = 'cleared';
+
+		if ( '' === $value ) {
+			delete_option( 'hil_seo_blog_index_description' );
+		} elseif ( mb_strlen( $value ) > 300 ) {
+			$result = 'toolong';
+		} else {
+			update_option( 'hil_seo_blog_index_description', $value, true );
+			$result = 'saved';
+		}
+
+		wp_safe_redirect( add_query_arg( array( 'page' => 'hil-seo-cutover', 'hil_seo_desc' => $result ), admin_url( 'admin.php' ) ) );
+		exit;
+	}
+
 	if ( 'rollback' === $action ) {
 		hil_seo_verify_admin_post( 'hil_seo_rollback' );
 
@@ -237,6 +257,15 @@ function hil_seo_render_cutover_page(): void {
 			<div class="notice notice-success"><p><?php esc_html_e( 'Default social image / logo cleared.', 'hil-seo' ); ?></p></div>
 		<?php elseif ( 'bad' === $image_result ) : ?>
 			<div class="notice notice-error"><p><?php esc_html_e( 'That ID is not an image in the Media Library — nothing was changed.', 'hil-seo' ); ?></p></div>
+		<?php endif; ?>
+
+		<?php $desc_result = isset( $_GET['hil_seo_desc'] ) ? sanitize_text_field( wp_unslash( (string) $_GET['hil_seo_desc'] ) ) : ''; ?>
+		<?php if ( 'saved' === $desc_result ) : ?>
+			<div class="notice notice-success"><p><?php esc_html_e( 'Blog homepage meta description saved. Purge LiteSpeed and the Hostinger CDN to see it live.', 'hil-seo' ); ?></p></div>
+		<?php elseif ( 'cleared' === $desc_result ) : ?>
+			<div class="notice notice-success"><p><?php esc_html_e( 'Blog homepage meta description cleared — the site tagline is used again.', 'hil-seo' ); ?></p></div>
+		<?php elseif ( 'toolong' === $desc_result ) : ?>
+			<div class="notice notice-error"><p><?php esc_html_e( 'Not saved — the description is over 300 characters. Aim for 140–155.', 'hil-seo' ); ?></p></div>
 		<?php endif; ?>
 
 		<?php if ( 'unconfirmed' === $error ) : ?>
@@ -299,6 +328,20 @@ function hil_seo_render_cutover_page(): void {
 						<input type="number" min="0" name="default_image_id" value="<?php echo esc_attr( (string) $status['default_social_image_id'] ); ?>" style="width:110px;">
 						<button type="submit" class="button"><?php esc_html_e( 'Save', 'hil-seo' ); ?></button>
 						<span class="description"><?php esc_html_e( 'Enter 0 to clear.', 'hil-seo' ); ?></span>
+					</form>
+				</li>
+				<li>
+					<?php $blog_desc = (string) get_option( 'hil_seo_blog_index_description', '' ); ?>
+					<?php esc_html_e( 'Blog homepage meta description:', 'hil-seo' ); ?>
+					<strong><?php echo '' !== $blog_desc ? esc_html( sprintf( /* translators: %d: character count. */ __( 'set (%d characters)', 'hil-seo' ), mb_strlen( $blog_desc ) ) ) : esc_html__( 'not set — using the site tagline', 'hil-seo' ); ?></strong>
+					<span class="description">— <?php esc_html_e( 'meta / og / Twitter description for the blog homepage and /page/N/ only. The homepage title, schema and theme heading keep using the tagline (Settings → General). Aim for 140–155 characters.', 'hil-seo' ); ?></span>
+					<form method="post" style="margin-top:.5em;">
+						<?php wp_nonce_field( 'hil_seo_save_blog_index_description', 'hil_seo_nonce' ); ?>
+						<input type="hidden" name="hil_seo_action" value="save_blog_index_description">
+						<textarea name="blog_index_description" rows="2" class="large-text" maxlength="300" oninput="this.nextElementSibling.textContent=this.value.trim().length+' / 155';"><?php echo esc_textarea( $blog_desc ); ?></textarea>
+						<span class="description"><?php echo esc_html( mb_strlen( $blog_desc ) . ' / 155' ); ?></span>
+						<br><button type="submit" class="button"><?php esc_html_e( 'Save description', 'hil-seo' ); ?></button>
+						<span class="description"><?php esc_html_e( 'Leave empty and save to go back to the tagline.', 'hil-seo' ); ?></span>
 					</form>
 				</li>
 			</ul>
