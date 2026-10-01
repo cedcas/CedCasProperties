@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HIL Performance
  * Description: Loads the theme's Font Awesome icon stylesheet without blocking the first paint. Deactivate to restore the theme's default loading.
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      HavenInLipa
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -19,8 +19,13 @@
  * same pattern the main site uses in src/app/layout.tsx. A <link> created at
  * runtime cannot be combined or made render-blocking by LiteSpeed, and the
  * script carries data-no-optimize so LiteSpeed leaves it untouched. Icons
- * appear a moment after the text; nothing else changes. A <noscript> copy
- * keeps icons for visitors without JavaScript.
+ * appear a moment after the text; nothing else changes.
+ *
+ * 1.0.1: removed the <noscript><link> fallback. LiteSpeed CSS Combine treats
+ * stylesheet links inside <noscript> as combinable, so 1.0.0's fallback put
+ * the whole Font Awesome stylesheet straight back into the render-blocking
+ * combined file (verified live 2026-09-30: 155 KB bundle, 15 Font Awesome
+ * headers). Visitors without JavaScript now get no icons; they are decorative.
  *
  * Rollback: deactivate the plugin, then purge LiteSpeed + the Hostinger CDN.
  */
@@ -71,17 +76,11 @@ function hil_perf_print_font_awesome_loader(): void {
 		return;
 	}
 
-	$src = esc_url( $GLOBALS['hil_perf_fa_src'] );
-
 	// media=print + onload swap: the browser fetches it at low priority without
 	// blocking render, then applies it. Same technique as the main site.
 	printf(
 		"<script data-no-optimize=\"1\">(function(){var l=document.createElement('link');l.rel='stylesheet';l.href=%s;l.media='print';l.crossOrigin='anonymous';l.referrerPolicy='no-referrer';l.onload=function(){this.media='all';this.onload=null;};document.head.appendChild(l);})();</script>\n",
 		wp_json_encode( $GLOBALS['hil_perf_fa_src'] )
-	);
-	printf(
-		"<noscript><link rel=\"stylesheet\" href=\"%s\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"></noscript>\n",
-		$src // Already escaped above.
 	);
 }
 add_action( 'wp_head', 'hil_perf_print_font_awesome_loader', 5 );
