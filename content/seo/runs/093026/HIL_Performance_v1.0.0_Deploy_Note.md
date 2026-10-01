@@ -1,4 +1,14 @@
-# HIL Performance: Deploy Note (2026-09-30), current version **1.0.1**
+# HIL Performance: Deploy Note (2026-09-30), current version **1.0.2**
+
+> **1.0.2 (same day), the real fix:** 1.0.1 was live and PageSpeed was still 65. The combined CSS was still 155 KB with Font Awesome inside it, and its **filename hash never changed** from before the plugin existed. LiteSpeed derives that name from the list of stylesheets it combines, so the theme's Font Awesome `<link>` was still being printed and swallowed into the bundle.
+>
+> The cause: 1.0.0/1.0.1 dequeued the handle on `wp_enqueue_scripts` at priority 100, but the theme adds it later than that.
+>
+> 1.0.2 removes the tag at the moment WordPress prints it (the `style_loader_tag` filter), which works whenever the theme enqueues it. The loader prints once, late in `<head>`, with a footer fallback.
+>
+> **Upgrade:** upload the new zip, choose **Replace current with uploaded**, then purge both caches.
+>
+> **Success check:** the combined CSS **filename changes** (no longer `bf1f75098fbc…`) and the file shrinks well below 155 KB.
 
 > **1.0.1 (same day):** 1.0.0 was live but didn't help. Its `<noscript>` fallback `<link>` was picked up by LiteSpeed CSS Combine, which treats links inside `<noscript>` as combinable. That put all of Font Awesome straight back into the render-blocking combined file (verified live: a 155 KB bundle with 15 Font Awesome headers, plus the cdnjs icon fonts chained off it in PageSpeed's network tree, and the score stayed at 65).
 >
