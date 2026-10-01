@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HIL Performance
  * Description: Loads the theme's Font Awesome icon stylesheet without blocking the first paint. Deactivate to restore the theme's default loading.
- * Version:     1.0.0
+ * Version:     1.0.2
  * Author:      HavenInLipa
  * Requires at least: 6.0
  * Requires PHP: 7.4
@@ -14,13 +14,18 @@
  * also folds that external stylesheet into its combined file, so rewriting the
  * <link> tag alone is not reliable.
  *
- * What this does: removes the `font-awesome` handle from WordPress's style
- * queue and injects the same stylesheet from a tiny inline script instead, the
+ * What this does: removes the theme's `font-awesome` <link> as WordPress prints
+ * it and injects the same stylesheet from a tiny inline script instead, the
  * same pattern the main site uses in src/app/layout.tsx. A <link> created at
  * runtime cannot be combined or made render-blocking by LiteSpeed, and the
  * script carries data-no-optimize so LiteSpeed leaves it untouched. Icons
- * appear a moment after the text; nothing else changes. A <noscript> copy
- * keeps icons for visitors without JavaScript.
+ * appear a moment after the text; nothing else changes.
+ *
+ * 1.0.1: removed the <noscript><link> fallback. LiteSpeed CSS Combine treats
+ * stylesheet links inside <noscript> as combinable, so 1.0.0's fallback put
+ * the whole Font Awesome stylesheet straight back into the render-blocking
+ * combined file (verified live 2026-09-30: 155 KB bundle, 15 Font Awesome
+ * headers). Visitors without JavaScript now get no icons; they are decorative.
  *
  * Rollback: deactivate the plugin, then purge LiteSpeed + the Hostinger CDN.
  */
@@ -32,46 +37,44 @@ if ( ! defined( 'ABSPATH' ) ) {
 /** Style handle the theme registers (rendered as id="font-awesome-css"). */
 const HIL_PERF_FA_HANDLE = 'font-awesome';
 
-/** Fallback if the handle's registered src can't be read. */
-const HIL_PERF_FA_FALLBACK_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css';
-
 /**
- * Captures the theme's Font Awesome URL, then dequeues it. Runs late so the
- * theme's own enqueue (default priority 10) has already happened.
+ * Removes the theme's render-blocking Font Awesome <link> at the moment
+ * WordPress prints it, and remembers its URL for the non-blocking loader.
+ *
+ * 1.0.2: 1.0.0/1.0.1 dequeued the handle on `wp_enqueue_scripts` at priority
+ * 100, but the theme adds it later than that, so the <link> was still printed
+ * and LiteSpeed CSS Combine kept folding it into the render-blocking bundle
+ * (proof: the combined file's name hash never changed). Filtering the printed
+ * tag works regardless of when or where the theme enqueues it.
+ *
+ * @param string $tag    The <link> tag WordPress is about to print.
+ * @param string $handle Style handle.
+ * @param string $href   Stylesheet URL (with ?ver=).
+ * @return string
  */
-function hil_perf_take_over_font_awesome(): void {
-	if ( is_admin() ) {
-		return;
+function hil_perf_intercept_font_awesome_tag( $tag, $handle, $href = '' ) {
+	if ( HIL_PERF_FA_HANDLE !== $handle || is_admin() || '' === (string) $href ) {
+		return $tag;
 	}
 
-	$styles = wp_styles();
+	$GLOBALS['hil_perf_fa_src'] = (string) $href;
 
-	if ( ! isset( $styles->registered[ HIL_PERF_FA_HANDLE ] ) ) {
-		return; // Theme no longer loads it: nothing to do.
-	}
-
-	$dep = $styles->registered[ HIL_PERF_FA_HANDLE ];
-	$src = $dep->src ? (string) $dep->src : HIL_PERF_FA_FALLBACK_SRC;
-
-	if ( $dep->ver ) {
-		$src = add_query_arg( 'ver', $dep->ver, $src );
-	}
-
-	$GLOBALS['hil_perf_fa_src'] = $src;
-
-	wp_dequeue_style( HIL_PERF_FA_HANDLE );
+	return '';
 }
-add_action( 'wp_enqueue_scripts', 'hil_perf_take_over_font_awesome', 100 );
+add_filter( 'style_loader_tag', 'hil_perf_intercept_font_awesome_tag', 999, 3 );
 
 /**
- * Prints the non-blocking loader in <head>.
+ * Prints the non-blocking loader once, after the tag has been intercepted.
+ * Runs late in <head> (styles print at wp_head priority 8) and again in the
+ * footer in case the theme's styles are printed late; the second call is a
+ * no-op once the loader has been printed.
  */
 function hil_perf_print_font_awesome_loader(): void {
-	if ( is_admin() || empty( $GLOBALS['hil_perf_fa_src'] ) ) {
+	if ( is_admin() || empty( $GLOBALS['hil_perf_fa_src'] ) || ! empty( $GLOBALS['hil_perf_fa_printed'] ) ) {
 		return;
 	}
 
-	$src = esc_url( $GLOBALS['hil_perf_fa_src'] );
+	$GLOBALS['hil_perf_fa_printed'] = true;
 
 	// media=print + onload swap: the browser fetches it at low priority without
 	// blocking render, then applies it. Same technique as the main site.
@@ -79,9 +82,6 @@ function hil_perf_print_font_awesome_loader(): void {
 		"<script data-no-optimize=\"1\">(function(){var l=document.createElement('link');l.rel='stylesheet';l.href=%s;l.media='print';l.crossOrigin='anonymous';l.referrerPolicy='no-referrer';l.onload=function(){this.media='all';this.onload=null;};document.head.appendChild(l);})();</script>\n",
 		wp_json_encode( $GLOBALS['hil_perf_fa_src'] )
 	);
-	printf(
-		"<noscript><link rel=\"stylesheet\" href=\"%s\" crossorigin=\"anonymous\" referrerpolicy=\"no-referrer\"></noscript>\n",
-		$src // Already escaped above.
-	);
 }
-add_action( 'wp_head', 'hil_perf_print_font_awesome_loader', 5 );
+add_action( 'wp_head', 'hil_perf_print_font_awesome_loader', 99 );
+add_action( 'wp_footer', 'hil_perf_print_font_awesome_loader', 99 );
