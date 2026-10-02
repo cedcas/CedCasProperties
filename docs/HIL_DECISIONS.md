@@ -605,6 +605,39 @@ None
 
 ---
 
+## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
+
+Date: 2026-10-01
+Status: Proposed — implemented on branch `feat/admin-booking-amend`, **not merged, not deployed**. The pricing and eligibility parts are interim defaults awaiting the Owner.
+Area: Website
+
+### Decision
+- **Inventory lock.** Any write that claims nights — a new booking (`POST /api/bookings`) or an amendment — first takes `SELECT … FOR UPDATE` on the `Property` rows of the listing and all members of its inventory group (`src/lib/inventory-lock.ts`), then re-checks availability and writes inside that transaction. The check reads sibling bookings directly, not only their derived blocks.
+- **Amendments are atomic.** The booking update, its sibling-block reconciliation, the unsent scheduled messages and the audit entry commit or roll back together. Only the booking and its own derived blocks are excluded from the availability check.
+- **Price is preserved.** An amendment writes no financial field, makes no charge or refund, and creates no `AdditionalCharge`. A reference quote is shown for comparison only.
+- **Interim eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
+
+### Reason
+- **Lock:** booking creation was check-then-insert with no lock. Two requests could both pass the check, and a transaction alone does not prevent that. A database test without the lock double-books every time.
+- **Row locks rather than `GET_LOCK`:** row locks release on commit, rollback or connection loss. A named lock would stay held on a pooled connection.
+- **One transaction for amendments:** the existing reconciler is safe on failure because it over-blocks. An amendment also *releases* nights, and a suppressed channel event must resume blocking them. Doing that after the commit would leave a window where it had not happened yet.
+- **Preserve price:** the two 2026-09-17 precedents differ (#130 kept its paid total; #136 was increased after a separately collected payment), and no policy has been approved. Keeping the stored figures is the only option that cannot misstate what was paid.
+
+### Implications
+- New code that inserts or moves a booking must go through `withInventoryLock`. Work inside it must be database-only, because a deadlock retry can run it more than once.
+- Deadlocks (InnoDB 1213) between the lock and a post-commit derived-block insert are expected and retried (`src/lib/db-retry.ts`): deadlocks only, 3 attempts, database-only work. Do not remove the retry or widen it to other errors. Verified against the production engine, MariaDB 11.8.9 / InnoDB.
+- A card booking that loses the race after payment now gets a 409 with its payment reference, an `AdminLog` entry and one admin alert email (`src/lib/paid-unavailable.ts`), instead of a double booking.
+- After a date change the stored `nightlyTotal` no longer equals nights × rate.
+- Moving a cancelled booking back to pending/confirmed (`PUT /api/admin/bookings/[id]`) takes the same lock and check; it is refused with 409 if the dates are gone. Other status transitions are unchanged.
+- A reminder is too late to stop once the sending worker has claimed it and re-read the booking. Amendments report such a reminder as in flight; they do not promise it was stopped.
+- Scheduled-message delivery is now at-most-once: an interrupted send is marked `failed`, not re-sent.
+- Not decided, and not automated: what happens to a card payment whose booking could not be saved (refund timing, the 6% card fee, guest wording). The site only records it and alerts the admin.
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

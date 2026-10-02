@@ -72,6 +72,17 @@ export function todayUtc(): Date {
   return toUtcMidnight(new Date());
 }
 
+/**
+ * Today's calendar date at the properties (Asia/Manila), as a UTC-midnight date.
+ *
+ * Use this — not {@link todayUtc} — for "has this stay started / ended?" decisions. Between
+ * 00:00 and 08:00 in Lipa the UTC date is still yesterday, so a UTC "today" would treat a
+ * stay that has already begun locally as upcoming. Manila is UTC+8 all year (no DST).
+ */
+export function todayInManila(now: Date = new Date()): Date {
+  return toUtcMidnight(new Date(now.getTime() + 8 * 60 * 60 * 1000));
+}
+
 /** Shift a UTC-midnight date by whole days. Negative `n` goes backwards. */
 export function addUtcDays(d: Date, n: number): Date {
   const out = new Date(d.getTime());

@@ -34,6 +34,7 @@ import {
 import { derivedBlockUid, type DerivedSourceKind } from "@/lib/calendar-uids";
 import { bookingBlocksAvailability, BLOCKING_BOOKING_STATUSES } from "@/lib/booking-status";
 import { logAction } from "@/lib/log";
+import { retryOnDeadlock } from "@/lib/db-retry";
 
 /** Marker values shared by every derived block. */
 export const DERIVED_BLOCK_TYPE = "inventory_derived";
@@ -178,7 +179,7 @@ export function planDerivedBlocks(input: {
 
 // ── Database layer ─────────────────────────────────────────────────────────
 
-type Db = Prisma.TransactionClient | typeof prisma;
+export type Db = Prisma.TransactionClient | typeof prisma;
 
 /** The property's group, or null when it belongs to none. Includes inactive groups. */
 export async function getGroupForProperty(
@@ -329,7 +330,7 @@ async function loadHilCoverage(
  * would leave siblings bookable for up to a sync interval while the unit is occupied, so
  * the re-evaluation happens immediately.
  */
-async function reconcileOverlappingExternalEvents(
+export async function reconcileOverlappingExternalEvents(
   propertyId: number,
   start: Date,
   end: Date,
@@ -531,6 +532,15 @@ export async function reconcileBookingDerivedBlocks(
   bookingId: number,
   db: Db = prisma
 ): Promise<ReconcileResult> {
+  // Outside a transaction this competes with holders of the inventory lock and can be
+  // picked as a deadlock victim. It is idempotent, so it is simply run again — a dropped
+  // run here would leave sibling listings unblocked. Inside a caller's transaction the
+  // caller owns the retry (a deadlock rolls its whole transaction back).
+  if (db === prisma) return retryOnDeadlock(() => reconcileBookingDerivedBlocksOnce(bookingId, db));
+  return reconcileBookingDerivedBlocksOnce(bookingId, db);
+}
+
+async function reconcileBookingDerivedBlocksOnce(bookingId: number, db: Db): Promise<ReconcileResult> {
   const booking = await db.booking.findUnique({
     where: { id: bookingId },
     select: { id: true, propertyId: true, checkIn: true, checkOut: true, status: true },
@@ -652,6 +662,57 @@ export async function reconcileManualBlockDerivedBlocks(
   }
 
   return result;
+}
+
+/**
+ * Read-only check: do the active sibling blocks of a booking match what it justifies now?
+ *
+ * Runs the same planner as reconciliation but applies nothing, so a caller can tell
+ * "amended and fully propagated" from "amended, projection still converging" instead of
+ * assuming a reconcile call that did not throw must have converged.
+ */
+export async function checkBookingProjection(
+  bookingId: number,
+  db: Db = prisma
+): Promise<{ inSync: boolean; blockedPropertyIds: number[]; missing: number; stale: number }> {
+  const booking = await db.booking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, propertyId: true, checkIn: true, checkOut: true, status: true },
+  });
+  if (!booking) return { inSync: true, blockedPropertyIds: [], missing: 0, stale: 0 };
+
+  const source: DerivedSource = {
+    kind: "booking",
+    id: booking.id,
+    propertyId: booking.propertyId,
+    start: booking.checkIn,
+    end: booking.checkOut,
+    isActive: bookingBlocksAvailability(booking.status),
+  };
+  const [group, existing] = await Promise.all([
+    getGroupForProperty(booking.propertyId, db),
+    loadExistingDerived(source, db),
+  ]);
+  const plan = planDerivedBlocks({ source, group, existing, cancelCutoff: null });
+
+  const active = new Map(
+    existing.filter((b) => b.status === "active" && b.externalUid).map((b) => [b.externalUid!, b])
+  );
+  const missing = plan.upserts.filter((u) => {
+    const have = active.get(u.externalUid);
+    return (
+      !have ||
+      have.startDate.getTime() !== u.startDate.getTime() ||
+      have.endDate.getTime() !== u.endDate.getTime()
+    );
+  }).length;
+
+  return {
+    inSync: missing === 0 && plan.cancels.length === 0,
+    blockedPropertyIds: plan.upserts.map((u) => u.propertyId),
+    missing,
+    stale: plan.cancels.length,
+  };
 }
 
 // ── Group-level reconciliation ─────────────────────────────────────────────

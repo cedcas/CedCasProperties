@@ -21,6 +21,7 @@ import { prisma } from "@/lib/prisma";
 import { rangesOverlap, toUtcMidnight, todayUtc, utcDateKey } from "@/lib/dates";
 import { ensureExternalEventsFresh } from "@/lib/external-calendar-sync";
 import { BLOCKING_BOOKING_STATUSES } from "@/lib/booking-status";
+import { getActiveSiblingPropertyIds, type Db } from "@/lib/inventory-groups";
 
 // Re-exported so callers can treat this module as the availability entry point.
 export { BLOCKING_BOOKING_STATUSES, bookingBlocksAvailability } from "@/lib/booking-status";
@@ -120,6 +121,8 @@ interface LoadOpts {
   /** Only load records that could overlap this window. Omit to load all future records. */
   from?: Date;
   to?: Date;
+  /** Read through a transaction client so a locked check sees that transaction's view. */
+  db?: Db;
 }
 
 /**
@@ -129,7 +132,12 @@ interface LoadOpts {
  * straddles the window boundary is still caught. Narrowing it to fully-contained ranges
  * would miss exactly the conflicts that matter.
  */
-async function loadCandidates({ propertyId, from, to }: LoadOpts): Promise<ConflictCandidate[]> {
+async function loadCandidates({
+  propertyId,
+  from,
+  to,
+  db = prisma,
+}: LoadOpts): Promise<ConflictCandidate[]> {
   const dateWindow = <T extends string>(startField: T, endField: T) => {
     const clauses: Record<string, unknown> = {};
     if (to) clauses[startField] = { lt: to };
@@ -138,7 +146,7 @@ async function loadCandidates({ propertyId, from, to }: LoadOpts): Promise<Confl
   };
 
   const [bookings, blocks, externalEvents] = await Promise.all([
-    prisma.booking.findMany({
+    db.booking.findMany({
       where: {
         propertyId,
         status: { in: [...BLOCKING_BOOKING_STATUSES] },
@@ -146,7 +154,7 @@ async function loadCandidates({ propertyId, from, to }: LoadOpts): Promise<Confl
       },
       select: { id: true, checkIn: true, checkOut: true, guestName: true, status: true },
     }),
-    prisma.availabilityBlock.findMany({
+    db.availabilityBlock.findMany({
       where: {
         propertyId,
         status: "active",
@@ -164,7 +172,7 @@ async function loadCandidates({ propertyId, from, to }: LoadOpts): Promise<Confl
         sourceProperty: { select: { name: true } },
       },
     }),
-    prisma.externalCalendarEvent.findMany({
+    db.externalCalendarEvent.findMany({
       where: {
         propertyId,
         status: "active",
@@ -344,6 +352,118 @@ export async function assertPropertyAvailable(opts: {
   if (conflicts.length > 0) {
     throw new AvailabilityConflictError(guestFacingConflictMessage(conflicts), conflicts);
   }
+}
+
+// ── Inventory-scope checks (commit-time, under the inventory lock) ─────────
+
+/**
+ * Drop a direct sibling-booking conflict when that booking's own derived block is already
+ * among the conflicts — they are the same reservation seen twice. Pure.
+ */
+export function dedupeSiblingBookingConflicts(conflicts: Conflict[]): Conflict[] {
+  const projected = new Set(
+    conflicts.filter((c) => c.kind === "inventory_block" && c.bookingId != null).map((c) => c.bookingId)
+  );
+  return conflicts.filter(
+    (c) => !(c.kind === "booking" && c.sourcePropertyId != null && projected.has(c.id))
+  );
+}
+
+/**
+ * Conflicts for [start, end) on a property AND across its shared inventory.
+ *
+ * `getPropertyConflicts` sees a sibling's reservation only through that reservation's
+ * derived block, which is written by reconciliation *after* the booking row. Under the
+ * inventory lock that gap matters: a booking that has committed on a sibling but whose
+ * block is not written yet would be invisible. So this also reads blocking bookings on
+ * active-group siblings directly — the source, not its projection.
+ *
+ * `excludeBookingId` removes exactly that booking and the blocks derived from it. It never
+ * removes another reservation, a manual block or an imported event, even one that overlaps
+ * the excluded booking's current dates.
+ *
+ * Never syncs the external feed (no network inside a transaction) — refresh it first with
+ * `refreshExternalFeedForBooking`.
+ */
+export async function getInventoryScopeConflicts(opts: {
+  propertyId: number;
+  start: Date;
+  end: Date;
+  excludeBookingId?: number | null;
+  db?: Db;
+}): Promise<Conflict[]> {
+  const db = opts.db ?? prisma;
+  const start = toUtcMidnight(opts.start);
+  const end = toUtcMidnight(opts.end);
+
+  const [own, siblingIds] = await Promise.all([
+    loadCandidates({ propertyId: opts.propertyId, from: start, to: end, db }),
+    getActiveSiblingPropertyIds(opts.propertyId, db),
+  ]);
+
+  const siblingBookings =
+    siblingIds.length === 0
+      ? []
+      : await db.booking.findMany({
+          where: {
+            propertyId: { in: siblingIds },
+            status: { in: [...BLOCKING_BOOKING_STATUSES] },
+            checkIn: { lt: end },
+            checkOut: { gt: start },
+          },
+          select: {
+            id: true,
+            checkIn: true,
+            checkOut: true,
+            guestName: true,
+            status: true,
+            propertyId: true,
+            property: { select: { name: true } },
+          },
+        });
+
+  const candidates: ConflictCandidate[] = [
+    ...own,
+    ...siblingBookings.map((b) => ({
+      kind: "booking" as const,
+      id: b.id,
+      start: b.checkIn,
+      end: b.checkOut,
+      label: `Booking #${b.id} — ${b.guestName} (${b.property.name}, shared inventory)`,
+      reason: b.status,
+      bookingId: b.id,
+      guestName: b.guestName,
+      sourcePropertyId: b.propertyId,
+      sourcePropertyName: b.property.name,
+    })),
+  ];
+
+  return dedupeSiblingBookingConflicts(
+    conflictsFor(candidates, start, end, { excludeBookingId: opts.excludeBookingId })
+  );
+}
+
+/** Throwing form of {@link getInventoryScopeConflicts}; the message is guest-safe. */
+export async function assertInventoryScopeAvailable(opts: {
+  propertyId: number;
+  start: Date;
+  end: Date;
+  excludeBookingId?: number | null;
+  db?: Db;
+}): Promise<void> {
+  const conflicts = await getInventoryScopeConflicts(opts);
+  if (conflicts.length > 0) {
+    throw new AvailabilityConflictError(guestFacingConflictMessage(conflicts), conflicts);
+  }
+}
+
+/**
+ * The pre-commit feed refresh (2-minute window), exposed so a caller can run it BEFORE
+ * opening a transaction. Same best-effort policy as every other check: a channel outage
+ * leaves the last known-good imported events in place and never unblocks anything.
+ */
+export async function refreshExternalFeedForBooking(propertyId: number): Promise<void> {
+  await applySyncPolicy(propertyId, "booking");
 }
 
 /** Compact `YYYY-MM-DD – YYYY-MM-DD` label, the shape the public API has always returned. */
