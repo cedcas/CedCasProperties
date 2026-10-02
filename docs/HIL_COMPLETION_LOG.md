@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-10-01 — Admin Guest & Stay Edit, inventory lock, protected reactivation
+
+Area: Website
+
+Status: **Released via PR #43.** Two separate verifications, not to be confused:
+- **Owner acceptance testing — passed, 2026-10-01, on `dev.haveninlipa.com`** (dev build `9eb9f76`, Vercel Preview environment, dev database).
+- **Production** — deployment and smoke-check result for the merge commit is recorded in [HIL Commits.md](HIL%20Commits.md) and [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md). The Owner's acceptance test was not run on production.
+
+### Outcome
+- Staff with the `bookings` permission can amend guest name, email, phone, guest count, property and dates on `/admin/bookings/[id]` through Edit → Review → Save, with a mandatory reason and an Amendment History list. Replaces the temporary-route method used on 2026-09-17.
+- Every write that claims nights now takes an inventory lock: amendments, `POST /api/bookings`, and cancelled → pending/confirmed status changes.
+- A card payment whose booking cannot be saved is reported to the guest with its reference and alerted to the admin once. No automatic refund.
+- The reminder worker claims rows before sending; delivery is at-most-once.
+- No schema change. Full detail: [Website spec → Booking Amendments](HIL%20Website%20Technical%20Specification.md#booking-amendments-guest--stay-edit), [DEC-024](HIL_DECISIONS.md).
+
+### Evidence
+- CI: lint, typecheck, build, 1,416 unit tests (three timezones).
+- Local only, not in CI: 56 database-backed tests on a throwaway MariaDB (`npm run test:db`), including concurrency races.
+- Production engine checked read-only: MariaDB 11.8.9, InnoDB.
+
+### Gotchas worth remembering
+- **`dev.haveninlipa.com` serves the `dev` branch, not a feature branch's Preview.** The first "deployed" report pointed at the feature Preview URL; the Owner looked at the dev hostname and saw nothing. Getting a branch cut from `main` onto `dev` needed an integration branch (PR #45), because `dev` and `main` had diverged in docs.
+- Deadlocks between the lock and post-commit block inserts are normal and retried; only the database-backed suite caught them.
+- Shipped on interim defaults. Price, notification, eligibility and paid-card policies are **not** Owner-approved yet.
+
+---
+
 ## 2026-09-30 — Full SEO audit and HIGH/MEDIUM fixes (main site + blog)
 
 Area: SEO | Website | Blog
