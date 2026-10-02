@@ -72,7 +72,7 @@ export default function GuestStayEditor({
   properties,
   editable,
   notice,
-  canEdit,
+  blockedReason,
   guestFooter,
   stayFooter,
 }: {
@@ -83,7 +83,11 @@ export default function GuestStayEditor({
   properties: EditorProperty[];
   editable: AmendableField[];
   notice: string | null;
-  canEdit: boolean;
+  /**
+   * Why this viewer cannot edit at all (missing permission, unverifiable session), or null.
+   * Shown in place of the Edit control — editing is never just silently absent.
+   */
+  blockedReason: string | null;
   guestFooter?: React.ReactNode;
   stayFooter?: React.ReactNode;
 }) {
@@ -271,8 +275,23 @@ export default function GuestStayEditor({
   const secondaryBtn =
     "min-h-[44px] px-5 rounded-full border border-charcoal/20 text-charcoal text-[13.5px] font-semibold hover:bg-cream focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-forest disabled:opacity-50 transition-colors";
 
-  const editButton = (ref?: React.Ref<HTMLButtonElement>) =>
-    canEdit && editable.length > 0 && mode === "view" ? (
+  // Editing is unavailable either for this viewer (`blockedReason`) or for this booking
+  // (`notice` with nothing editable, e.g. cancelled). Either way the reason is displayed.
+  const canEdit = blockedReason === null;
+  const lockedOut = !canEdit || editable.length === 0;
+  const lockReason = blockedReason ?? notice;
+
+  const editButton = (ref?: React.Ref<HTMLButtonElement>) => {
+    if (mode !== "view") return null;
+    if (lockedOut) {
+      return (
+        <span className="text-[12px] font-semibold text-charcoal/45" aria-describedby={`${uid}-lock`}>
+          <i className="fa-solid fa-lock text-[11px] mr-1.5" aria-hidden="true" />
+          Editing locked
+        </span>
+      );
+    }
+    return (
       <button
         ref={ref}
         type="button"
@@ -282,7 +301,8 @@ export default function GuestStayEditor({
         <i className="fa-solid fa-pen text-[11px] mr-1.5" aria-hidden="true" />
         Edit<span className="sr-only"> guest and stay details</span>
       </button>
-    ) : null;
+    );
+  };
 
   const field = (
     name: AmendableField,
@@ -583,10 +603,14 @@ export default function GuestStayEditor({
         </div>
       )}
       {mode !== "review" && errorBox}
-      {notice && canEdit && (
-        <p className="lg:col-span-2 text-[12.5px] text-charcoal/55 -mb-2">
+      {lockReason && (
+        <p
+          id={`${uid}-lock`}
+          className={`lg:col-span-2 text-[13px] -mb-2 ${lockedOut ? "rounded-[10px] border border-charcoal/15 bg-cream/60 px-4 py-2.5 text-charcoal/75" : "text-charcoal/55"}`}
+        >
           <i className="fa-solid fa-lock text-[11px] mr-1.5" aria-hidden="true" />
-          {notice}
+          {lockedOut && <strong>Guest and stay details cannot be edited here. </strong>}
+          {lockReason}
         </p>
       )}
 

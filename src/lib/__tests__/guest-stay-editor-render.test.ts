@@ -111,7 +111,7 @@ function mount(props: Partial<Parameters<typeof GuestStayEditor>[0]> = {}, repli
         properties: PROPERTIES,
         editable: ALL,
         notice: null,
-        canEdit: true,
+        blockedReason: null,
         ...props,
       })
     );
@@ -152,13 +152,27 @@ describe("Guest & Stay editor — rendered flow", () => {
     expect(text()).toContain("Nights2");
   });
 
-  it("offers no Edit control without the bookings permission or on a locked booking", () => {
-    mount({ canEdit: false });
+  it("never hides editing silently: says why when the viewer lacks permission or the booking is locked", async () => {
+    mount({ blockedReason: "Your account does not have the Bookings permission. An admin can switch it on for you under Users." });
     expect(button(/Edit/)).toBeUndefined();
+    expect(text()).toContain("Editing locked");
+    expect(text()).toContain("Guest and stay details cannot be edited here. Your account does not have the Bookings permission");
     act(() => mounted.pop()!.unmount());
-    mount({ editable: [], notice: "This booking is cancelled and cannot be amended." });
+    document.body.innerHTML = "";
+
+    mount({ editable: [], notice: "This booking is cancelled and cannot be amended. Amending never reactivates a booking." });
     expect(button(/Edit/)).toBeUndefined();
-    expect(text()).toContain("cannot be amended");
+    expect(text()).toContain("Editing locked");
+    expect(text()).toContain("This booking is cancelled and cannot be amended");
+  });
+
+  it("a past booking still offers Edit, limited to contact details, and says so", async () => {
+    mount({ editable: ["guestName", "guestEmail", "guestPhone"], notice: "This stay has ended. Only contact details can be corrected." });
+    expect(text()).toContain("This stay has ended. Only contact details can be corrected.");
+    expect(text()).not.toContain("Editing locked");
+    await click(/Edit/);
+    expect(byLabel("Email")!.value).toBe("ana@example.com");
+    for (const locked of ["Guests", "Property", "Check-in", "Check-out"]) expect(byLabel(locked)).toBeNull();
   });
 
   it("edit mode: every field is a labelled input pre-filled from the booking, focus moves into the form", async () => {

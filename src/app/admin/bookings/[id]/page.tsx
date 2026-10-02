@@ -113,7 +113,13 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           properties={activeProperties}
           editable={editableFieldsFor(phase)}
           notice={phaseNotice(phase)}
-          canEdit={permission.ok}
+          blockedReason={
+            permission.ok
+              ? null
+              : permission.status === 403
+                ? "Your account does not have the Bookings permission. An admin can switch it on for you under Users."
+                : "Your sign-in could not be verified. Sign out and sign in again to edit."
+          }
           guestFooter={
             <div className="mt-5 pt-4 border-t border-black/[.06]">
               <Link href={`/admin/customers/${booking.id}`} className="text-[13px] text-forest font-semibold hover:underline inline-flex items-center gap-1.5">
