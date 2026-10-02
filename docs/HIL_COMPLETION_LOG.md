@@ -26,6 +26,41 @@ Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`),
   - Primary route: Theme File Editor. Optional zip: `haveninlipa-blog-1.0.1.zip`, built from the source with the live footer edits folded in; use it only after comparing with live.
   - Instructions are on the HIL PM box at `/workspace/hil-blog-theme/APPLY.md`, including the LiteSpeed purge, Hostinger CDN flush and a logged-out check.
 
+## 2026-09-30 — Full SEO audit and HIGH/MEDIUM fixes (main site + blog)
+
+Area: SEO | Website | Blog
+
+Status: **Complete — live on both sites.** Main-site code: PR #38 (`3168324`), merged and confirmed live by the Owner. Blog: `hil-seo` 1.1.6 and HIL Performance 1.0.2 uploaded by the Owner; artifacts in PRs #38/#39/#40.
+
+- **Audit (read-only):**
+  - Crawled 14 main-site and 31 blog URLs, with an internal-link check on both sites.
+  - Validated the JSON-LD, ran local Lighthouse on main-site templates, and reviewed the code.
+  - Found 4 HIGH and 9 MEDIUM issues.
+  - **Corrections made during the work:**
+    - HIGH #4 (homepage LCP 5.4 s) was a cold-start outlier; re-runs gave 2.7–2.8 s.
+    - The review-markup finding was withdrawn: the reviews are real direct-booking guests.
+    - Only 3 property descriptions were over 160 characters, not 4.
+- **Main site (PR #38), verified on the preview and then on production:**
+  - Duplicated title brand fixed on all 5 listings: `stripBrandSuffix()`.
+  - Per-page Open Graph/Twitter tags on every public page, via `socialMetadata()` in `src/lib/seo-metadata.ts`. `/faq`, `/about`, `/privacy`, `/terms` and `/ambassadors` had been sharing as the homepage.
+  - Real 1200×630 `og-default.jpg`.
+  - `/faq` description cut from 210 to 152 characters.
+  - Gallery moved to `next/image`: listing page 21.3 MB → 622 KB, mobile LCP 5.7 s → 1.8 s, accessibility 87 → 92.
+  - New admin "Search Engine Listing" fields. The Owner used them to shorten the 3 Mickey descriptions (now 152–157 characters, live).
+- **Blog:**
+  - Article #6 (post 67) set to Private; its 301 still works, and no blog page links to it any more.
+  - Extra H1s removed on posts 77, 763 and 764.
+  - `hil-seo` 1.1.6 title-suffix rule (SEO-DEC-031).
+  - LiteSpeed/EWWW lazy-load and CSS configuration, plus the HIL Performance plugin (DEC-023).
+  - Blog post PageSpeed mobile went from 65 to **89**.
+  - The plugin needed three releases, recorded with their gotchas in the Blog spec: the dequeue ran too early, then LiteSpeed combined the `<noscript>` fallback.
+- **Owner decisions:** keep "one hour from Manila" on the main site (SEO-DEC-032); article #6 set to Private; blog title rule (SEO-DEC-031); admin fields rather than a production script for the descriptions.
+- **Follow-up:** GSC Request Indexing done for 10 URLs (5 listings, `/faq`, `/about`, posts 77/763/764).
+- **Open:**
+  - LOW findings, not started: sitemap `lastmod` is set to request time; `/ambassadors` is missing from the sitemap; brand identity is inconsistent between the two sites' structured data; seasonal blog posts are stale; blog homepage meta description is 32 characters.
+  - 26 blog titles still over 60 characters (editorial).
+  - Optional Google Fonts async ON/OFF comparison.
+
 ---
 
 ## 2026-09-28 — Production drive-time correction run; temporary route removed

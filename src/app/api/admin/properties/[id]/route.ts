@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mergePricingNotesPaymentMethods } from "@/lib/pricing-notes";
+import { normalizeSeoField } from "@/lib/seo-metadata";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -28,6 +29,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   if (data.isFeatured !== undefined)   update.isFeatured = data.isFeatured;
   if (data.airbnbIcsUrl !== undefined) update.airbnbIcsUrl = data.airbnbIcsUrl ?? null;
   if (data.propertyRules !== undefined) update.propertyRules = data.propertyRules ?? null;
+
+  // Search-result title/description overrides (Admin → Edit → "Search Engine
+  // Listing"). Blank clears the override so the page falls back to its
+  // generated copy. Price tokens in the description are still rewritten to the
+  // live rate at render time by normalizePricingProse.
+  for (const field of ["seoTitle", "seoDescription"] as const) {
+    if (data[field] === undefined) continue;
+    const result = normalizeSeoField(data[field]);
+    if ("error" in result) {
+      return NextResponse.json(
+        { error: `${field === "seoTitle" ? "SEO title" : "SEO description"} ${result.error}.` },
+        { status: 400 }
+      );
+    }
+    update[field] = result.value;
+  }
 
   // pricePerNight (the weekday/base rate) is patched only from the Rates page.
   if (data.pricePerNight !== undefined && data.pricePerNight !== "") {

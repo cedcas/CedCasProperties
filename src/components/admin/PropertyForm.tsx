@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { Property } from "@prisma/client";
 import { safeParsePricingNotes } from "@/lib/pricing-notes";
+import { SEO_DESCRIPTION_TARGET, SEO_TITLE_TARGET, stripBrandSuffix } from "@/lib/seo-metadata";
 
 const AMENITY_OPTIONS = ["WiFi", "AC", "Parking", "TV", "Kitchen", "Pool", "Washer", "Coffee"];
 const APPROVED_PAYMENT_METHODS_TEXT =
@@ -25,6 +26,8 @@ export default function PropertyForm({ property }: { property?: Property }) {
     isFeatured:     property?.isFeatured ?? false,
     airbnbIcsUrl:   (property as Property & { airbnbIcsUrl?: string | null })?.airbnbIcsUrl ?? "",
     propertyRules:  (property as Property & { propertyRules?: string | null })?.propertyRules ?? "",
+    seoTitle:       property?.seoTitle       ?? "",
+    seoDescription: property?.seoDescription ?? "",
     paymentMethods: typeof safeParsePricingNotes(property?.pricingNotes).paymentMethods === "string"
       ? (safeParsePricingNotes(property?.pricingNotes).paymentMethods as string)
       : "",
@@ -66,7 +69,7 @@ export default function PropertyForm({ property }: { property?: Property }) {
       // it on create — new properties don't have a pricingNotes row to merge into yet.
       const body = isEdit
         ? { ...form, amenities: JSON.stringify(amenities), paymentMethods: form.paymentMethods.trim() || undefined }
-        : { ...form, amenities: JSON.stringify(amenities), images: "[]", paymentMethods: undefined };
+        : { ...form, amenities: JSON.stringify(amenities), images: "[]", paymentMethods: undefined, seoTitle: undefined, seoDescription: undefined };
       const url  = isEdit ? `/api/admin/properties/${property.id}` : "/api/admin/properties";
       const res  = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
@@ -104,6 +107,37 @@ export default function PropertyForm({ property }: { property?: Property }) {
           <div><label className={labelCls}>Location</label><input name="location" value={form.location} onChange={handle} className={inputCls} /></div>
         </div>
       </div>
+
+      {isEdit && (
+        <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
+          <h3 className="font-serif font-semibold text-charcoal mb-1">Search Engine Listing</h3>
+          <p className="text-[12px] text-charcoal/50 mb-5">
+            How this listing appears in Google results and link previews. Leave blank to use the property name and description.
+          </p>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="seoTitle" className={labelCls}>SEO Title</label>
+              <input id="seoTitle" name="seoTitle" value={form.seoTitle} onChange={handle} className={inputCls}
+                placeholder="e.g. Cozy 1BR Vacation Rental in Lipa City — Sleeps 5" />
+              <CharCount
+                length={stripBrandSuffix(form.seoTitle).length}
+                target={SEO_TITLE_TARGET}
+                note={'" | Haven in Lipa" is added automatically — don\u2019t type it.'}
+              />
+            </div>
+            <div>
+              <label htmlFor="seoDescription" className={labelCls}>SEO Description</label>
+              <textarea id="seoDescription" name="seoDescription" value={form.seoDescription} onChange={handle} rows={3}
+                className={`${inputCls} resize-none`} placeholder="One or two sentences shown under the title in Google." />
+              <CharCount
+                length={form.seoDescription.trim().length}
+                target={SEO_DESCRIPTION_TARGET}
+                note="A nightly price written like ₱2,400/night is updated to the live rate automatically."
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
         <h3 className="font-serif font-semibold text-charcoal mb-5">Capacity</h3>
@@ -261,5 +295,17 @@ export default function PropertyForm({ property }: { property?: Property }) {
         </button>
       </div>
     </form>
+  );
+}
+
+function CharCount({ length, target, note }: { length: number; target: number; note: string }) {
+  const over = length > target;
+  return (
+    <p className="text-[11.5px] mt-1.5 flex justify-between gap-3">
+      <span className="text-charcoal/45">{note}</span>
+      <span className={`whitespace-nowrap font-medium ${over ? "text-amber-700" : "text-charcoal/45"}`}>
+        {length} / {target}{over ? " — Google may cut this off" : ""}
+      </span>
+    </p>
   );
 }

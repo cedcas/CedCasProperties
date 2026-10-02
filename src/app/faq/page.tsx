@@ -4,14 +4,21 @@ import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import FaqAnswer from "@/components/ui/FaqAnswer";
 import { faqs } from "@/lib/faqs";
+import { socialMetadata } from "@/lib/seo-metadata";
+
+const FAQ_TITLE = "FAQ — Booking, Payments & Stays in Lipa City";
+// ≤160 chars. The previous copy (210 chars) said "our two Lipa City properties"
+// while every other page says five homes (2026-09-30 SEO audit).
+const FAQ_DESCRIPTION =
+  "Booking direct with Haven in Lipa: GCash, BPI and card payments, cancellation, WiFi, parking, pets, check-in, and choosing among our five Lipa City homes.";
 
 export const metadata: Metadata = {
-  title: "FAQ — Booking, Payments & Stays in Lipa City",
-  description:
-    "Answers to common questions about booking direct with Haven in Lipa: payments (GCash, BPI, credit card), cancellation, WiFi, parking, families, pets, check-in, and choosing between our two Lipa City properties.",
+  title: FAQ_TITLE,
+  description: FAQ_DESCRIPTION,
   alternates: {
     canonical: "/faq",
   },
+  ...socialMetadata({ title: FAQ_TITLE, description: FAQ_DESCRIPTION, path: "/faq" }),
 };
 
 const faqJsonLd = {

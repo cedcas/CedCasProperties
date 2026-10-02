@@ -7,6 +7,7 @@ import FaqAnswer from "@/components/ui/FaqAnswer";
 import type { FaqLink } from "@/lib/faqs";
 import { extraGuestFeeApplies } from "@/lib/occupancy";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
+import { socialMetadata } from "@/lib/seo-metadata";
 import {
   buildShortNames,
   deriveHouses,
@@ -144,7 +145,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // canonical — the App Router metadata gotcha that put two /book URLs in the
     // index as duplicate-canonical thin pages (36fa136).
     alternates: { canonical: "/staycation" },
-    openGraph: { title, description, type: "website", url: "/staycation" },
+    ...socialMetadata({ title, description, path: "/staycation" }),
   };
 }
 

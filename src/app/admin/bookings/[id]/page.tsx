@@ -5,7 +5,17 @@ import DeleteButton from "@/components/admin/DeleteButton";
 import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
 import AdditionalChargesManager from "@/components/admin/AdditionalChargesManager";
 import NotesEditor from "@/components/admin/NotesEditor";
-import { formatStayDate } from "@/lib/dates";
+import GuestStayEditor from "@/components/admin/GuestStayEditor";
+import { todayInManila } from "@/lib/dates";
+import { checkPermission } from "@/lib/admin-permissions";
+import {
+  AMENDMENT_LOG_PREFIX,
+  classifyStayPhase,
+  editableFieldsFor,
+  phaseNotice,
+  snapshotOf,
+  type ReviewChange,
+} from "@/lib/booking-amendment";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +35,32 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
     },
   });
   if (!booking) notFound();
+
+  // Guest & Stay amendments. The Edit control is only offered to someone who holds the
+  // `bookings` permission; the API enforces the same check regardless of what is shown.
+  const [permission, activeProperties, amendmentLogs] = await Promise.all([
+    checkPermission("bookings"),
+    prisma.property.findMany({
+      where: { OR: [{ isActive: true }, { id: booking.propertyId }] },
+      select: { id: true, name: true, maxGuests: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.adminLog.findMany({
+      where: { module: "bookings", target: `booking-${booking.id}`, action: { startsWith: AMENDMENT_LOG_PREFIX } },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+  ]);
+  const phase = classifyStayPhase(booking, todayInManila());
+  const amendments = amendmentLogs.map((log) => {
+    let meta: { reason?: string; changes?: ReviewChange[] } = {};
+    try {
+      meta = log.metadata ? JSON.parse(log.metadata) : {};
+    } catch {
+      // Unreadable metadata — still show who and when.
+    }
+    return { id: log.id, actor: log.actor, at: log.createdAt, reason: meta.reason ?? "", changes: meta.changes ?? [] };
+  });
 
   const charges = booking.additionalCharges.map((c) => ({
     id: c.id,
@@ -68,48 +104,50 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Guest */}
-        <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
-          <h2 className="font-serif font-semibold text-charcoal text-[1rem] mb-5">Guest</h2>
-          <dl className="space-y-3 text-[13.5px]">
-            <Row label="Name" value={booking.guestName} />
-            <Row label="Email" value={<a href={`mailto:${booking.guestEmail}`} className="text-forest hover:underline break-all">{booking.guestEmail}</a>} />
-            <Row label="Phone" value={booking.guestPhone ? <a href={`tel:${booking.guestPhone}`} className="text-forest hover:underline">{booking.guestPhone}</a> : <span className="text-charcoal/35">—</span>} />
-            <Row label="Guests" value={String(booking.guests)} />
-          </dl>
-          <div className="mt-5 pt-4 border-t border-black/[.06]">
-            <Link href={`/admin/customers/${booking.id}`} className="text-[13px] text-forest font-semibold hover:underline inline-flex items-center gap-1.5">
-              View customer <i className="fa-solid fa-arrow-right text-[11px]" />
-            </Link>
-          </div>
-        </section>
-
-        {/* Stay */}
-        <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
-          <h2 className="font-serif font-semibold text-charcoal text-[1rem] mb-5">Stay</h2>
-          <dl className="space-y-3 text-[13.5px]">
-            <Row label="Property" value={<Link href={`/properties/${booking.property.slug}`} className="text-forest hover:underline">{booking.property.name}</Link>} />
-            <Row label="Check-in" value={formatStayDate(booking.checkIn)} />
-            <Row label="Check-out" value={formatStayDate(booking.checkOut)} />
-            <Row label="Nights" value={String(nights)} />
-          </dl>
-          {booking.notes && (
+        {/* Guest + Stay (editable) */}
+        <GuestStayEditor
+          bookingId={booking.id}
+          snapshot={snapshotOf(booking)}
+          propertyName={booking.property.name}
+          propertySlug={booking.property.slug}
+          properties={activeProperties}
+          editable={editableFieldsFor(phase)}
+          notice={phaseNotice(phase)}
+          blockedReason={
+            permission.ok
+              ? null
+              : permission.status === 403
+                ? "Your account does not have the Bookings permission. An admin can switch it on for you under Users."
+                : "Your sign-in could not be verified. Sign out and sign in again to edit."
+          }
+          guestFooter={
             <div className="mt-5 pt-4 border-t border-black/[.06]">
-              <div className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-2">Guest&apos;s Request</div>
-              <p className="text-[13.5px] text-charcoal/70 whitespace-pre-wrap bg-cream/40 rounded-[10px] px-4 py-2.5">{booking.notes}</p>
-              <p className="text-[11px] text-charcoal/35 mt-1.5">Submitted by the guest at booking · read-only</p>
+              <Link href={`/admin/customers/${booking.id}`} className="text-[13px] text-forest font-semibold hover:underline inline-flex items-center gap-1.5">
+                View customer <i className="fa-solid fa-arrow-right text-[11px]" />
+              </Link>
             </div>
-          )}
-          <div className="mt-5 pt-4 border-t border-black/[.06]">
-            <NotesEditor
-              endpoint={`/api/admin/bookings/${booking.id}`}
-              field="adminNotes"
-              initialValue={booking.adminNotes}
-              label="Admin Comment (internal · not shown to guest)"
-              placeholder="Internal notes about this stay (e.g. guest review, reminders)…"
-            />
-          </div>
-        </section>
+          }
+          stayFooter={
+            <>
+              {booking.notes && (
+                <div className="mt-5 pt-4 border-t border-black/[.06]">
+                  <div className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-2">Guest&apos;s Request</div>
+                  <p className="text-[13.5px] text-charcoal/70 whitespace-pre-wrap bg-cream/40 rounded-[10px] px-4 py-2.5">{booking.notes}</p>
+                  <p className="text-[11px] text-charcoal/35 mt-1.5">Submitted by the guest at booking · read-only</p>
+                </div>
+              )}
+              <div className="mt-5 pt-4 border-t border-black/[.06]">
+                <NotesEditor
+                  endpoint={`/api/admin/bookings/${booking.id}`}
+                  field="adminNotes"
+                  initialValue={booking.adminNotes}
+                  label="Admin Comment (internal · not shown to guest)"
+                  placeholder="Internal notes about this stay (e.g. guest review, reminders)…"
+                />
+              </div>
+            </>
+          }
+        />
 
         {/* Payment */}
         <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
@@ -155,6 +193,29 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           placeholder="Internal notes about charges, damages, or incidentals for this booking…"
         />
       </section>
+
+      {/* Amendment history */}
+      {amendments.length > 0 && (
+        <section aria-labelledby="amendment-history" className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] mt-6">
+          <h2 id="amendment-history" className="font-serif font-semibold text-charcoal text-[1rem] mb-4">Amendment History</h2>
+          <ol className="space-y-4 text-[13.5px]">
+            {amendments.map((a) => (
+              <li key={a.id} className="border-l-2 border-gold/60 pl-4">
+                <p className="text-charcoal/80">
+                  <strong>{a.actor}</strong>{" "}
+                  <span className="text-charcoal/45">· {a.at.toLocaleString("en-PH", { timeZone: "Asia/Manila" })} (Manila)</span>
+                </p>
+                {a.reason && <p className="text-charcoal/70 mt-0.5">Reason: {a.reason}</p>}
+                <ul className="mt-1 text-charcoal/60 space-y-0.5">
+                  {a.changes.map((c) => (
+                    <li key={c.field}>{c.label}: {c.before} → <span className="text-charcoal/85">{c.after}</span></li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
 
       {/* Meta */}
       <div className="mt-6 text-[12px] text-charcoal/40 flex flex-wrap gap-x-6 gap-y-1">

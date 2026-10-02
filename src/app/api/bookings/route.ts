@@ -9,7 +9,18 @@ import { logAction, getIpFromRequest } from "@/lib/log";
 import { normalizePhone } from "@/lib/phone";
 import { promoteContactMessagesForEmail } from "@/lib/emailReply";
 import { formatStayDate } from "@/lib/dates";
-import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
+import {
+  assertPropertyAvailable,
+  assertInventoryScopeAvailable,
+  AvailabilityConflictError,
+} from "@/lib/availability";
+import { withInventoryLock } from "@/lib/inventory-lock";
+import {
+  isPaidIntentForStay,
+  paidUnavailableGuestMessage,
+  reportPaidButUnavailable,
+  PAID_UNAVAILABLE_CODE,
+} from "@/lib/paid-unavailable";
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
 
@@ -70,6 +81,44 @@ export async function POST(req: NextRequest) {
     total: computedTotal,
   } = quoteResult.quote;
 
+  // The dates turned out to be unavailable. For GCash/BPI nothing has been paid through
+  // the site, so the guest-safe conflict message is the whole answer (it never reveals
+  // *why* — owner use, sibling listing, …). A card is different: it was charged in the
+  // browser before this request, so if that payment really succeeded for this stay, say
+  // so, give the guest the reference, and alert the admin. See src/lib/paid-unavailable.ts.
+  const unavailableResponse = async (err: AvailabilityConflictError) => {
+    const generic = NextResponse.json({ error: err.message }, { status: err.status });
+    const secretKey = process.env.STRIPE_SECRET_KEY;
+    if (paymentMethod !== "stripe" || typeof rawStripePaymentIntentId !== "string" || !rawStripePaymentIntentId || !secretKey) {
+      return generic;
+    }
+    const stay = { propertyId: Number(propertyId), checkIn: checkInDate, checkOut: checkOutDate };
+    let pi: Stripe.PaymentIntent;
+    try {
+      pi = await new Stripe(secretKey).paymentIntents.retrieve(rawStripePaymentIntentId);
+    } catch {
+      return generic;
+    }
+    if (!isPaidIntentForStay(pi, stay)) return generic;
+
+    console.error("[bookings] card paid but dates unavailable:", pi.id);
+    await reportPaidButUnavailable({
+      ...stay,
+      intentId: pi.id,
+      amount: (pi.amount_received ?? pi.amount) / 100,
+      propertyName: property.name,
+      guests: guestCount,
+      guestName,
+      guestEmail,
+      guestPhone: guestPhoneE164,
+      ipAddress: getIpFromRequest(req),
+    });
+    return NextResponse.json(
+      { error: paidUnavailableGuestMessage(pi.id), code: PAID_UNAVAILABLE_CODE, paymentReference: pi.id },
+      { status: 409 }
+    );
+  };
+
   // ── Availability enforcement ─────────────────────────────────────────────
   // Single source of truth (src/lib/availability.ts): HIL bookings in a blocking status,
   // manual blocks, shared-inventory sibling blocks, and persisted external calendar
@@ -90,8 +139,7 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     if (err instanceof AvailabilityConflictError) {
-      // Guest-safe message: never reveals *why* (owner use, sibling listing, …).
-      return NextResponse.json({ error: err.message }, { status: err.status });
+      return unavailableResponse(err);
     }
     throw err;
   }
@@ -157,28 +205,50 @@ export async function POST(req: NextRequest) {
   // Only a verified Stripe payment is auto-confirmed.
   const isStripeConfirmed = isStripe && stripePaymentIntentId !== null;
 
-  const booking = await prisma.booking.create({
-    data: {
-      propertyId: Number(propertyId),
-      guestName,
-      guestEmail,
-      guestPhone: guestPhoneE164,
-      checkIn:   checkInDate,
-      checkOut:  checkOutDate,
-      guests:    guestCount,
-      totalPrice: computedTotal,
-      nightlyTotal: serverNightlyTotal,
-      extraGuestFee: extraGuestFee > 0 ? extraGuestFee : null,
-      stripeFee:  stripeFee > 0 ? stripeFee : null,
-      discountCode: discountCode || null,
-      discountAmount: discountAmount > 0 ? discountAmount : null,
-      paymentMethod: paymentMethod || null,
-      stripePaymentIntentId,
-      status:    isStripeConfirmed ? "confirmed" : "pending",
-      notes:     notes || null,
-    },
-    include: { property: true },
-  });
+  // The check above ran before the (slow) payment verification and is not atomic with
+  // the insert: two guests submitting the same nights can both pass it. So the dates are
+  // re-checked and the row inserted while holding the inventory lock, which every writer
+  // that claims nights takes (src/lib/inventory-lock.ts). The re-check reads sibling
+  // bookings directly, because a competing booking's derived blocks are written after it.
+  let booking;
+  try {
+    booking = await withInventoryLock([Number(propertyId)], async (tx) => {
+      await assertInventoryScopeAvailable({
+        propertyId: Number(propertyId),
+        start: checkInDate,
+        end: checkOutDate,
+        db: tx,
+      });
+      return tx.booking.create({
+        data: {
+          propertyId: Number(propertyId),
+          guestName,
+          guestEmail,
+          guestPhone: guestPhoneE164,
+          checkIn:   checkInDate,
+          checkOut:  checkOutDate,
+          guests:    guestCount,
+          totalPrice: computedTotal,
+          nightlyTotal: serverNightlyTotal,
+          extraGuestFee: extraGuestFee > 0 ? extraGuestFee : null,
+          stripeFee:  stripeFee > 0 ? stripeFee : null,
+          discountCode: discountCode || null,
+          discountAmount: discountAmount > 0 ? discountAmount : null,
+          paymentMethod: paymentMethod || null,
+          stripePaymentIntentId,
+          status:    isStripeConfirmed ? "confirmed" : "pending",
+          notes:     notes || null,
+        },
+        include: { property: true },
+      });
+    });
+  } catch (err) {
+    if (err instanceof AvailabilityConflictError) {
+      // Lost the race for these nights after the card was verified.
+      return unavailableResponse(err);
+    }
+    throw err;
+  }
 
   // Increment discount code usage
   if (discountCode) {
