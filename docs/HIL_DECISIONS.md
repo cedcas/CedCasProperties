@@ -608,7 +608,7 @@ None
 ## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
 
 Date: 2026-10-01
-Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). Production verification is recorded separately in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md) and [HIL Commits.md](HIL%20Commits.md). The price, notification, eligibility and paid-card rules below are **interim defaults the Owner has not yet approved as policy**.
+Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). **Live on production since 2026-10-02** (merge `6aa5729`, deployment success, signed-out smoke checks passed; no logged-in amendment has been run on production). The price, notification, eligibility and paid-card rules below are **interim defaults the Owner has not yet approved as policy**.
 Area: Website
 
 ### Decision
