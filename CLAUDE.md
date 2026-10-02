@@ -233,7 +233,7 @@ not to create a division of labor.
    `hil-stay-match.php`, `hil-seo`'s packaged builds in `content/seo/runs/`). **Never
    edits WordPress core.** Note HIL's blog runs the custom `haveninlipa-blog` theme (source outside this repo, see
    `docs/HIL Blog Technical Specification.md` → Theme), not a third-party parent/child theme —
-   don't import theme-layer conventions from other projects. Footer credit brand standard: DEC-023.
+   don't import theme-layer conventions from other projects. Footer credit brand standard: DEC-025.
 3. **Vercel / Application Engineer** — the Next.js app: booking flow, admin panel,
    Prisma/MySQL, Vercel deploys, CI (`.github/workflows/`). Owns the Hard Constraints
    implicit in `docs/HIL_DECISIONS.md` (DEC-001 through DEC-017).

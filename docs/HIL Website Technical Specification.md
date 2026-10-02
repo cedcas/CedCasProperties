@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit) and the inventory lock; branch `feat/admin-booking-amend`, **not merged, not deployed** — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -531,7 +531,7 @@ src/
   components/
     layout/
       Navbar.tsx                      # Nav with working anchor links from any page
-      Footer.tsx                      # Async server component; "Plan Your Trip" column fetches latest 5 posts from WP REST API — see HIL Blog Technical Specification. Bottom legal row (14px): copyright + "Powered by NetCoreSolutions.com" credit link (DEC-023) on the left, Privacy/Terms on the right
+      Footer.tsx                      # Async server component; "Plan Your Trip" column fetches latest 5 posts from WP REST API — see HIL Blog Technical Specification. Bottom legal row (14px): copyright + "Powered by NetCoreSolutions.com" credit link (DEC-025) on the left, Privacy/Terms on the right
     sections/
       Hero.tsx
       Properties.tsx                  # Property listing cards with pagination
@@ -960,7 +960,7 @@ Other mitigations: `InventoryGroup.isActive` defaults to **`false`**, and blocks
 
 ## Booking Amendments (Guest & Stay Edit)
 
-*Added 2026-10-01 — branch `feat/admin-booking-amend`, **not merged, not deployed**. [DEC-024](HIL_DECISIONS.md).*
+*Added 2026-10-01 — PR #43. Owner acceptance-tested on `dev.haveninlipa.com` (dev build `9eb9f76`) before release. [DEC-024](HIL_DECISIONS.md).*
 
 Staff can change a booking's **guest name, email, phone, guest count, property, check-in and check-out** from `/admin/bookings/[id]`. Before this, those fields had no editor and corrections needed a temporary DEC-012 route (see the 2026-09-17 entry in [HIL_COMPLETION_LOG.md](HIL_COMPLETION_LOG.md)).
 
@@ -987,7 +987,7 @@ Staff can change a booking's **guest name, email, phone, guest count, property, 
 | Past | contact details only |
 | Cancelled | nothing — an amendment never reactivates a booking |
 
-These rules are the implemented default, **not yet confirmed by the Owner** (see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md)).
+These rules were approved by the Owner as first-release policy on 2026-10-02 ([DEC-024](HIL_DECISIONS.md)).
 
 Other validation: the `changes` object is allowlisted to the seven fields and anything else (e.g. `totalPrice`, `status`) is **rejected with 400**, not ignored; dates must be strict `YYYY-MM-DD` real calendar dates; guests must be a whole number within the target listing's `maxGuests`; a move requires an active target listing; phone goes through `normalizePhone`.
 
@@ -1025,7 +1025,7 @@ After the commit, `checkBookingProjection` reads the blocks back. The response i
 
 ### Price — preserved, never recalculated
 
-No financial field is written. The review shows a **reference** quote from `computeBookingQuote` (DEC-020) for comparison only. Nothing is charged or refunded, Stripe evidence is not touched, and no `AdditionalCharge` is created (its creation route emails the guest). Re-pricing is rejected (`pricing` other than `"preserve"` → 400) until the Owner decides the policy. **Consequence:** after a date change, `nightlyTotal` no longer equals nights × rate, so any per-night figure derived from it (e.g. the confirmation email's "N nights × ₱…" row) is an average.
+No financial field is written. The review shows a **reference** quote from `computeBookingQuote` (DEC-020) for comparison only. Nothing is charged or refunded, Stripe evidence is not touched, and no `AdditionalCharge` is created (its creation route emails the guest). Re-pricing is rejected (`pricing` other than `"preserve"` → 400): the Owner's first-release policy is to preserve the agreed price and defer re-pricing and financial recording ([DEC-024](HIL_DECISIONS.md)). **Consequence:** after a date change, `nightlyTotal` no longer equals nights × rate, so any per-night figure derived from it (e.g. the confirmation email's "N nights × ₱…" row) is an average.
 
 ### Scheduled messages
 
@@ -1055,7 +1055,8 @@ The `AdminLog` row (`module: "bookings"`, `target: booking-{id}`, action prefix 
 
 - **Unit, in CI (`npm test`, three timezones):** rules, allowlist, DST/Manila boundaries, exclusion logic, message planning, route authorization (mocked), and the rendered Edit → Review → Save flow in jsdom.
 - **Database-backed, local only (`npm run test:db`):** real Prisma, row locks and transactions against a disposable local MySQL/MariaDB — concurrency races (with an unlocked control that double-books), rollback and retry, same-group / cross-group / ungrouped moves, echo re-propagation, iCal feeds, permissions on real rows, the amendment-versus-reminder race in each order, protected reactivation, and the paid-but-unavailable card path (Stripe mocked). [vitest.db.config.ts](../vitest.db.config.ts) refuses any non-loopback host, because Prisma otherwise falls back to `.env`, which points at production.
-- **Not covered:** a real browser (keyboard, focus, mobile layout), and a real channel's import of the changed feed.
+- **Owner acceptance (2026-10-01):** passed in a browser on `dev.haveninlipa.com` against the dev database.
+- **Not covered by any automated test:** a real channel's import of the changed feed; the locking code under real production load.
 
 ---
 
@@ -1593,7 +1594,7 @@ The `haven-pulse` keyframes in [globals.css](../src/app/globals.css) animate `tr
 - Property card "View Details" links carry `aria-label={`View details for ${property.name}`}` so screen readers can distinguish otherwise-identical links.
 - Heading hierarchy on the homepage: `h1` (Hero) → `h2` (each top-level section) → `h3` (sub-sections and footer columns). **Do not introduce `h4`** without an intervening `h3` in the same section.
 - Footer body text uses `text-white/70` and secondary text `text-white/55` on `bg-[#1c1c1c]` to meet WCAG AA contrast; hover state is `text-white/85`.
-- **Footer credit (DEC-023, copied from the live tribemedspa.com footer):**
+- **Footer credit (DEC-025, copied from the live tribemedspa.com footer):**
   - The bottom legal row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55`. At ≤768px it stacks and centres (`max-[769px]:flex-col max-[769px]:text-center`).
   - Left block: copyright, `<br />`, then `<a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` (`NETCORE_CREDIT_URL`). The whole phrase is the link, with no target/rel. It inherits white/55 and is `no-underline`; on hover/focus-visible it becomes `text-white/85` plus underline.
   - Privacy/Terms sit on the right at the same 14px.

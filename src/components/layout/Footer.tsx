@@ -10,7 +10,7 @@ type WpPost = {
 
 type BlogLink = { label: string; href: string };
 
-/** Footer credit required on every Cedric site (DEC-023; reference: live tribemedspa.com footer). */
+/** Footer credit required on every Cedric site (DEC-025; reference: live tribemedspa.com footer). */
 export const NETCORE_CREDIT_URL = "https://netcoresolutions.com";
 
 const STATIC_BLOG_LINKS: BlogLink[] = [
@@ -177,7 +177,7 @@ export default async function Footer() {
         </div>
 
         {/* Legal row: mirrors the live tribemedspa.com footer (.tms-footer__legal / .tms-footer__credit),
-            DEC-023. Copyright + credit on the left, legal links on the right; 14px in HIL's muted
+            DEC-025. Copyright + credit on the left, legal links on the right; 14px in HIL's muted
             white/55; whole "Powered by NetCoreSolutions.com" is the link, no underline until
             hover/focus; stacks and centers at <=768px. */}
         <div className="py-5 flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[769px]:flex-col max-[769px]:text-center">

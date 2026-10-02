@@ -577,9 +577,80 @@ None
 
 ---
 
-## DEC-023 — Footer credit brand standard: Powered by NetCoreSolutions.com, no GeneratePress branding
+## DEC-023 — Blog front-end loading: one image lazy-loader (EWWW), Font Awesome off the critical path via a small plugin, theme untouched
+
+Date: 2026-09-30
+Status: Active — Owner-configured and uploaded 2026-09-30, **live** on `blog.haveninlipa.com` (blog post PageSpeed mobile 65 → 89)
+Area: Blog | SEO
+
+### Decision
+- **One image lazy-loader:** **EWWW Image Optimizer** is the blog's only image lazy-loader. LiteSpeed "Lazy Load Images" is **OFF**. The post hero image is excluded from EWWW lazy load by class `size-haveninlipa-featured`.
+- **CSS:** LiteSpeed **CSS Minify + CSS Combine ON**. "Load CSS Asynchronously" and UCSS stay **OFF**, because they can break layout and depend on QUIC.cloud.
+- **Font Awesome:** the theme's full Font Awesome CSS is kept off the render-blocking path by the repo-owned **HIL Performance** plugin (`content/seo/runs/093026/hil-performance/`). It drops the theme's `<link>` at print time and loads the same file through a non-blocking loader. The theme's code is not modified.
+
+### Reason
+- **Single lazy-loader:** with two lazy-loaders active, excluding the LCP hero in one just handed it to the other. The placeholder stayed, and the score didn't move.
+- **CSS Combine:** it cut four render-blocking first-party stylesheet requests to one.
+- **Font Awesome:** it was the largest render-blocking request, about 1 s on slow 4G, for about 14 icons. Under CSS Combine it gets folded into the bundle unless its tag is removed outright.
+- **Plugin rather than theme edit:** the theme source isn't in this repo. A plugin is versioned here, independently reversible (deactivate), and survives theme updates.
+
+### Implications
+- Any new above-the-fold image pattern needs its class added to EWWW's lazy-load exclusions, not LiteSpeed's.
+- If the theme renames the `font-awesome` handle, the plugin silently does nothing. Re-check this after theme updates; the combined-CSS filename-hash test is in the Blog spec.
+- Don't re-enable LiteSpeed lazy load, and don't add a `<noscript>` stylesheet fallback; LiteSpeed combines those.
+- Further gains would need theme changes: trim the 8 Google Font styles, self-host fonts, or subset Font Awesome. That would be a separate, planned change.
+
+### Supersedes
+None
+
+---
+
+## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
+
+Date: 2026-10-01
+Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). **Live on production since 2026-10-02** (merge `6aa5729`, deployment success, signed-out smoke checks passed; no logged-in amendment has been run on production). **The Owner approved the first-release policies on 2026-10-02** (section below); the released code already matched them, so approval changed no behaviour.
+Area: Website
+
+### Decision
+- **Inventory lock.** Any write that claims nights — a new booking (`POST /api/bookings`) or an amendment — first takes `SELECT … FOR UPDATE` on the `Property` rows of the listing and all members of its inventory group (`src/lib/inventory-lock.ts`), then re-checks availability and writes inside that transaction. The check reads sibling bookings directly, not only their derived blocks.
+- **Amendments are atomic.** The booking update, its sibling-block reconciliation, the unsent scheduled messages and the audit entry commit or roll back together. Only the booking and its own derived blocks are excluded from the availability check.
+- **Price is preserved.** An amendment writes no financial field, makes no charge or refund, and creates no `AdditionalCharge`. A reference quote is shown for comparison only.
+- **Eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
+
+### Approved first-release policies (Owner, 2026-10-02)
+1. **Price:** the agreed price is preserved. Re-pricing and any recording of extra amounts or refunds are deferred — not built, not scheduled.
+2. **Notification:** an amendment does not notify the guest automatically.
+3. **Overdue reminders:** a reminder whose send time an amendment moves into the past is held, not sent. "Held" means the row is marked `skipped` with a reason and listed at review; staff send it by hand from the thread if still needed. It is not queued for later release.
+4. **Eligibility:** as in the Decision above (upcoming / in progress / past / cancelled).
+5. **Card charged but booking not saved:** handled manually. The guest gets the notice with the payment reference and the admin gets one alert. No automatic refund and no promised deadline.
+
+**One known exception to policy 3.** A reminder the sending worker has already claimed when the amendment commits cannot be held. If its amended time is already due, it is sent. The amendment reports it as "being sent right now". Tracked as a follow-up in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
+
+### Reason
+- **Lock:** booking creation was check-then-insert with no lock. Two requests could both pass the check, and a transaction alone does not prevent that. A database test without the lock double-books every time.
+- **Row locks rather than `GET_LOCK`:** row locks release on commit, rollback or connection loss. A named lock would stay held on a pooled connection.
+- **One transaction for amendments:** the existing reconciler is safe on failure because it over-blocks. An amendment also *releases* nights, and a suppressed channel event must resume blocking them. Doing that after the commit would leave a window where it had not happened yet.
+- **Preserve price:** the two 2026-09-17 precedents differ (#130 kept its paid total; #136 was increased after a separately collected payment), and no policy has been approved. Keeping the stored figures is the only option that cannot misstate what was paid.
+
+### Implications
+- New code that inserts or moves a booking must go through `withInventoryLock`. Work inside it must be database-only, because a deadlock retry can run it more than once.
+- Deadlocks (InnoDB 1213) between the lock and a post-commit derived-block insert are expected and retried (`src/lib/db-retry.ts`): deadlocks only, 3 attempts, database-only work. Do not remove the retry or widen it to other errors. Verified against the production engine, MariaDB 11.8.9 / InnoDB.
+- A card booking that loses the race after payment now gets a 409 with its payment reference, an `AdminLog` entry and one admin alert email (`src/lib/paid-unavailable.ts`), instead of a double booking.
+- After a date change the stored `nightlyTotal` no longer equals nights × rate.
+- Moving a cancelled booking back to pending/confirmed (`PUT /api/admin/bookings/[id]`) takes the same lock and check; it is refused with 409 if the dates are gone. Other status transitions are unchanged.
+- A reminder is too late to stop once the sending worker has claimed it and re-read the booking. Amendments report such a reminder as in flight; they do not promise it was stopped.
+- Scheduled-message delivery is now at-most-once: an interrupted send is marked `failed`, not re-sent.
+- A card payment whose booking could not be saved is handled by hand (policy 5). Refund timing and the 6% card fee are settled case by case; the site only records it and alerts the admin.
+
+### Supersedes
+None
+
+---
+
+## DEC-025 — Footer credit brand standard: Powered by NetCoreSolutions.com, no GeneratePress branding
 
 Date: 2026-09-29
+Renumbered: was DEC-023 on `dev` until 2026-10-02. It clashed with the blog-loading decision already recorded as DEC-023 on `main`, so this one — not yet released to `main` — took the next free number. Commit `18bcdc4` and PR #37 still say DEC-023 in their titles.
 Status: Active. Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged. Blog: change prepared for WP admin, not applied.
 Area: Website | Blog | Brand
 
@@ -614,65 +685,6 @@ A consistent, low-key attribution across every property the Owner runs, without 
   - The live `footer.php` has drifted from the Dropbox source, so apply via Theme File Editor rather than reinstalling the old source.
 - **GeneratePress:** as of 2026-09-29 there is no GeneratePress branding in the repo. The only old mention was a `CLAUDE.md` note, now reworded; the remaining mentions are these decision records and a test that asserts its absence. There is none on the live blog either, and `/wp-content/themes/generatepress/` returns 404. Structural references (e.g. a `Template: generatepress` child theme, class names) would be acceptable on other sites, but HIL has none. Re-check whenever a theme changes.
 - A new site, or a footer rewrite, must keep this credit. Do not make it more prominent (no logo, no larger type, no accent colour at rest) without an Owner decision.
-
-## DEC-023 — Blog front-end loading: one image lazy-loader (EWWW), Font Awesome off the critical path via a small plugin, theme untouched
-
-Date: 2026-09-30
-Status: Active — Owner-configured and uploaded 2026-09-30, **live** on `blog.haveninlipa.com` (blog post PageSpeed mobile 65 → 89)
-Area: Blog | SEO
-
-### Decision
-- **One image lazy-loader:** **EWWW Image Optimizer** is the blog's only image lazy-loader. LiteSpeed "Lazy Load Images" is **OFF**. The post hero image is excluded from EWWW lazy load by class `size-haveninlipa-featured`.
-- **CSS:** LiteSpeed **CSS Minify + CSS Combine ON**. "Load CSS Asynchronously" and UCSS stay **OFF**, because they can break layout and depend on QUIC.cloud.
-- **Font Awesome:** the theme's full Font Awesome CSS is kept off the render-blocking path by the repo-owned **HIL Performance** plugin (`content/seo/runs/093026/hil-performance/`). It drops the theme's `<link>` at print time and loads the same file through a non-blocking loader. The theme's code is not modified.
-
-### Reason
-- **Single lazy-loader:** with two lazy-loaders active, excluding the LCP hero in one just handed it to the other. The placeholder stayed, and the score didn't move.
-- **CSS Combine:** it cut four render-blocking first-party stylesheet requests to one.
-- **Font Awesome:** it was the largest render-blocking request, about 1 s on slow 4G, for about 14 icons. Under CSS Combine it gets folded into the bundle unless its tag is removed outright.
-- **Plugin rather than theme edit:** the theme source isn't in this repo. A plugin is versioned here, independently reversible (deactivate), and survives theme updates.
-
-### Implications
-- Any new above-the-fold image pattern needs its class added to EWWW's lazy-load exclusions, not LiteSpeed's.
-- If the theme renames the `font-awesome` handle, the plugin silently does nothing. Re-check this after theme updates; the combined-CSS filename-hash test is in the Blog spec.
-- Don't re-enable LiteSpeed lazy load, and don't add a `<noscript>` stylesheet fallback; LiteSpeed combines those.
-- Further gains would need theme changes: trim the 8 Google Font styles, self-host fonts, or subset Font Awesome. That would be a separate, planned change.
-
-### Supersedes
-None
-
----
-
-## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
-
-Date: 2026-10-01
-Status: Proposed — implemented on branch `feat/admin-booking-amend`, **not merged, not deployed**. The pricing and eligibility parts are interim defaults awaiting the Owner.
-Area: Website
-
-### Decision
-- **Inventory lock.** Any write that claims nights — a new booking (`POST /api/bookings`) or an amendment — first takes `SELECT … FOR UPDATE` on the `Property` rows of the listing and all members of its inventory group (`src/lib/inventory-lock.ts`), then re-checks availability and writes inside that transaction. The check reads sibling bookings directly, not only their derived blocks.
-- **Amendments are atomic.** The booking update, its sibling-block reconciliation, the unsent scheduled messages and the audit entry commit or roll back together. Only the booking and its own derived blocks are excluded from the availability check.
-- **Price is preserved.** An amendment writes no financial field, makes no charge or refund, and creates no `AdditionalCharge`. A reference quote is shown for comparison only.
-- **Interim eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
-
-### Reason
-- **Lock:** booking creation was check-then-insert with no lock. Two requests could both pass the check, and a transaction alone does not prevent that. A database test without the lock double-books every time.
-- **Row locks rather than `GET_LOCK`:** row locks release on commit, rollback or connection loss. A named lock would stay held on a pooled connection.
-- **One transaction for amendments:** the existing reconciler is safe on failure because it over-blocks. An amendment also *releases* nights, and a suppressed channel event must resume blocking them. Doing that after the commit would leave a window where it had not happened yet.
-- **Preserve price:** the two 2026-09-17 precedents differ (#130 kept its paid total; #136 was increased after a separately collected payment), and no policy has been approved. Keeping the stored figures is the only option that cannot misstate what was paid.
-
-### Implications
-- New code that inserts or moves a booking must go through `withInventoryLock`. Work inside it must be database-only, because a deadlock retry can run it more than once.
-- Deadlocks (InnoDB 1213) between the lock and a post-commit derived-block insert are expected and retried (`src/lib/db-retry.ts`): deadlocks only, 3 attempts, database-only work. Do not remove the retry or widen it to other errors. Verified against the production engine, MariaDB 11.8.9 / InnoDB.
-- A card booking that loses the race after payment now gets a 409 with its payment reference, an `AdminLog` entry and one admin alert email (`src/lib/paid-unavailable.ts`), instead of a double booking.
-- After a date change the stored `nightlyTotal` no longer equals nights × rate.
-- Moving a cancelled booking back to pending/confirmed (`PUT /api/admin/bookings/[id]`) takes the same lock and check; it is refused with 409 if the dates are gone. Other status transitions are unchanged.
-- A reminder is too late to stop once the sending worker has claimed it and re-read the booking. Amendments report such a reminder as in flight; they do not promise it was stopped.
-- Scheduled-message delivery is now at-most-once: an interrupted send is marked `failed`, not re-sent.
-- Not decided, and not automated: what happens to a card payment whose booking could not be saved (refund timing, the 6% card fee, guest wording). The site only records it and alerts the admin.
-
-### Supersedes
-None
 
 ---
 
