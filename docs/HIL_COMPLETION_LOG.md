@@ -27,7 +27,7 @@ Status: **Released via PR #43.** Two separate verifications, not to be confused:
 ### Gotchas worth remembering
 - **`dev.haveninlipa.com` serves the `dev` branch, not a feature branch's Preview.** The first "deployed" report pointed at the feature Preview URL; the Owner looked at the dev hostname and saw nothing. Getting a branch cut from `main` onto `dev` needed an integration branch (PR #45), because `dev` and `main` had diverged in docs.
 - Deadlocks between the lock and post-commit block inserts are normal and retried; only the database-backed suite caught them.
-- Shipped on interim defaults. Price, notification, eligibility and paid-card policies are **not** Owner-approved yet.
+- The first-release policies (keep agreed price, no automatic guest notification, hold reminders made overdue, the four eligibility phases, manual handling of a card charged without a booking) were **approved by the Owner on 2026-10-02**. The released code already matched them; see DEC-024, including the one in-flight reminder exception.
 
 ---
 
