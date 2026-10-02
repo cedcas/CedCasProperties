@@ -577,6 +577,34 @@ None
 
 ---
 
+## DEC-023 — Blog front-end loading: one image lazy-loader (EWWW), Font Awesome off the critical path via a small plugin, theme untouched
+
+Date: 2026-09-30
+Status: Active — Owner-configured and uploaded 2026-09-30, **live** on `blog.haveninlipa.com` (blog post PageSpeed mobile 65 → 89)
+Area: Blog | SEO
+
+### Decision
+- **One image lazy-loader:** **EWWW Image Optimizer** is the blog's only image lazy-loader. LiteSpeed "Lazy Load Images" is **OFF**. The post hero image is excluded from EWWW lazy load by class `size-haveninlipa-featured`.
+- **CSS:** LiteSpeed **CSS Minify + CSS Combine ON**. "Load CSS Asynchronously" and UCSS stay **OFF**, because they can break layout and depend on QUIC.cloud.
+- **Font Awesome:** the theme's full Font Awesome CSS is kept off the render-blocking path by the repo-owned **HIL Performance** plugin (`content/seo/runs/093026/hil-performance/`). It drops the theme's `<link>` at print time and loads the same file through a non-blocking loader. The theme's code is not modified.
+
+### Reason
+- **Single lazy-loader:** with two lazy-loaders active, excluding the LCP hero in one just handed it to the other. The placeholder stayed, and the score didn't move.
+- **CSS Combine:** it cut four render-blocking first-party stylesheet requests to one.
+- **Font Awesome:** it was the largest render-blocking request, about 1 s on slow 4G, for about 14 icons. Under CSS Combine it gets folded into the bundle unless its tag is removed outright.
+- **Plugin rather than theme edit:** the theme source isn't in this repo. A plugin is versioned here, independently reversible (deactivate), and survives theme updates.
+
+### Implications
+- Any new above-the-fold image pattern needs its class added to EWWW's lazy-load exclusions, not LiteSpeed's.
+- If the theme renames the `font-awesome` handle, the plugin silently does nothing. Re-check this after theme updates; the combined-CSS filename-hash test is in the Blog spec.
+- Don't re-enable LiteSpeed lazy load, and don't add a `<noscript>` stylesheet fallback; LiteSpeed combines those.
+- Further gains would need theme changes: trim the 8 Google Font styles, self-host fonts, or subset Font Awesome. That would be a separate, planned change.
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
@@ -620,6 +648,8 @@ is a summary only.
 | **SEO-DEC-028** | Decided 2026-09-19 (edits in one owner batch) | Blog claim-durability rules for posts 75/205/552: wrong or contradicted figures (400/500 Mbps vs the listings' 340, 1-hour/2-hour travel times, obsolete Mickey 5/9/13) removed or corrected; volatile hard-coded rates and fares made number-free; current capacities (Cozy 5, Spacious 9, Mickey 7/11/15), policy windows and the cost-per-head math retained; post 75 description rewritten; post 763 handled by checkpoint, not reopened. |
 | **SEO-DEC-029** | Active (2026-09-27, decided by Cedric; new — not part of the 2026-09-17 migration) | Publishing of Owner-approved batches: after Cedric approves each batch, new articles are scheduled as WordPress `future` posts at 08:00 `Asia/Manila` and verified via REST (publish date, category, SEO fields). Amends SEO-DEC-010 for approved batches only — anything not approved still defaults to draft. The SEO-DEC-006 content freeze still applies separately. |
 | **SEO-DEC-030** | Active (2026-09-27; task approved by Cedric; new — not part of the 2026-09-17 migration) | Venue/destination-intent queries (`wedding destination in lipa`, `wedding venue in lipa`, `intimate wedding venue lipa`) are targeted from `/weddings-accommodation` by answering the couple's real question — Lipa as a wedding destination, where the churches/venues are relative to the homes, and where the wedding party and guests stay — **never** by claiming to be a venue. Title/meta may use "wedding destination" and "venue(s)" only in a locational or negating sense ("near Lipa's churches and venues", "we're not the venue"); the page states plainly that HIL is not a venue; schema stays `FAQPage`-only (DEC-008, SEO-DEC-003 unchanged). Venue names and drive times come only from owner-verified data already in the repo. |
+| **SEO-DEC-031** | Active (2026-09-30, decided by Cedric) | Blog `<title>` keeps the " - Haven in Lipa Blog" suffix only when the full title fits in 60 characters; otherwise the suffix is dropped, including from `hil_seo_title` overrides. Implemented in `hil-seo` 1.1.6 (`hil_seo_fit_title()`, filterable via `hil_seo_title_max_length`), live 2026-09-30. Post titles still over 60 characters on their own are an editorial follow-up (shorter SEO title per post), not a plugin change. |
+| **SEO-DEC-032** | Active (2026-09-30, decided by Cedric) | The main site **keeps** "about one hour from Manila" (property descriptions, `src/lib/faqs.ts`, `/about`, chatbot, DiscoverLipa), although the blog removed numeric Manila travel times (SEO-DEC-023/028). This cross-site inconsistency is **accepted**: don't "fix" either side without a new Owner decision. |
 
 **Status of the underlying SEO workstream, as of the 2026-09-17 migration:** see
 `docs/HIL_SEO_SPECIFICATION.md` for the reconciled current state — several items above
