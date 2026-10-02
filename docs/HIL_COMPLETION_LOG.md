@@ -10,7 +10,7 @@ Area: Website
 
 Status: **Released via PR #43.** Two separate verifications, not to be confused:
 - **Owner acceptance testing — passed, 2026-10-01, on `dev.haveninlipa.com`** (dev build `9eb9f76`, Vercel Preview environment, dev database).
-- **Production** — deployment and smoke-check result for the merge commit is recorded in [HIL Commits.md](HIL%20Commits.md) and [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md). The Owner's acceptance test was not run on production.
+- **Production verification — deployment and smoke checks only.** merged as `6aa5729` on 2026-10-02 05:00 UTC; Production deployment `6801664704` for that SHA succeeded; signed-out read-only smoke checks passed (public pages 200, amend route 401 where it was 404, availability API and `.ics` feed normal, CI on `main` green). **Not exercised on production:** a logged-in amendment, a real booking, or the lock under concurrent load. The Owner's acceptance test was not repeated on production.
 
 ### Outcome
 - Staff with the `bookings` permission can amend guest name, email, phone, guest count, property and dates on `/admin/bookings/[id]` through Edit → Review → Save, with a mandatory reason and an Amendment History list. Replaces the temporary-route method used on 2026-09-17.
@@ -27,7 +27,7 @@ Status: **Released via PR #43.** Two separate verifications, not to be confused:
 ### Gotchas worth remembering
 - **`dev.haveninlipa.com` serves the `dev` branch, not a feature branch's Preview.** The first "deployed" report pointed at the feature Preview URL; the Owner looked at the dev hostname and saw nothing. Getting a branch cut from `main` onto `dev` needed an integration branch (PR #45), because `dev` and `main` had diverged in docs.
 - Deadlocks between the lock and post-commit block inserts are normal and retried; only the database-backed suite caught them.
-- Shipped on interim defaults. Price, notification, eligibility and paid-card policies are **not** Owner-approved yet.
+- The first-release policies (keep agreed price, no automatic guest notification, hold reminders made overdue, the four eligibility phases, manual handling of a card charged without a booking) were **approved by the Owner on 2026-10-02**. The released code already matched them; see DEC-024, including the one in-flight reminder exception.
 
 ---
 

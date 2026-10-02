@@ -608,14 +608,23 @@ None
 ## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
 
 Date: 2026-10-01
-Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). Production verification is recorded separately in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md) and [HIL Commits.md](HIL%20Commits.md). The price, notification, eligibility and paid-card rules below are **interim defaults the Owner has not yet approved as policy**.
+Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). **Live on production since 2026-10-02** (merge `6aa5729`, deployment success, signed-out smoke checks passed; no logged-in amendment has been run on production). **The Owner approved the first-release policies on 2026-10-02** (section below); the released code already matched them, so approval changed no behaviour.
 Area: Website
 
 ### Decision
 - **Inventory lock.** Any write that claims nights — a new booking (`POST /api/bookings`) or an amendment — first takes `SELECT … FOR UPDATE` on the `Property` rows of the listing and all members of its inventory group (`src/lib/inventory-lock.ts`), then re-checks availability and writes inside that transaction. The check reads sibling bookings directly, not only their derived blocks.
 - **Amendments are atomic.** The booking update, its sibling-block reconciliation, the unsent scheduled messages and the audit entry commit or roll back together. Only the booking and its own derived blocks are excluded from the availability check.
 - **Price is preserved.** An amendment writes no financial field, makes no charge or refund, and creates no `AdditionalCharge`. A reference quote is shown for comparison only.
-- **Interim eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
+- **Eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
+
+### Approved first-release policies (Owner, 2026-10-02)
+1. **Price:** the agreed price is preserved. Re-pricing and any recording of extra amounts or refunds are deferred — not built, not scheduled.
+2. **Notification:** an amendment does not notify the guest automatically.
+3. **Overdue reminders:** a reminder whose send time an amendment moves into the past is held, not sent. "Held" means the row is marked `skipped` with a reason and listed at review; staff send it by hand from the thread if still needed. It is not queued for later release.
+4. **Eligibility:** as in the Decision above (upcoming / in progress / past / cancelled).
+5. **Card charged but booking not saved:** handled manually. The guest gets the notice with the payment reference and the admin gets one alert. No automatic refund and no promised deadline.
+
+**One known exception to policy 3.** A reminder the sending worker has already claimed when the amendment commits cannot be held. If its amended time is already due, it is sent. The amendment reports it as "being sent right now". Tracked as a follow-up in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
 
 ### Reason
 - **Lock:** booking creation was check-then-insert with no lock. Two requests could both pass the check, and a transaction alone does not prevent that. A database test without the lock double-books every time.
@@ -631,7 +640,7 @@ Area: Website
 - Moving a cancelled booking back to pending/confirmed (`PUT /api/admin/bookings/[id]`) takes the same lock and check; it is refused with 409 if the dates are gone. Other status transitions are unchanged.
 - A reminder is too late to stop once the sending worker has claimed it and re-read the booking. Amendments report such a reminder as in flight; they do not promise it was stopped.
 - Scheduled-message delivery is now at-most-once: an interrupted send is marked `failed`, not re-sent.
-- Not decided, and not automated: what happens to a card payment whose booking could not be saved (refund timing, the 6% card fee, guest wording). The site only records it and alerts the admin.
+- A card payment whose booking could not be saved is handled by hand (policy 5). Refund timing and the 6% card fee are settled case by case; the site only records it and alerts the admin.
 
 ### Supersedes
 None
