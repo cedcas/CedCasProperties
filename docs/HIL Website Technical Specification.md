@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-09-29 (footer credit brand standard, DEC-023, copied from the live tribemedspa.com footer: 14px legal row with "Powered by NetCoreSolutions.com" linked under the copyright in `Footer.tsx`; PR #37 against `dev`, not merged). Earlier: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit) and the inventory lock; branch `feat/admin-booking-amend`, **not merged, not deployed** — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -126,6 +126,12 @@ The site is designed as a direct-booking alternative to Airbnb, with a savings c
 - **Property** — slug, name, description, type (2BR/3BR/Studio etc.), pricePerNight, location, bedrooms, bathrooms, maxGuests, images (JSON array), featuredImage, amenities (JSON array), propertyRules (house rules text), isFeatured, isActive, airbnbIcsUrl. **Extra-guest-fee fields (added 2026-06-14):** `includedGuests` (Int, default 1 — fee applies to guests beyond this) and `extraGuestFeePerNight` (Decimal 10,2, default 0 = **disabled**). Configured on the admin Rates page; see Dynamic Pricing System → Extra guest fee. **SEO fields (added 2026-05-08, all optional):** `seoTitle`, `seoDescription` (override page metadata), `tagline` (hero one-liner), `heroSummary` (above-the-fold paragraph), `bestForSegments` (JSON: audience-fit blocks with optional internal links), `amenityDetails` (JSON: grouped amenity tour), `neighborhoodPlaces` (JSON: places by drive-radius), `housePolicies` (JSON: check-in/out, max guests, smoking, parties, pets), `pricingNotes` (JSON: rate, weekly/monthly discount, payment methods, deposit, cancellation), `propertyFaqs` (JSON: per-property Q&A array used in FAQPage schema), `imageAlts` (JSON: descriptive alts parallel to `images`), `aggregateReviewCount`, `aggregateReviewRating` (used in VacationRental AggregateRating schema). Seed via `npm run seed:property-seo` ([prisma/seed-property-seo.ts](../prisma/seed-property-seo.ts)). **How these SEO fields are used is documented in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).**
 
 **`pricingNotes.paymentMethods` is admin-editable (added 2026-09-06).** Every other key inside this JSON blob is seed-only with no admin UI. `paymentMethods` is the one exception — [PropertyForm.tsx](../src/components/admin/PropertyForm.tsx) shows a "Payment Methods" field (edit mode only) seeded from the property's current value via `safeParsePricingNotes()`, with a "Use approved wording" shortcut button. `PUT /api/admin/properties/[id]` accepts an optional `paymentMethods` string and merges it into the existing `pricingNotes` JSON server-side via `mergePricingNotesPaymentMethods()` ([src/lib/pricing-notes.ts](../src/lib/pricing-notes.ts)) — the client never sends (and the route never accepts) a full `pricingNotes` object, so a stale or partial client payload can't clobber `rate`/`weeklyDiscount`/`monthlyDiscount`/`deposit`/`cancellation`. The field is omitted from the request entirely when left blank, so editing an unrelated property field never trips the server's non-empty validation on `paymentMethods`. This intentionally does **not** extend to any other `pricingNotes` key or to `bestForSegments`/`neighborhoodPlaces`/`propertyFaqs` — those remain seed-file-only (no admin path), per [DEC-015's](HIL_DECISIONS.md) narrow-field-plus-merge pattern.
+
+**`seoTitle` / `seoDescription` are admin-editable (added 2026-09-30, PR #38).**
+- [PropertyForm.tsx](../src/components/admin/PropertyForm.tsx) has a "Search Engine Listing" card (edit mode only) with a character counter: 60 for the title, excluding the auto-appended ` | Haven in Lipa`, and 155 for the description.
+- `PUT /api/admin/properties/[id]` normalizes both with `normalizeSeoField()` ([src/lib/seo-metadata.ts](../src/lib/seo-metadata.ts)): trim and collapse whitespace, blank → `null`, 300-character cap → 400.
+- The seeds still overwrite them, so mirror any admin edit into `prisma/property-content/*`.
+- Rendering rules live in the SEO spec → "Page titles and social metadata".
 - **Booking** — propertyId, guestName, guestEmail, guestPhone, checkIn, checkOut, guests, totalPrice, nightlyTotal, `extraGuestFee` (Decimal 10,2, nullable — added 2026-06-14), stripeFee, discountCode, discountAmount, status (pending/confirmed/cancelled), paymentMethod (gcash/bpi/stripe), stripePaymentIntentId, notes
 - **DiscountCode** — code (unique), type (fixed/percentage), value, isActive, usageCount, maxUses, `propertyIds` (added 2026-06-05; optional JSON int array — `null`/empty = applies to all properties, otherwise scopes the code to those Property ids)
 - **AdditionalCharge** *(added 2026-06-28)* — bookingId (FK, `onDelete: Cascade`), description, amount (Decimal 10,2), `token` (unique, opaque — drives the public `/pay/<token>` URL), status (pending/awaiting_verification/paid/cancelled), paymentMethod (gcash/bpi/stripe, set when guest pays), stripeFee (Decimal 10,2, card only), stripePaymentIntentId, notifiedAt, paidAt; indexed on `(bookingId)` and `(status)`. See Additional Charges (Pay-by-Link).
@@ -952,6 +958,107 @@ Other mitigations: `InventoryGroup.isActive` defaults to **`false`**, and blocks
 
 ---
 
+## Booking Amendments (Guest & Stay Edit)
+
+*Added 2026-10-01 — branch `feat/admin-booking-amend`, **not merged, not deployed**. [DEC-024](HIL_DECISIONS.md).*
+
+Staff can change a booking's **guest name, email, phone, guest count, property, check-in and check-out** from `/admin/bookings/[id]`. Before this, those fields had no editor and corrections needed a temporary DEC-012 route (see the 2026-09-17 entry in [HIL_COMPLETION_LOG.md](HIL_COMPLETION_LOG.md)).
+
+| Piece | Where |
+|---|---|
+| Service (validation, review, commit) | [src/lib/booking-amendment.ts](../src/lib/booking-amendment.ts) |
+| API | `POST` [/api/admin/bookings/[id]/amend](../src/app/api/admin/bookings/[id]/amend/route.ts) — `{action: "preview" \| "commit" \| "resync"}` |
+| UI | [GuestStayEditor.tsx](../src/components/admin/GuestStayEditor.tsx), mounted in the existing Guest and Stay cards |
+| Inventory lock | [src/lib/inventory-lock.ts](../src/lib/inventory-lock.ts), [src/lib/db-retry.ts](../src/lib/db-retry.ts) |
+| Permission check | [src/lib/admin-permissions.ts](../src/lib/admin-permissions.ts) |
+
+### Flow
+
+**Edit → Review → Save.** "Review changes" calls `preview`, which validates and returns before/after values, nights, the sibling listings that will be blocked or released, any conflicts, the price position and the scheduled-message plan. Nothing is written. "Save amendment" calls `commit` with a mandatory **reason** and the `expectedUpdatedAt` token from the review. The booking keeps its id, status, payment evidence and history.
+
+### Who can amend what
+
+`classifyStayPhase` uses the **Manila** calendar date (`todayInManila` in [dates.ts](../src/lib/dates.ts)) — not the server's UTC date, which is still "yesterday" until 08:00 in Lipa.
+
+| Phase | Editable |
+|---|---|
+| Upcoming (pending or confirmed) | everything; check-in cannot move into the past |
+| In progress (check-in ≤ today ≤ check-out) | contact, guests, check-out. Check-in and property are locked |
+| Past | contact details only |
+| Cancelled | nothing — an amendment never reactivates a booking |
+
+These rules are the implemented default, **not yet confirmed by the Owner** (see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md)).
+
+Other validation: the `changes` object is allowlisted to the seven fields and anything else (e.g. `totalPrice`, `status`) is **rejected with 400**, not ignored; dates must be strict `YYYY-MM-DD` real calendar dates; guests must be a whole number within the target listing's `maxGuests`; a move requires an active target listing; phone goes through `normalizePhone`.
+
+### Availability
+
+A check runs only when the property or dates change. It uses `getInventoryScopeConflicts` in [availability.ts](../src/lib/availability.ts) with `excludeBookingId`, which removes **only** this booking and the blocks derived from it. Another booking, a manual block or an imported channel event still conflicts — **including an imported event that overlaps the booking's own current nights**. The code cannot tell an echo from a real channel reservation, so it never assumes; resolve it on the channel first.
+
+`getInventoryScopeConflicts` also reads blocking bookings on active-group **siblings directly**, not only through their derived blocks. A booking's derived blocks are written after its row, so a check that relied on the projection alone would miss a sibling booking that has just committed.
+
+The external feed is refreshed with the same 2-minute pre-commit policy as a new booking, **before** the transaction opens (no network inside a lock). Failure policy is unchanged: last known-good events stay in force. If the feed's last status is a failure, the review shows a warning.
+
+### The inventory lock — why a transaction is not enough
+
+Check-then-insert is not atomic, and under InnoDB two transactions do not see each other's uncommitted rows, so a transaction alone lets both pass. `withInventoryLock` takes `SELECT … FOR UPDATE` on the `Property` rows of the whole inventory scope (the listing plus every member of its group) in id order, at `READ COMMITTED`. **Both `POST /api/bookings` and amendments take it.** The public route keeps its early `assertPropertyAvailable` (before the slow Stripe verification) and re-checks under the lock immediately before the insert.
+
+**Gotcha — deadlocks are expected.** A writer outside the lock that inserts a row with a foreign key to `Property` (a post-commit derived-block upsert) takes share locks in foreign-key order, which can cross the lock's id order. InnoDB aborts one side with error 1213. `retryOnDeadlock` ([db-retry.ts](../src/lib/db-retry.ts)) re-runs the transaction, and `reconcileBookingDerivedBlocks` retries itself when called outside a transaction. Found by the database-backed suite (about 1 run in 4 before the retry).
+
+The retry is deliberately narrow: **only** a deadlock (Prisma `P2034`, or `P2010` with `meta.code` 1213), **3 attempts in total**, jittered. A lock-wait timeout (1205), Prisma's transaction timeout (`P2028`) and connection errors are not retried. It wraps only database work — one transaction, or the upsert-based reconciler — never anything that emails, calls Stripe or fetches a feed.
+
+**Production database (checked read-only 2026-10-01).** Hostinger runs **MariaDB 11.8.9**; production and dev are separate schemas on the same server; all 23 tables are InnoDB. Server default isolation is already `READ-COMMITTED`, `innodb_deadlock_detect` is ON, `innodb_lock_wait_timeout` is 50 s, `lower_case_table_names` is 0 (so the raw `` `Property` `` / `` `Booking` `` names must keep their exact case), `max_user_connections` is 75. The local test database was MariaDB 12.3 — same engine family, same locking behaviour. A lock waiter is cut off by Prisma's 25 s transaction timeout long before the server's 50 s.
+
+**How this keeps the reconciler's guarantees.** The reconciler's contract is: write desired blocks before cancelling stale ones, be idempotent on the unique UID, soft-cancel only, and fail towards over-blocking. Nothing in `planDerivedBlocks` or `applyPlan` changed. Outside a transaction (booking creation, sync, group edits) it behaves exactly as before, plus a deadlock retry. Inside an amendment or reactivation transaction the same `applyPlan` runs in the same order on the transaction client, so the outcome is either the complete new projection or the untouched old one — strictly stronger than "over-block on partial failure", never weaker. The one new step is re-reconciling imported events on the nights a booking left, which is the existing uncover rule (DEC-003) applied to a move instead of a cancellation.
+
+**Card payments — paid but unavailable.** The card is charged in the browser before `POST /api/bookings` runs, so a paid request can still find the dates gone, at the first availability check or at the locked re-check. When the PaymentIntent really is a succeeded payment for that exact stay, [paid-unavailable.ts](../src/lib/paid-unavailable.ts) returns `409 {code: "paid_unavailable", paymentReference}` with a message telling the guest the payment went through, no booking was made, and not to pay again; writes one `AdminLog` row (`target: stripe-{intent id}`); and sends one alert email to `customerservice@haveninlipa.com` with the reference, amount, guest contact and stay. It is once per payment — a retried request gets the same answer and no second alert. **Nothing is refunded or re-charged automatically.** Before the lock, the second of two racing card bookings was saved as a double booking; before this module, a paid request refused at the first check left no record at all beyond the 10-minute checkout-abandonment alert.
+
+### Reactivating a cancelled booking
+
+`PUT /api/admin/bookings/[id]` is unchanged except for one transition: from a non-blocking status (cancelled) to a blocking one (pending/confirmed). That claims nights again, so it refreshes the feed, takes the inventory lock, runs `getInventoryScopeConflicts` (excluding itself), and writes the status and the sibling blocks in one transaction. A conflict returns 409 with the conflict list, the booking stays cancelled, no confirmation email is sent, and the refusal is logged. [BookingStatusSelect.tsx](../src/components/admin/BookingStatusSelect.tsx) shows the reason and snaps back to the saved status. Every other transition (pending → confirmed, anything → cancelled) keeps its previous behaviour and takes no lock.
+
+### Commit — one transaction
+
+Under the lock: lock the `Booking` row → reject if `updatedAt` ≠ `expectedUpdatedAt` (stale edit, 409) → re-validate → re-check availability → update the booking → reconcile its sibling blocks (same upsert-then-cancel order as elsewhere) → re-reconcile imported events on the nights the booking left (they may have been echo-suppressed, DEC-003) → reconcile unsent scheduled messages → write the `AdminLog` entry. All of it commits or rolls back together, so a rejected or failed amendment leaves the booking and every block untouched and there is no window in which new nights are claimed but not yet blocked on siblings.
+
+After the commit, `checkBookingProjection` reads the blocks back. The response is `applied` only if they match; otherwise `applied_propagation_incomplete`, and the UI offers **Retry propagation** (`resync`, idempotent).
+
+### Price — preserved, never recalculated
+
+No financial field is written. The review shows a **reference** quote from `computeBookingQuote` (DEC-020) for comparison only. Nothing is charged or refunded, Stripe evidence is not touched, and no `AdditionalCharge` is created (its creation route emails the guest). Re-pricing is rejected (`pricing` other than `"preserve"` → 400) until the Owner decides the policy. **Consequence:** after a date change, `nightlyTotal` no longer equals nights × rate, so any per-night figure derived from it (e.g. the confirmation email's "N nights × ₱…" row) is an average.
+
+### Scheduled messages
+
+`ScheduledMessage.sendAt` is precomputed, so `planScheduledMessageAmendment` ([scheduler.ts](../src/lib/scheduler.ts)) reconciles **pending** rows of a confirmed booking: stay-anchored rows are re-timed; templates that no longer apply to the listing are marked `skipped`; templates new to the listing get a row. Sent rows are never changed or re-sent, confirmation-anchored templates are never replayed, and a reminder whose amended time is already past is **held** (`skipped`, with a reason) rather than sent — the review lists these so staff can send by hand. The guest is not notified of an amendment.
+
+**Worker coordination — and its limit.** `flushDueScheduledMessages` now works in two steps per row. `claimScheduledMessage` flips `pending → sending` in one conditional UPDATE that only succeeds if the row still has the send time the worker read. `deliverClaimedScheduledMessage` then re-reads the booking and template **once** and skips the row (booking not confirmed, or template not for the booking's listing), hands it back with its corrected time (stay moved later), or sends it.
+
+| Amendment commits… | Result |
+|---|---|
+| before the worker's claim | Not sent. The claim fails; the row carries its new time or is withdrawn. If the amendment is still uncommitted, the claim waits on the row lock and then fails |
+| after the claim, before the re-read | Not sent early or to the wrong listing: handed back or skipped. The amendment itself could not change the row and reports it as "being sent right now". If the new time is already due, it **is** sent, with amended content |
+| after the re-read | **Sent.** Too late to stop. This window is one database read plus the mail hand-off. The body is rendered from a later read, so it may or may not show the amended details |
+
+So the point of no return for an amendment is the claim; the worker's single re-read is a best-effort second chance, not a guarantee. The claim also stops the hourly cron and an inline flush from double-sending. **Behaviour change:** delivery is now at-most-once. A `sending` row older than 15 minutes (a run that died mid-send) is marked `failed` for a human to check, not re-sent; previously such a row stayed `pending` and was sent again. A side effect of the hand-back rule: if a template's offset is edited to a later time after rows were created, a due row is re-timed rather than sent at its old time.
+
+### Messages, customers, iCal
+
+- Thread identity is `bookingId`, and the thread list and header read the booking live, so labels follow the amendment. `GuestMessage` rows store rendered text and are untouched. Templates render at send time, so later sends use the amended data.
+- A contact edit moves or merges no message history and does not call `promoteContactMessagesForEmail`. The Customers view groups by email/phone at request time, so the review warns when the new details already belong to another booking.
+- `booking-{id}@haveninlipa.com` and the derived-block UIDs depend only on ids, so they survive date and property changes. A moved booking leaves the old listing's feed and appears on the new one under the same UID. **Channels apply this on their next import, not instantly.**
+
+### Audit
+
+The `AdminLog` row (`module: "bookings"`, `target: booking-{id}`, action prefix `Amended booking`) is written inside the transaction and carries actor, reason, before/after snapshots, the reference quote and the propagation counts. The booking page lists these under **Amendment History**.
+
+### Tests
+
+- **Unit, in CI (`npm test`, three timezones):** rules, allowlist, DST/Manila boundaries, exclusion logic, message planning, route authorization (mocked), and the rendered Edit → Review → Save flow in jsdom.
+- **Database-backed, local only (`npm run test:db`):** real Prisma, row locks and transactions against a disposable local MySQL/MariaDB — concurrency races (with an unlocked control that double-books), rollback and retry, same-group / cross-group / ungrouped moves, echo re-propagation, iCal feeds, permissions on real rows, the amendment-versus-reminder race in each order, protected reactivation, and the paid-but-unavailable card path (Stripe mocked). [vitest.db.config.ts](../vitest.db.config.ts) refuses any non-loopback host, because Prisma otherwise falls back to `.env`, which points at production.
+- **Not covered:** a real browser (keyboard, focus, mobile layout), and a real channel's import of the changed feed.
+
+---
+
 ## Dynamic Pricing System
 
 The pricing engine (`src/lib/pricing.ts`) computes nightly rates with the following priority:
@@ -1178,6 +1285,8 @@ Replaces the launch tiers (1–10 ₱200 / 11–20 ₱400 / 21–30 ₱600 / 31+
 - `bookings` — view and manage booking statuses
 - `messages` — view and manage contact messages
 - `testimonials` — manage property testimonials
+
+**Enforcement gap (found 2026-10-01).** Only `POST /api/admin/bookings/[id]/amend` enforces a module permission server-side (`checkPermission("bookings")` in [admin-permissions.ts](../src/lib/admin-permissions.ts), which re-reads the user from the database on every call). Every other admin API route checks only that a session exists, so a manager can call any of them regardless of their `AdminPermission` row. The JWT carries the role as it was at sign-in, which is why the helper does not trust it.
 - `promoCodes` — create and manage discount codes
 - `logs` — view audit trail
 - `userManagement` — create and manage admin/manager accounts

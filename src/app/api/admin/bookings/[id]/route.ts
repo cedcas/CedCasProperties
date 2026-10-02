@@ -10,7 +10,22 @@ import {
   flushDueScheduledMessages,
   cancelScheduledMessagesForBooking,
 } from "@/lib/scheduler";
-import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
+import { reconcileBookingDerivedBlocks, reconcileSource } from "@/lib/inventory-groups";
+import { bookingBlocksAvailability } from "@/lib/booking-status";
+import {
+  formatConflictRange,
+  getInventoryScopeConflicts,
+  refreshExternalFeedForBooking,
+  type Conflict,
+} from "@/lib/availability";
+import { withInventoryLock } from "@/lib/inventory-lock";
+
+/** Thrown inside the reactivation transaction to roll it back and report why. */
+class ReactivationConflict extends Error {
+  constructor(readonly conflicts: Conflict[]) {
+    super("reactivation conflict");
+  }
+}
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -19,13 +34,91 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const { status } = await req.json();
 
-  const prev = await prisma.booking.findUnique({ where: { id: Number(id) }, select: { status: true } });
-
-  const booking = await prisma.booking.update({
+  const prev = await prisma.booking.findUnique({
     where: { id: Number(id) },
-    data: { status },
-    include: { property: true },
+    select: { status: true, propertyId: true },
   });
+
+  // A booking that is NOT holding its dates (cancelled) being moved back to a status that
+  // does (pending / confirmed) claims those nights again — exactly like a new booking. In
+  // the meantime they may have been sold, blocked or booked on a sibling listing, so this
+  // takes the same inventory lock and availability check as booking creation, and writes
+  // the sibling blocks in the same transaction. Every other transition is unchanged.
+  const reactivating =
+    !!prev &&
+    typeof status === "string" &&
+    !bookingBlocksAvailability(prev.status) &&
+    bookingBlocksAvailability(status);
+
+  let booking;
+  if (reactivating) {
+    await refreshExternalFeedForBooking(prev.propertyId);
+    try {
+      booking = await withInventoryLock([prev.propertyId], async (tx) => {
+        await tx.$queryRaw`SELECT id FROM \`Booking\` WHERE id = ${Number(id)} FOR UPDATE`;
+        const current = await tx.booking.findUniqueOrThrow({
+          where: { id: Number(id) },
+          select: { status: true, propertyId: true, checkIn: true, checkOut: true },
+        });
+        // Someone else reactivated it first — nothing left to claim.
+        if (!bookingBlocksAvailability(current.status)) {
+          const conflicts = await getInventoryScopeConflicts({
+            propertyId: current.propertyId,
+            start: current.checkIn,
+            end: current.checkOut,
+            excludeBookingId: Number(id),
+            db: tx,
+          });
+          if (conflicts.length > 0) throw new ReactivationConflict(conflicts);
+        }
+        const updated = await tx.booking.update({
+          where: { id: Number(id) },
+          data: { status },
+          include: { property: true },
+        });
+        await reconcileSource(
+          {
+            kind: "booking",
+            id: updated.id,
+            propertyId: updated.propertyId,
+            start: updated.checkIn,
+            end: updated.checkOut,
+            isActive: true,
+          },
+          { db: tx }
+        );
+        return updated;
+      });
+    } catch (err) {
+      if (err instanceof ReactivationConflict) {
+        await logAction({
+          actor: session.user.name ?? "Admin",
+          actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+          actorId: parseInt(session.user.id),
+          action: `Refused to change booking #${id} from "${prev.status}" to "${status}" — its dates are no longer available`,
+          module: "bookings",
+          target: `booking-${id}`,
+          ipAddress: getIpFromRequest(req),
+          metadata: { bookingId: id, conflicts: err.conflicts.map((c) => ({ label: c.label, range: formatConflictRange(c) })) },
+        });
+        return NextResponse.json(
+          {
+            error: `This booking's dates are no longer available, so it stays ${prev.status}.`,
+            code: "conflict",
+            conflicts: err.conflicts.map((c) => ({ label: c.label, range: formatConflictRange(c), kind: c.kind })),
+          },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
+  } else {
+    booking = await prisma.booking.update({
+      where: { id: Number(id) },
+      data: { status },
+      include: { property: true },
+    });
+  }
 
   const becameConfirmed = prev?.status !== "confirmed" && status === "confirmed";
   const leftConfirmed = prev?.status === "confirmed" && status !== "confirmed";

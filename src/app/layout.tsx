@@ -6,6 +6,7 @@ import ChatWidgetServer from "@/components/chat/ChatWidgetServer";
 import ChatWidgetGate from "@/components/chat/ChatWidgetGate";
 import AnalyticsClickTracker from "@/components/AnalyticsClickTracker";
 import Analytics from "@/components/Analytics";
+import { DEFAULT_OG_IMAGE } from "@/lib/seo-metadata";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -105,21 +106,16 @@ export const metadata: Metadata = {
     type: "website",
     url: "/",
     siteName: "Haven in Lipa",
-    images: [
-      {
-        url: "/brand-assets/Logo.png",
-        width: 1200,
-        height: 630,
-        alt: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
-      },
-    ],
+    // Fallback only — public pages set their own via socialMetadata(), since a
+    // page-level openGraph replaces this object rather than merging with it.
+    images: [DEFAULT_OG_IMAGE],
   },
   twitter: {
     card: "summary_large_image",
     title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
     description:
       "Stay in Style, Live in Comfort. Short-term rentals in Lipa, Batangas.",
-    images: ["/brand-assets/Logo.png"],
+    images: [DEFAULT_OG_IMAGE.url],
   },
 };
 

@@ -6,6 +6,7 @@ import ScrollReveal from "@/components/ui/ScrollReveal";
 import PropertyCard from "@/components/ui/PropertyCard";
 import { normalizePricingProse } from "@/lib/occupancy";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
+import { socialMetadata } from "@/lib/seo-metadata";
 import { buildShortNames, getPublicListingCount, getPublicListings, numberWord } from "@/lib/listings";
 
 // The inventory index. `/properties` was a 404 until now even though it looks
@@ -75,12 +76,7 @@ export async function generateMetadata(): Promise<Metadata> {
     // canonical — the App Router metadata gotcha that put two /book URLs in the
     // index as duplicate-canonical thin pages (36fa136).
     alternates: { canonical: "/properties" },
-    openGraph: {
-      title,
-      description,
-      type: "website",
-      url: "/properties",
-    },
+    ...socialMetadata({ title, description, path: "/properties" }),
   };
 }
 
