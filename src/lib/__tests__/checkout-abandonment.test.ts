@@ -27,11 +27,16 @@ vi.mock("@/lib/email", () => ({ createMailer: () => ({ sendMail }), FROM_ADDRESS
 vi.mock("@/lib/log", () => ({ logAction: vi.fn(), getIpFromRequest: () => "127.0.0.1" }));
 vi.mock("@/lib/availability", () => ({
   assertPropertyAvailable: vi.fn(),
+  assertInventoryScopeAvailable: vi.fn(),
   AvailabilityConflictError: class extends Error {
     status = 409;
   },
 }));
 vi.mock("@/lib/inventory-groups", () => ({ reconcileBookingDerivedBlocks: vi.fn() }));
+// The inventory lock is a real MySQL row lock; here it just runs the callback on the mock client.
+vi.mock("@/lib/inventory-lock", () => ({
+  withInventoryLock: (_ids: number[], fn: (tx: typeof db) => unknown) => fn(db),
+}));
 vi.mock("@/lib/emailReply", () => ({ promoteContactMessagesForEmail: vi.fn() }));
 vi.mock("@/lib/scheduler", () => ({
   materializeScheduledMessagesForBooking: vi.fn(),
