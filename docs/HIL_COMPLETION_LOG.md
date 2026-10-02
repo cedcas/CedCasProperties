@@ -4,27 +4,32 @@
 
 ---
 
-## 2026-09-29 — Footer credit brand standard (DEC-023): "Powered by NetCoreSolutions.com"
+## 2026-10-01 — Admin Guest & Stay Edit, inventory lock, protected reactivation
 
-Area: Website | Blog | Brand
+Area: Website
 
-Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
+Status: **Released via PR #43.** Two separate verifications, not to be confused:
+- **Owner acceptance testing — passed, 2026-10-01, on `dev.haveninlipa.com`** (dev build `9eb9f76`, Vercel Preview environment, dev database).
+- **Production verification — deployment and smoke checks only.** merged as `6aa5729` on 2026-10-02 05:00 UTC; Production deployment `6801664704` for that SHA succeeded; signed-out read-only smoke checks passed (public pages 200, amend route 401 where it was 404, availability API and `.ics` feed normal, CI on `main` green). **Not exercised on production:** a logged-in amendment, a real booking, or the lock under concurrent load. The Owner's acceptance test was not repeated on production.
 
-- **Reference:** the live tribemedspa.com footer, fetched 2026-09-29 (details in DEC-023):
-  - the whole phrase "Powered by NetCoreSolutions.com" is one plain link, on a second line under the copyright, on the left of the legal row;
-  - 14px, muted colour, no underline; underline plus a stronger colour on hover/focus-visible;
-  - the row stacks and centres at ≤768px.
-- **Main site:** `src/components/layout/Footer.tsx`, bottom row.
-  - The legal row is now 14px white/55 (was 12.5px): copyright, then the linked credit on the next line, with Privacy/Terms on the right.
-  - The link hovers/focuses to white/85 with an underline.
-  - On mobile it is stacked and centred (`max-[769px]:flex-col text-center`).
-  - It is on every page that renders `<Footer />`, and deliberately not on `/admin/*` or `/pay/[token]`.
-  - New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks link scope, href, no target/rel, placement, 14px/white-55, underline only on hover/focus, the mobile classes and that there is no GeneratePress.
-- **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), now reworded. Nothing in `content/seo`. None on the live blog (homepage, post, 404, `/wp-json`, theme `style.css`), and `/wp-content/themes/generatepress/` returns 404.
-- **Blog theme:** the source is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/`. Its `style.css` and `main.css` are byte-identical to live, but live `footer.php` has drifted (Quick Links, and legal links hardcoded to haveninlipa.com).
-  - Prepared change: `<br><a class="footer-credit" href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` in the `.footer-bottom` copyright `<p>`, plus 4 CSS rules after `.footer-bottom__links` in `main.css` (row 0.875rem; credit `rgba(255,255,255,.5)`, no underline; hover/focus accent plus underline), plus `Version: 1.0.1`.
-  - Primary route: Theme File Editor. Optional zip: `haveninlipa-blog-1.0.1.zip`, built from the source with the live footer edits folded in; use it only after comparing with live.
-  - Instructions are on the HIL PM box at `/workspace/hil-blog-theme/APPLY.md`, including the LiteSpeed purge, Hostinger CDN flush and a logged-out check.
+### Outcome
+- Staff with the `bookings` permission can amend guest name, email, phone, guest count, property and dates on `/admin/bookings/[id]` through Edit → Review → Save, with a mandatory reason and an Amendment History list. Replaces the temporary-route method used on 2026-09-17.
+- Every write that claims nights now takes an inventory lock: amendments, `POST /api/bookings`, and cancelled → pending/confirmed status changes.
+- A card payment whose booking cannot be saved is reported to the guest with its reference and alerted to the admin once. No automatic refund.
+- The reminder worker claims rows before sending; delivery is at-most-once.
+- No schema change. Full detail: [Website spec → Booking Amendments](HIL%20Website%20Technical%20Specification.md#booking-amendments-guest--stay-edit), [DEC-024](HIL_DECISIONS.md).
+
+### Evidence
+- CI: lint, typecheck, build, 1,416 unit tests (three timezones).
+- Local only, not in CI: 56 database-backed tests on a throwaway MariaDB (`npm run test:db`), including concurrency races.
+- Production engine checked read-only: MariaDB 11.8.9, InnoDB.
+
+### Gotchas worth remembering
+- **`dev.haveninlipa.com` serves the `dev` branch, not a feature branch's Preview.** The first "deployed" report pointed at the feature Preview URL; the Owner looked at the dev hostname and saw nothing. Getting a branch cut from `main` onto `dev` needed an integration branch (PR #45), because `dev` and `main` had diverged in docs.
+- Deadlocks between the lock and post-commit block inserts are normal and retried; only the database-backed suite caught them.
+- The first-release policies (keep agreed price, no automatic guest notification, hold reminders made overdue, the four eligibility phases, manual handling of a card charged without a booking) were **approved by the Owner on 2026-10-02**. The released code already matched them; see DEC-024, including the one in-flight reminder exception.
+
+---
 
 ## 2026-09-30 — Full SEO audit and HIGH/MEDIUM fixes (main site + blog)
 
@@ -63,6 +68,27 @@ Status: **Complete — live on both sites.** Main-site code: PR #38 (`3168324`),
 
 ---
 
+## 2026-09-29 — Footer credit brand standard (DEC-025): "Powered by NetCoreSolutions.com"
+
+Area: Website | Blog | Brand
+
+Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
+
+- **Reference:** the live tribemedspa.com footer, fetched 2026-09-29 (details in DEC-025):
+  - the whole phrase "Powered by NetCoreSolutions.com" is one plain link, on a second line under the copyright, on the left of the legal row;
+  - 14px, muted colour, no underline; underline plus a stronger colour on hover/focus-visible;
+  - the row stacks and centres at ≤768px.
+- **Main site:** `src/components/layout/Footer.tsx`, bottom row.
+  - The legal row is now 14px white/55 (was 12.5px): copyright, then the linked credit on the next line, with Privacy/Terms on the right.
+  - The link hovers/focuses to white/85 with an underline.
+  - On mobile it is stacked and centred (`max-[769px]:flex-col text-center`).
+  - It is on every page that renders `<Footer />`, and deliberately not on `/admin/*` or `/pay/[token]`.
+  - New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks link scope, href, no target/rel, placement, 14px/white-55, underline only on hover/focus, the mobile classes and that there is no GeneratePress.
+- **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), now reworded. Nothing in `content/seo`. None on the live blog (homepage, post, 404, `/wp-json`, theme `style.css`), and `/wp-content/themes/generatepress/` returns 404.
+- **Blog theme:** the source is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/`. Its `style.css` and `main.css` are byte-identical to live, but live `footer.php` has drifted (Quick Links, and legal links hardcoded to haveninlipa.com).
+  - Prepared change: `<br><a class="footer-credit" href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` in the `.footer-bottom` copyright `<p>`, plus 4 CSS rules after `.footer-bottom__links` in `main.css` (row 0.875rem; credit `rgba(255,255,255,.5)`, no underline; hover/focus accent plus underline), plus `Version: 1.0.1`.
+  - Primary route: Theme File Editor. Optional zip: `haveninlipa-blog-1.0.1.zip`, built from the source with the live footer edits folded in; use it only after comparing with live.
+  - Instructions are on the HIL PM box at `/workspace/hil-blog-theme/APPLY.md`, including the LiteSpeed purge, Hostinger CDN flush and a logged-out check.
 ## 2026-09-28 — Production drive-time correction run; temporary route removed
 
 Area: Website | Content

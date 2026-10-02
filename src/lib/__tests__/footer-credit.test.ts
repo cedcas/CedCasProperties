@@ -13,7 +13,7 @@ vi.mock("next/image", () => ({
 import Footer, { NETCORE_CREDIT_URL } from "@/components/layout/Footer";
 
 /**
- * DEC-023 brand standard, copied from the live tribemedspa.com footer (2026-09-29):
+ * DEC-025 brand standard, copied from the live tribemedspa.com footer (2026-09-29):
  * `© {year} … <br><a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>`
  * as the left block of the bottom legal row (legal links on the right), 14px in the footer's muted
  * gray (HIL: white/55), no underline until hover/focus-visible, row stacks + centers at <=768px.
@@ -32,7 +32,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Footer credit (DEC-023)", () => {
+describe("Footer credit (DEC-025)", () => {
   it("links the whole 'Powered by NetCoreSolutions.com' phrase, once, to netcoresolutions.com", async () => {
     const html = await renderFooter();
     const links = [...html.matchAll(CREDIT_A)];
