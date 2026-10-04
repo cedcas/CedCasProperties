@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-10-01 — Admin Guest & Stay Edit, inventory lock, protected reactivation
+
+Area: Website
+
+Status: **Released via PR #43.** Two separate verifications, not to be confused:
+- **Owner acceptance testing — passed, 2026-10-01, on `dev.haveninlipa.com`** (dev build `9eb9f76`, Vercel Preview environment, dev database).
+- **Production verification — deployment and smoke checks only.** merged as `6aa5729` on 2026-10-02 05:00 UTC; Production deployment `6801664704` for that SHA succeeded; signed-out read-only smoke checks passed (public pages 200, amend route 401 where it was 404, availability API and `.ics` feed normal, CI on `main` green). **Not exercised on production:** a logged-in amendment, a real booking, or the lock under concurrent load. The Owner's acceptance test was not repeated on production.
+
+### Outcome
+- Staff with the `bookings` permission can amend guest name, email, phone, guest count, property and dates on `/admin/bookings/[id]` through Edit → Review → Save, with a mandatory reason and an Amendment History list. Replaces the temporary-route method used on 2026-09-17.
+- Every write that claims nights now takes an inventory lock: amendments, `POST /api/bookings`, and cancelled → pending/confirmed status changes.
+- A card payment whose booking cannot be saved is reported to the guest with its reference and alerted to the admin once. No automatic refund.
+- The reminder worker claims rows before sending; delivery is at-most-once.
+- No schema change. Full detail: [Website spec → Booking Amendments](HIL%20Website%20Technical%20Specification.md#booking-amendments-guest--stay-edit), [DEC-024](HIL_DECISIONS.md).
+
+### Evidence
+- CI: lint, typecheck, build, 1,416 unit tests (three timezones).
+- Local only, not in CI: 56 database-backed tests on a throwaway MariaDB (`npm run test:db`), including concurrency races.
+- Production engine checked read-only: MariaDB 11.8.9, InnoDB.
+
+### Gotchas worth remembering
+- **`dev.haveninlipa.com` serves the `dev` branch, not a feature branch's Preview.** The first "deployed" report pointed at the feature Preview URL; the Owner looked at the dev hostname and saw nothing. Getting a branch cut from `main` onto `dev` needed an integration branch (PR #45), because `dev` and `main` had diverged in docs.
+- Deadlocks between the lock and post-commit block inserts are normal and retried; only the database-backed suite caught them.
+- The first-release policies (keep agreed price, no automatic guest notification, hold reminders made overdue, the four eligibility phases, manual handling of a card charged without a booking) were **approved by the Owner on 2026-10-02**. The released code already matched them; see DEC-024, including the one in-flight reminder exception.
+
+---
+
+## 2026-09-30 — Full SEO audit and HIGH/MEDIUM fixes (main site + blog)
+
+Area: SEO | Website | Blog
+
+Status: **Complete — live on both sites.** Main-site code: PR #38 (`3168324`), merged and confirmed live by the Owner. Blog: `hil-seo` 1.1.6 and HIL Performance 1.0.2 uploaded by the Owner; artifacts in PRs #38/#39/#40.
+
+- **Audit (read-only):**
+  - Crawled 14 main-site and 31 blog URLs, with an internal-link check on both sites.
+  - Validated the JSON-LD, ran local Lighthouse on main-site templates, and reviewed the code.
+  - Found 4 HIGH and 9 MEDIUM issues.
+  - **Corrections made during the work:**
+    - HIGH #4 (homepage LCP 5.4 s) was a cold-start outlier; re-runs gave 2.7–2.8 s.
+    - The review-markup finding was withdrawn: the reviews are real direct-booking guests.
+    - Only 3 property descriptions were over 160 characters, not 4.
+- **Main site (PR #38), verified on the preview and then on production:**
+  - Duplicated title brand fixed on all 5 listings: `stripBrandSuffix()`.
+  - Per-page Open Graph/Twitter tags on every public page, via `socialMetadata()` in `src/lib/seo-metadata.ts`. `/faq`, `/about`, `/privacy`, `/terms` and `/ambassadors` had been sharing as the homepage.
+  - Real 1200×630 `og-default.jpg`.
+  - `/faq` description cut from 210 to 152 characters.
+  - Gallery moved to `next/image`: listing page 21.3 MB → 622 KB, mobile LCP 5.7 s → 1.8 s, accessibility 87 → 92.
+  - New admin "Search Engine Listing" fields. The Owner used them to shorten the 3 Mickey descriptions (now 152–157 characters, live).
+- **Blog:**
+  - Article #6 (post 67) set to Private; its 301 still works, and no blog page links to it any more.
+  - Extra H1s removed on posts 77, 763 and 764.
+  - `hil-seo` 1.1.6 title-suffix rule (SEO-DEC-031).
+  - LiteSpeed/EWWW lazy-load and CSS configuration, plus the HIL Performance plugin (DEC-023).
+  - Blog post PageSpeed mobile went from 65 to **89**.
+  - The plugin needed three releases, recorded with their gotchas in the Blog spec: the dequeue ran too early, then LiteSpeed combined the `<noscript>` fallback.
+- **Owner decisions:** keep "one hour from Manila" on the main site (SEO-DEC-032); article #6 set to Private; blog title rule (SEO-DEC-031); admin fields rather than a production script for the descriptions.
+- **Follow-up:** GSC Request Indexing done for 10 URLs (5 listings, `/faq`, `/about`, posts 77/763/764).
+- **Open:**
+  - LOW findings, not started: sitemap `lastmod` is set to request time; `/ambassadors` is missing from the sitemap; brand identity is inconsistent between the two sites' structured data; seasonal blog posts are stale; blog homepage meta description is 32 characters.
+  - 26 blog titles still over 60 characters (editorial).
+  - Optional Google Fonts async ON/OFF comparison.
+
+---
+
 ## 2026-09-28 — Production drive-time correction run; temporary route removed
 
 Area: Website | Content

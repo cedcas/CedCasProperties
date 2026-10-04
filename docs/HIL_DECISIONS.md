@@ -577,6 +577,76 @@ None
 
 ---
 
+## DEC-023 — Blog front-end loading: one image lazy-loader (EWWW), Font Awesome off the critical path via a small plugin, theme untouched
+
+Date: 2026-09-30
+Status: Active — Owner-configured and uploaded 2026-09-30, **live** on `blog.haveninlipa.com` (blog post PageSpeed mobile 65 → 89)
+Area: Blog | SEO
+
+### Decision
+- **One image lazy-loader:** **EWWW Image Optimizer** is the blog's only image lazy-loader. LiteSpeed "Lazy Load Images" is **OFF**. The post hero image is excluded from EWWW lazy load by class `size-haveninlipa-featured`.
+- **CSS:** LiteSpeed **CSS Minify + CSS Combine ON**. "Load CSS Asynchronously" and UCSS stay **OFF**, because they can break layout and depend on QUIC.cloud.
+- **Font Awesome:** the theme's full Font Awesome CSS is kept off the render-blocking path by the repo-owned **HIL Performance** plugin (`content/seo/runs/093026/hil-performance/`). It drops the theme's `<link>` at print time and loads the same file through a non-blocking loader. The theme's code is not modified.
+
+### Reason
+- **Single lazy-loader:** with two lazy-loaders active, excluding the LCP hero in one just handed it to the other. The placeholder stayed, and the score didn't move.
+- **CSS Combine:** it cut four render-blocking first-party stylesheet requests to one.
+- **Font Awesome:** it was the largest render-blocking request, about 1 s on slow 4G, for about 14 icons. Under CSS Combine it gets folded into the bundle unless its tag is removed outright.
+- **Plugin rather than theme edit:** the theme source isn't in this repo. A plugin is versioned here, independently reversible (deactivate), and survives theme updates.
+
+### Implications
+- Any new above-the-fold image pattern needs its class added to EWWW's lazy-load exclusions, not LiteSpeed's.
+- If the theme renames the `font-awesome` handle, the plugin silently does nothing. Re-check this after theme updates; the combined-CSS filename-hash test is in the Blog spec.
+- Don't re-enable LiteSpeed lazy load, and don't add a `<noscript>` stylesheet fallback; LiteSpeed combines those.
+- Further gains would need theme changes: trim the 8 Google Font styles, self-host fonts, or subset Font Awesome. That would be a separate, planned change.
+
+### Supersedes
+None
+
+---
+
+## DEC-024 — Every write that claims nights takes the inventory lock; a booking amendment is one transaction and keeps the agreed price
+
+Date: 2026-10-01
+Status: Active — released via PR #43. **Owner acceptance testing passed on `dev.haveninlipa.com` on 2026-10-01** (dev build `9eb9f76`, Preview environment, dev database). **Live on production since 2026-10-02** (merge `6aa5729`, deployment success, signed-out smoke checks passed; no logged-in amendment has been run on production). **The Owner approved the first-release policies on 2026-10-02** (section below); the released code already matched them, so approval changed no behaviour.
+Area: Website
+
+### Decision
+- **Inventory lock.** Any write that claims nights — a new booking (`POST /api/bookings`) or an amendment — first takes `SELECT … FOR UPDATE` on the `Property` rows of the listing and all members of its inventory group (`src/lib/inventory-lock.ts`), then re-checks availability and writes inside that transaction. The check reads sibling bookings directly, not only their derived blocks.
+- **Amendments are atomic.** The booking update, its sibling-block reconciliation, the unsent scheduled messages and the audit entry commit or roll back together. Only the booking and its own derived blocks are excluded from the availability check.
+- **Price is preserved.** An amendment writes no financial field, makes no charge or refund, and creates no `AdditionalCharge`. A reference quote is shown for comparison only.
+- **Eligibility.** Upcoming: all fields. In progress: contact, guests, check-out. Past: contact only. Cancelled: none.
+
+### Approved first-release policies (Owner, 2026-10-02)
+1. **Price:** the agreed price is preserved. Re-pricing and any recording of extra amounts or refunds are deferred — not built, not scheduled.
+2. **Notification:** an amendment does not notify the guest automatically.
+3. **Overdue reminders:** a reminder whose send time an amendment moves into the past is held, not sent. "Held" means the row is marked `skipped` with a reason and listed at review; staff send it by hand from the thread if still needed. It is not queued for later release.
+4. **Eligibility:** as in the Decision above (upcoming / in progress / past / cancelled).
+5. **Card charged but booking not saved:** handled manually. The guest gets the notice with the payment reference and the admin gets one alert. No automatic refund and no promised deadline.
+
+**One known exception to policy 3.** A reminder the sending worker has already claimed when the amendment commits cannot be held. If its amended time is already due, it is sent. The amendment reports it as "being sent right now". Tracked as a follow-up in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
+
+### Reason
+- **Lock:** booking creation was check-then-insert with no lock. Two requests could both pass the check, and a transaction alone does not prevent that. A database test without the lock double-books every time.
+- **Row locks rather than `GET_LOCK`:** row locks release on commit, rollback or connection loss. A named lock would stay held on a pooled connection.
+- **One transaction for amendments:** the existing reconciler is safe on failure because it over-blocks. An amendment also *releases* nights, and a suppressed channel event must resume blocking them. Doing that after the commit would leave a window where it had not happened yet.
+- **Preserve price:** the two 2026-09-17 precedents differ (#130 kept its paid total; #136 was increased after a separately collected payment), and no policy has been approved. Keeping the stored figures is the only option that cannot misstate what was paid.
+
+### Implications
+- New code that inserts or moves a booking must go through `withInventoryLock`. Work inside it must be database-only, because a deadlock retry can run it more than once.
+- Deadlocks (InnoDB 1213) between the lock and a post-commit derived-block insert are expected and retried (`src/lib/db-retry.ts`): deadlocks only, 3 attempts, database-only work. Do not remove the retry or widen it to other errors. Verified against the production engine, MariaDB 11.8.9 / InnoDB.
+- A card booking that loses the race after payment now gets a 409 with its payment reference, an `AdminLog` entry and one admin alert email (`src/lib/paid-unavailable.ts`), instead of a double booking.
+- After a date change the stored `nightlyTotal` no longer equals nights × rate.
+- Moving a cancelled booking back to pending/confirmed (`PUT /api/admin/bookings/[id]`) takes the same lock and check; it is refused with 409 if the dates are gone. Other status transitions are unchanged.
+- A reminder is too late to stop once the sending worker has claimed it and re-read the booking. Amendments report such a reminder as in flight; they do not promise it was stopped.
+- Scheduled-message delivery is now at-most-once: an interrupted send is marked `failed`, not re-sent.
+- A card payment whose booking could not be saved is handled by hand (policy 5). Refund timing and the 6% card fee are settled case by case; the site only records it and alerts the admin.
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
@@ -620,6 +690,8 @@ is a summary only.
 | **SEO-DEC-028** | Decided 2026-09-19 (edits in one owner batch) | Blog claim-durability rules for posts 75/205/552: wrong or contradicted figures (400/500 Mbps vs the listings' 340, 1-hour/2-hour travel times, obsolete Mickey 5/9/13) removed or corrected; volatile hard-coded rates and fares made number-free; current capacities (Cozy 5, Spacious 9, Mickey 7/11/15), policy windows and the cost-per-head math retained; post 75 description rewritten; post 763 handled by checkpoint, not reopened. |
 | **SEO-DEC-029** | Active (2026-09-27, decided by Cedric; new — not part of the 2026-09-17 migration) | Publishing of Owner-approved batches: after Cedric approves each batch, new articles are scheduled as WordPress `future` posts at 08:00 `Asia/Manila` and verified via REST (publish date, category, SEO fields). Amends SEO-DEC-010 for approved batches only — anything not approved still defaults to draft. The SEO-DEC-006 content freeze still applies separately. |
 | **SEO-DEC-030** | Active (2026-09-27; task approved by Cedric; new — not part of the 2026-09-17 migration) | Venue/destination-intent queries (`wedding destination in lipa`, `wedding venue in lipa`, `intimate wedding venue lipa`) are targeted from `/weddings-accommodation` by answering the couple's real question — Lipa as a wedding destination, where the churches/venues are relative to the homes, and where the wedding party and guests stay — **never** by claiming to be a venue. Title/meta may use "wedding destination" and "venue(s)" only in a locational or negating sense ("near Lipa's churches and venues", "we're not the venue"); the page states plainly that HIL is not a venue; schema stays `FAQPage`-only (DEC-008, SEO-DEC-003 unchanged). Venue names and drive times come only from owner-verified data already in the repo. |
+| **SEO-DEC-031** | Active (2026-09-30, decided by Cedric) | Blog `<title>` keeps the " - Haven in Lipa Blog" suffix only when the full title fits in 60 characters; otherwise the suffix is dropped, including from `hil_seo_title` overrides. Implemented in `hil-seo` 1.1.6 (`hil_seo_fit_title()`, filterable via `hil_seo_title_max_length`), live 2026-09-30. Post titles still over 60 characters on their own are an editorial follow-up (shorter SEO title per post), not a plugin change. |
+| **SEO-DEC-032** | Active (2026-09-30, decided by Cedric) | The main site **keeps** "about one hour from Manila" (property descriptions, `src/lib/faqs.ts`, `/about`, chatbot, DiscoverLipa), although the blog removed numeric Manila travel times (SEO-DEC-023/028). This cross-site inconsistency is **accepted**: don't "fix" either side without a new Owner decision. |
 
 **Status of the underlying SEO workstream, as of the 2026-09-17 migration:** see
 `docs/HIL_SEO_SPECIFICATION.md` for the reconciled current state — several items above

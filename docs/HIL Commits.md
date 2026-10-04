@@ -11,6 +11,64 @@ Newest commits at the top. On every "We're done for today" session wrap-up, new 
 
 | Commit | Date | Type | Message |
 |---|---|---|---|
+| `6aa5729` | 2026-10-02 | HIL Website | **Merge pull request #43 — Admin Guest & Stay Edit, inventory lock, protected reactivation.** Merge commit, so `git revert -m 1 6aa5729` rolls it back (no schema change, so no database step). Merged 2026-10-02 05:00 UTC through branch protection with all four required checks green. **Production deployment `6801664704` for this exact SHA: success** (DEC-006). Production smoke checks passed, signed-out and read-only: public pages 200; `/api/admin/bookings/{id}/amend` 401 (404 before release); status route 401; availability API and `.ics` feed normal; CI on `main` green. **Not done on production:** a logged-in amendment, a real booking, or any locking under load — the Owner's acceptance test was on `dev.haveninlipa.com` only |
+| `c0b0573` | 2026-10-01 | HIL Website | docs: record Owner acceptance of Guest & Stay Edit on dev (DEC-024 active) *(acceptance passed on `dev.haveninlipa.com`, dev build `9eb9f76`; kept separate from production verification)* |
+| `06a9f3f` | 2026-10-01 | HIL Website | fix(admin): show why Guest & Stay editing is locked instead of hiding it *(a manager without the bookings permission, or a cancelled booking, got no Edit control and no explanation)* |
+| `fb082b2` | 2026-10-01 | HIL Website | feat(admin): Guest & Stay Edit, inventory lock, protected reactivation *(staff could not correct guest or stay details without a temporary route; booking creation was check-then-insert with no lock; a cancelled booking could be reactivated over taken dates; a card charged for unavailable dates left no record — DEC-024)* |
+| `b624452` | 2026-10-01 | HIL Website / HIL Blog / HIL SEO | **Merge pull request #41 — 2026-09-30 wrap-up docs.** Merge commit, so `git revert -m 1 b624452` rolls it back. Docs only |
+| `6c8b5f7` | 2026-09-30 | HIL Website / HIL Blog / HIL SEO | docs: 2026-09-30 wrap-up — SEO audit fixes, blog performance, DEC-023, SEO-DEC-031/032 |
+| `74f25ab` | 2026-09-30 | HIL Blog | **Merge pull request #40 — HIL Performance 1.0.1/1.0.2 artifact.** Merge commit, so `git revert -m 1 74f25ab` rolls it back. Artifact only; Owner uploaded 1.0.2 to WordPress 2026-09-30 and it is live (blog PageSpeed mobile 65 → 89) |
+| `9fa1433` | 2026-09-30 | HIL Blog | fix(blog): HIL Performance 1.0.2 — intercept the printed Font Awesome tag *(1.0.0/1.0.1 dequeued too early — the theme enqueues Font Awesome later — so LiteSpeed kept combining it; proof was the combined-CSS filename hash never changing. Now drops the tag via `style_loader_tag`)* |
+| `78119d7` | 2026-09-30 | HIL Blog | fix(blog): HIL Performance 1.0.1 — drop noscript fallback *(LiteSpeed CSS Combine treats `<noscript><link>` as combinable, so the fallback put Font Awesome back into the blocking bundle)* |
+| `722335c` | 2026-09-30 | HIL Blog | **Merge pull request #39 — HIL Performance v1.0.0 artifact.** Merge commit, so `git revert -m 1 722335c` rolls it back. Artifact only; superseded by 1.0.2 (#40) |
+| `78fbc99` | 2026-09-30 | HIL Blog | feat(blog): HIL Performance v1.0.0 artifact *(new WordPress plugin to load the theme's full Font Awesome CSS without blocking first paint — the largest render-blocking request on blog posts, ~1,050 ms)* |
+| `3168324` | 2026-09-30 | HIL Website + HIL SEO | **Merge pull request #38 — SEO audit fixes (titles, share tags, gallery images, admin SEO fields, hil-seo 1.1.6).** Merge commit, so `git revert -m 1 3168324` rolls it back. **Merged and confirmed live by the Owner 2026-09-30**; production re-check: single brand suffix, per-page `og:url`, `og-default.jpg` 200 |
+| `c437a95` | 2026-09-30 | HIL SEO + HIL Blog | feat(seo): hil-seo v1.1.6 artifact *(drops " - Haven in Lipa Blog" from post titles over 60 chars, overrides included — 2026-09-30 audit found titles up to 132 chars; Owner uploaded it 2026-09-30, live)* |
+| `9a1499b` | 2026-09-30 | HIL SEO | docs(seo): record audit fixes in the SEO Technical Specification |
+| `87dd43d` | 2026-09-30 | HIL Website | perf(listing): serve gallery photos through next/image *(listing pages were ~21 MB / LCP 5.7 s: raw `<img>` to 1–4.6 MB Blob originals, rendered twice incl. a CSS-hidden mobile copy; preview measured 622 KB / LCP 1.8 s. Also drops the hero's stale "2" property-count fallback)* |
+| `f8b464e` | 2026-09-30 | HIL Website + HIL SEO | fix(seo): single brand suffix, per-page social metadata, admin SEO fields *(property titles read "… \| Haven in Lipa \| Haven in Lipa"; /faq, /about, /privacy, /terms, /ambassadors shared as the homepage; new `src/lib/seo-metadata.ts`, 1200×630 default share image, shorter /faq description, Admin → Edit "Search Engine Listing" SEO title/description fields)* |
+| `5f6255f` | 2026-09-28 | HIL Website | **Merge pull request #35 — docs: checkout-abandonment record.** Merge commit, so `git revert -m 1 5f6255f` rolls it back. Docs only |
+| `a93e43c` | 2026-09-28 | HIL Website | docs: record checkout-abandonment alerts (DEC-022), Owner test, and #30/#34 live |
+| `dab3a0a` | 2026-09-28 | HIL Website | **Merge pull request #34 — remove temporary fix-drive-times route.** Merge commit, so `git revert -m 1 dab3a0a` rolls it back |
+| `521aa54` | 2026-09-28 | HIL Website | Merge origin/main into chore/remove-fix-drive-times-route *(branch sync)* |
+| `cbfd123` | 2026-09-28 | HIL Website | **Merge pull request #32 — checkout-abandonment alerts + GA4 `add_payment_info` (DEC-022).** Merge commit, so `git revert -m 1 cbfd123` rolls it back. Live and Owner-tested 2026-09-28 |
+| `d84689c` | 2026-09-28 | HIL Website | chore: remove temporary fix-drive-times admin route after the production run *(DEC-012/016 one-off route had served its purpose)* |
+| `0f2f889` | 2026-09-27 | HIL Website | chore(cron): trigger checkout-abandonment from Vercel Cron every 5 min |
+| `c4f13a4` | 2026-09-27 | HIL Website | feat(booking): alert the Owner when a checkout is left unfinished; GA4 `add_payment_info` *(prompted by booking #140 paid 53 min before "I Paid"; DEC-022)* |
+| `41d666a` | 2026-09-28 | HIL Website + HIL SEO | **Merge pull request #30 — release `dev` → `main` 2026-09-28** (PRs #24–#28). Merge commit, so `git revert -m 1 41d666a` rolls it back. Live on production 2026-09-28 |
+| `142121d` | 2026-09-27 | HIL Website | docs: record dev → main release and reconciliation of production fixes #19–#23 |
+| `75be614` | 2026-09-27 | HIL Website | Merge origin/main into release branch *(reconciles production-only fixes #19–#23 into `dev` history)* |
+| `6a6a1f6` | 2026-09-27 | HIL Website | **Merge pull request #28 — production drive-time correction tooling.** Merge commit, so `git revert -m 1 6a6a1f6` rolls it back |
+| `2a242e1` | 2026-09-27 | HIL Website | Merge origin/dev into fix/property-drive-times-db *(branch sync)* |
+| `d3cea57` | 2026-09-27 | HIL Website | docs: record drive-time correction tooling (DEC-016 extension) |
+| `b323ead` | 2026-09-27 | HIL Website | feat(maintenance): targeted SM Lipa / Casa Marikit drive-time pass *(fixes stored property text to the Owner-confirmed ~20 / ~30 min figures without overwriting admin edits)* |
+| `35d682f` | 2026-09-27 | HIL Website | **Merge pull request #27 — remove leftover manual-fix route from `dev`.** Merge commit, so `git revert -m 1 35d682f` rolls it back |
+| `412a842` | 2026-09-27 | HIL Website | Merge origin/dev into chore/remove-manual-fix-route *(branch sync)* |
+| `d236376` | 2026-09-27 | HIL SEO + HIL Website | **Merge pull request #26 — `/weddings-accommodation` SEO rework (SEO-DEC-030).** Merge commit, so `git revert -m 1 d236376` rolls it back |
+| `8a4afa5` | 2026-09-27 | HIL Website | docs: mark PR #25 analytics entry as merged into dev |
+| `4438a3d` | 2026-09-27 | HIL Website | docs: record Owner decline of `Booking.isTest` proposal (DEC-021) |
+| `9e7f16b` | 2026-09-27 | HIL Website | docs: record removal of leftover manual-fix route from dev |
+| `1ed162c` | 2026-09-27 | HIL Website | chore: remove leftover manual-fix admin route from dev |
+| `ae7a7b2` | 2026-09-27 | HIL SEO | Merge origin/dev into seo/weddings-accommodation-rework *(branch sync)* |
+| `ea8baf9` | 2026-09-27 | HIL SEO | docs: record SM Lipa / Casa Marikit drive-time fact-check resolution |
+| `db0cdbc` | 2026-09-27 | HIL Website + HIL SEO | fix(content): make SM Lipa and Casa Marikit drive times consistent *(Owner-confirmed ~7 km / ~20 min and ~10 km / ~30 min)* |
+| `a90c72b` | 2026-09-27 | HIL Website + HIL SEO | **Merge pull request #25 — analytics tracking fixes (DEC-021).** Merge commit, so `git revert -m 1 a90c72b` rolls it back |
+| `4f34150` | 2026-09-27 | HIL SEO | docs: record /weddings-accommodation SEO rework (SEO-DEC-030) |
+| `9c5a0c7` | 2026-09-27 | HIL SEO + HIL Website | feat(seo): rework /weddings-accommodation for Lipa wedding-destination intent *(title/meta, H1/H2, FAQ 7→9; never claims to be a venue)* |
+| `f1578ec` | 2026-09-27 | HIL SEO + HIL Blog | docs: record GA4 gating (DEC-021), stay_match_click finding and Stay Match v1.0.2 |
+| `0732962` | 2026-09-27 | HIL Blog | feat(seo): Stay Match plugin v1.0.2 artifact + deploy note *(not deployed — Owner upload)* |
+| `e600947` | 2026-09-27 | HIL Website | fix(analytics): gate GA4 to the production host, never load it on /admin *(DEC-021)* |
+| `88539d0` | 2026-09-27 | HIL Website + HIL SEO + HIL Blog | **Merge pull request #24 — move layered docs into git-tracked `docs/`.** Merge commit, so `git revert -m 1 88539d0` rolls it back |
+| `b9920cb` | 2026-09-27 | HIL Website + HIL SEO + HIL Blog | docs: move layered project docs into `docs/` *(so PRs update the docs alongside code)* |
+| `57f0a10` | 2026-09-25 | HIL Website | test(admin): render Guest Messages views in jsdom to pin booking dates *(cherry-pick of `cb02295` onto `dev`)* |
+| `818fad4` | 2026-09-25 | HIL Website | fix(admin): render Guest Messages booking dates as UTC calendar dates *(cherry-pick of `4e2d2b9` onto `dev`)* |
+| `47af155` | 2026-09-19 | HIL Blog + HIL SEO | docs: record blog WordPress cleanup, verification and scheduled-post checkpoints |
+| `e84a0bc` | 2026-09-19 | HIL SEO | chore(seo): add gitignored SEO secrets file with a tracked placeholder template |
+| `4b28b07` | 2026-09-19 | HIL SEO + HIL Blog | feat(seo): HIL SEO plugin v1.1.5 *(sitemap, robots and blog-index metadata — the version live after the 2026-09-19 cutover)* |
+| `61d2520` | 2026-09-19 | HIL SEO + HIL Blog | docs: record hil-seo/Yoast cutover, verification and post-cutover decisions |
+| `bec0f8c` | 2026-09-17 | HIL Website | chore: add temporary admin route for manual booking data fix *(`dev` copy of `25864d0`)* |
+| `53844ee` | 2026-09-17 | HIL Website + HIL SEO | docs: record Owner confirmation of Airbnb unlink and PinasBNB boundary |
+| `d73112b` | 2026-09-17 | HIL Website + HIL SEO + HIL Blog | chore: unify HIL web and SEO workspace governance *(DEC-018)* |
 | `480053f` | 2026-09-27 | HIL Website | **Merge pull request #23 from `cedcas/fix/verify-stripe-payment-server-side` — fix(payments): verify Stripe PaymentIntent server-side before confirming bookings.** Merged 18:45 CT and deployed to production. Merge commit, so `git revert -m 1 480053f` rolls it back. No schema change (see Website spec → Payments, [DEC-020](HIL_DECISIONS.md)) |
 | `fb3933b` | 2026-09-27 | HIL Website | fix(payments): verify Stripe PaymentIntent server-side before confirming bookings *(closes a gap where `/api/bookings` auto-confirmed a card booking on any client-sent `stripePaymentIntentId` and `/api/stripe/payment-intent` charged a client-sent amount: stays and charges are now priced server-side (`src/lib/booking-quote.ts`), and the intent is retrieved and checked for succeeded + PHP + exact amount + matching metadata + not reused (`src/lib/stripe-payment.ts`) in `/api/bookings` and `/api/charges/[token]/pay`; promo discount now computed on the server nightly total; 9 files, +952/−130, tests with mocked Stripe/Prisma)* |
 | `c4f6345` | 2026-09-25 | HIL Website | **Merge pull request #22 from `cedcas/fix/messages-booking-date-utc` — fix(admin): Guest Messages booking dates display one day early.** Merge commit, so `git revert -m 1 c4f6345` rolls it back |
