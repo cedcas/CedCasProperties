@@ -528,7 +528,8 @@ into Testing in the UI, while hits that were never sent can't be recovered.
 ### Implications
 - Owner GA4-UI steps (not code): set the **Internal Traffic** and **Developer** data
   filters Active (**done — Owner-confirmed Active 2026-10-04**); mark `generate_lead`
-  (and `booking_confirmed`) as key events.
+  (and `booking_confirmed`) as key events (**done — both report as key events in GA4,
+  checked 2026-10-04**).
 - Any new production hostname must be added to `ANALYTICS_HOSTS`, or GA silently goes dark
   there. Any new owner-only route tree must be added to `isTrackedPath`.
 - GA4 data between 2026-08-09 and this deploy still contains admin/dev/test traffic.
