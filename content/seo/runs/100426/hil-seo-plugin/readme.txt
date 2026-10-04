@@ -3,7 +3,7 @@ Contributors: haveninlipa
 Requires at least: 6.5
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.1.7
+Stable tag: 1.1.8
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -42,6 +42,9 @@ The screen and the REST route (`/wp-json/hil-seo/v1/cutover`) write through the 
 No content, no post meta, and no term meta is ever deleted by this plugin — not on deactivation, not on uninstall (see `uninstall.php`). Rolling back is: reactivate Yoast, re-enable its schema/social modules if they were disabled, and flip every `hil_seo_cutover` flag back to `false` (or simply deactivate this plugin — deactivation alone stops every gated output hook from firing). See `HIL_Yoast_Migration_and_Rollback_Plan.md` §2 for the full procedure.
 
 == Changelog ==
+
+= 1.1.8 =
+* Changed: the Organization schema's Facebook `sameAs` is now `https://www.facebook.com/haveninlipa`, matching the main site's LocalBusiness schema. The previous `profile.php?id=61572535599006` URL redirects to it, so both sites now name the same page the same way (2026-09-30 SEO audit, brand-consistency finding). Nothing else changes; no settings or post meta are touched.
 
 = 1.1.7 =
 * Added: "Blog homepage meta description" setting on WP Admin → HIL SEO (option `hil_seo_blog_index_description`, Administrator only). The blog homepage and /page/N/ use it for meta, og and Twitter descriptions, falling back to the site tagline when empty. The tagline alone was 32 characters (2026-09-30 SEO audit), but it also builds the homepage <title>, the WebSite schema description and the theme heading, so it can't simply be lengthened. Titles, schema and every other output are unchanged. No change on install until the setting is saved.

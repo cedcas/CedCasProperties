@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-10-04 (GA4 Analytics Events: Internal Traffic and Developer data filters confirmed Active by the Owner). Prior: 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -1372,8 +1372,22 @@ Any `/admin/*` page other than `/admin/login` can only render for a signed-in us
 carries `traffic_type: "internal"`, and `track()` adds it to every event too (belt and
 braces — `config` params apply to the page's hits, and a marker set mid-page is applied
 with `gtag('set', …)`). GA is **not** disabled for the device: tagging is reversible and
-only takes effect once the GA4 **Internal Traffic** data filter is set Active (Owner, GA4
-UI). Clear it on a device with `?hil_internal=0`.
+only takes effect while the GA4 **Internal Traffic** data filter is Active — it is
+(Owner-confirmed 2026-10-04, GA4 UI). The filter only drops hits from a *marked* device:
+a browser that has not rendered a signed-in admin page since the 2026-09-28 deploy, a
+private window, or one with cleared site data is not marked and is still counted. Clear
+the marker on a device with `?hil_internal=0`.
+
+**Cookie twin (2026-10-04).** [src/middleware.ts](../src/middleware.ts) also sets a
+`hil_internal=1` cookie on every signed-in `/admin` request (`Path=/`, 400 days, renewed
+each request, `SameSite=Lax`, not HttpOnly so the gate can read it). `readAnalyticsContext()`
+treats the device as internal if **either** the `localStorage` marker or the cookie is
+present (`hasInternalCookie` in `analytics-config.ts`); `?hil_internal=0` clears both.
+Why: Safari on iOS deletes script-written storage after 7 days without a visit to the
+site, so an owner phone that had not opened admin that week lost its tag; a server-set
+cookie is not subject to that cap. Still **per browser** — an in-app browser (Google /
+Facebook app) needs its own admin sign-in once. Host-only cookie, so it does not cover
+`blog.haveninlipa.com`.
 
 ### The `track()` helper — [src/lib/analytics.ts](../src/lib/analytics.ts)
 
@@ -1483,9 +1497,19 @@ left in *Testing* state excludes nothing; it only labels data for preview.
 
 Since 2026-09-27 (DEC-021) non-production hosts send **nothing**, so the Developer filter
 only matters for the explicit `?ga_debug=1` opt-in, which sets `debug_mode` on `config`
-(covering `page_view`/`scroll` too) as well as on events. As of 2026-09-27 neither the
-Developer filter nor the **Internal Traffic** filter (which keys on `traffic_type =
-internal`, set by the marker above) is Active — both are Owner steps in the GA4 UI.
+(covering `page_view`/`scroll` too) as well as on events. As of 2026-10-04 both the
+Developer filter and the **Internal Traffic** filter (which keys on `traffic_type =
+internal`, set by the marker above) are **Active**, operation Exclude — confirmed by the
+Owner from the GA4 UI. Per the Owner they were switched on the day admin traffic stopped
+appearing in GA4; the last `/admin` pageviews are dated 2026-09-28 (the same day the
+DEC-021 code went live, which on its own stops `/admin` hits). On 2026-09-27 neither was
+Active. Data filters are not retroactive, so data collected before activation still
+contains owner/admin hits — segment by hostname/page path when reading it. The GA4 Data
+API cannot read filter state; re-confirm in the UI. ⚠️ Public-page hits from the same
+cities as the earlier admin traffic still appear on 2026-09-30 – 2026-10-02 (none on
+10-03/10-04, checked 10-04): with the filter Active these can only come from an unmarked
+browser — e.g. an in-app browser (Google/Facebook app), which has its own `localStorage`
+separate from the browser used to sign in to admin.
 
 ### `stay_match_arrival` — landing-side Stay Match confirmation
 
