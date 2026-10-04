@@ -20,10 +20,10 @@
  *    the new nights are claimed but not yet blocked on sibling listings.
  *  - A stale edit (the booking changed since the form was loaded) is rejected.
  *
- * PRICING. Whether an amendment keeps the agreed price or re-prices is an Owner decision
- * that has not been made, so the only mode is "preserve": the stored totals stay as they
- * are and the review shows a server-calculated reference quote for comparison. Nothing is
- * charged, refunded or added as an AdditionalCharge.
+ * PRICING. The Owner's first-release policy (DEC-024, approved 2026-10-02) is to keep the
+ * agreed price and defer re-pricing, so the only mode is "preserve": the stored totals stay
+ * as they are and the review shows a server-calculated reference quote for comparison.
+ * Nothing is charged, refunded or added as an AdditionalCharge.
  */
 
 import { Prisma } from "@prisma/client";
