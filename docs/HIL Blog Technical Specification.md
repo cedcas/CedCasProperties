@@ -1,6 +1,6 @@
 # Haven in Lipa — Blog Technical Specification
 
-> **Last updated:** 2026-09-30 (added [Front-end performance and title length](#front-end-performance-and-title-length-2026-09-30): `hil-seo` 1.1.6 title rule, HIL Performance plugin 1.0.2, LiteSpeed/EWWW settings; blog post PageSpeed mobile 65 → 89). Prior: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
+> **Last updated:** 2026-10-04 (`hil-seo` 1.1.7 blog-homepage description setting, live; 1.1.8 Facebook `sameAs` artifact, pending upload — see the `hil-seo` notes under Front-end performance and title length). Prior: 2026-09-30 (added [Front-end performance and title length](#front-end-performance-and-title-length-2026-09-30): `hil-seo` 1.1.6 title rule, HIL Performance plugin 1.0.2, LiteSpeed/EWWW settings; blog post PageSpeed mobile 65 → 89). Prior: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
 >
 > This spec covers the WordPress blog at `blog.haveninlipa.com` and how the main rental app integrates with it. Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); SEO / structured data lives in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).
 >
@@ -175,6 +175,12 @@ All of this is live on `blog.haveninlipa.com`, uploaded or configured by the Own
 |---|---|---|
 | Before | 65–67 | 3.9 s |
 | After | 89 (3 of 4 runs; the first run after a purge was 69) | — |
+
+### `hil-seo` 1.1.7 / 1.1.8: blog homepage description, Facebook `sameAs`
+- **1.1.7 (live 2026-10-04):** the blog homepage and `/page/N/` take their meta, og and Twitter description from the option `hil_seo_blog_index_description`, set at WP Admin → HIL SEO → "Blog homepage meta description". It falls back to the site tagline when empty. The current value is 143 characters.
+  - **Gotcha:** do not lengthen the tagline to change the description. The tagline also builds the homepage `<title>` ("<site> - <tagline>"), the WebSite schema description and the theme's homepage H1.
+- **1.1.8 (artifact in `content/seo/runs/100426/`, pending Owner upload):** the Organization schema's Facebook `sameAs` becomes `https://www.facebook.com/haveninlipa`, matching the main site's `layout.tsx`. The old `profile.php?id=…` URL redirects to it.
+- **All 26 long post titles** were shortened through each post's SEO title field on 2026-10-04, from the Word list in the Owner's `Marketing/Blog/Corrections 100126` folder. No published post title is over 60 characters.
 
 ### `hil-seo` 1.1.6: title suffix only when it fits
 - **Rule:** `hil_seo_fit_title()` in `includes/seo-title.php` drops the trailing ` - Haven in Lipa Blog` from post/page `<title>`, `og:title` and `twitter:title` when the full title would exceed 60 characters (filter: `hil_seo_title_max_length`).

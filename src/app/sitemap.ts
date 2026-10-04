@@ -12,12 +12,23 @@ export const dynamic = "force-dynamic";
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const properties = await getPublicListings();
 
-  const now = new Date();
+  // `lastModified` must be a real date or be left out. It used to be the
+  // request time on every non-listing URL, so each fetch claimed the whole site
+  // had just changed, and Google learns to ignore a sitemap's dates when they
+  // are not trustworthy (2026-09-30 SEO audit).
+  // - Pages that render the inventory use the newest listing update.
+  // - Fixed-copy pages (/faq, /privacy, /terms, /ambassadors) carry no date.
+  // `updatedAt` may arrive as a string: getPublicListings() is cached, and the
+  // cache serializes Dates.
+  const times = properties
+    .map((p) => new Date(p.updatedAt).getTime())
+    .filter((t) => Number.isFinite(t));
+  const inventoryUpdated = times.length ? new Date(Math.max(...times)) : undefined;
 
   return [
     {
       url: BASE_URL,
-      lastModified: now,
+      lastModified: inventoryUpdated,
       changeFrequency: "daily",
       priority: 1.0,
     },
@@ -26,7 +37,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // individual listings because it's the landing surface for plain lodging
       // intent and the target of the external links that used to 404.
       url: `${BASE_URL}/properties`,
-      lastModified: now,
+      lastModified: inventoryUpdated,
       changeFrequency: "weekly" as const,
       priority: 0.9,
     },
@@ -41,7 +52,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // level with /properties: it is cluster C1's landing surface and the
       // consolidation target for the retired blog article #6.
       url: `${BASE_URL}/staycation`,
-      lastModified: now,
+      lastModified: inventoryUpdated,
       changeFrequency: "monthly" as const,
       priority: 0.9,
     },
@@ -51,31 +62,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       // multi-night, full-house booking, and the only content in this market
       // answering "where does the entourage sleep".
       url: `${BASE_URL}/weddings-accommodation`,
-      lastModified: now,
+      lastModified: inventoryUpdated,
       changeFrequency: "monthly" as const,
       priority: 0.8,
     },
     {
       url: `${BASE_URL}/faq`,
-      lastModified: now,
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
       url: `${BASE_URL}/about`,
-      lastModified: now,
+      lastModified: inventoryUpdated,
       changeFrequency: "monthly" as const,
       priority: 0.6,
     },
     {
+      // The Ambassador program page (src/app/ambassadors/page.tsx): public,
+      // self-canonical and linked site-wide, but it was missing here. The Owner
+      // confirmed 2026-10-04 that it should be findable in search.
+      url: `${BASE_URL}/ambassadors`,
+      changeFrequency: "monthly" as const,
+      priority: 0.5,
+    },
+    {
       url: `${BASE_URL}/privacy`,
-      lastModified: now,
       changeFrequency: "yearly" as const,
       priority: 0.3,
     },
     {
       url: `${BASE_URL}/terms`,
-      lastModified: now,
       changeFrequency: "yearly" as const,
       priority: 0.3,
     },

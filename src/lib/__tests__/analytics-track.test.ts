@@ -114,6 +114,22 @@ describe("track()", () => {
     expect(gtag).toHaveBeenCalledWith("event", "booking_confirmed", { value: 1, traffic_type: "internal" });
   });
 
+  it("adds traffic_type internal when only the middleware cookie is present", () => {
+    const gtag = vi.fn();
+    makeWindow("https://haveninlipa.com/", gtag);
+    win.document = { cookie: "_ga=GA1.1.1; hil_internal=1" };
+    track("booking_confirmed", { value: 1 });
+    expect(gtag).toHaveBeenCalledWith("event", "booking_confirmed", { value: 1, traffic_type: "internal" });
+  });
+
+  it("?hil_internal=0 expires the cookie too", () => {
+    makeWindow("https://haveninlipa.com/?hil_internal=0");
+    const doc = { cookie: "hil_internal=1" };
+    win.document = doc;
+    applyUrlOptIns(win.location.search);
+    expect(doc.cookie).toBe("hil_internal=; Max-Age=0; Path=/");
+  });
+
   it("?hil_internal=0 clears the marker", () => {
     const gtag = vi.fn();
     makeWindow("https://haveninlipa.com/?hil_internal=0", gtag);
