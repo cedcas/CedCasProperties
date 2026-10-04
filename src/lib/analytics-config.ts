@@ -25,6 +25,15 @@ export const ANALYTICS_HOSTS: readonly string[] = ["haveninlipa.com", "www.haven
 
 /** localStorage key set on devices that have opened the admin panel. */
 export const INTERNAL_MARKER_KEY = "hil_internal";
+/**
+ * Cookie twin of the marker, set by middleware on every signed-in `/admin`
+ * request. A server-set cookie outlives Safari's 7-day cap on script-written
+ * storage, which silently untagged an owner phone that hadn't opened admin
+ * that week. Not HttpOnly — the browser-side gate has to read it.
+ */
+export const INTERNAL_COOKIE_NAME = "hil_internal";
+/** 400 days: the longest lifetime browsers accept. Renewed on each admin request. */
+export const INTERNAL_COOKIE_MAX_AGE = 400 * 24 * 60 * 60;
 /** sessionStorage key for the explicit DebugView opt-in (`?ga_debug=1`). */
 export const DEBUG_OPT_IN_KEY = "hil_ga_debug";
 export const DEBUG_QUERY_PARAM = "ga_debug";
@@ -58,6 +67,11 @@ export function isTrackedPath(pathname: string): boolean {
  */
 export function isInternalMarkerPath(pathname: string): boolean {
   return isUnder(pathname, "/admin") && !isUnder(pathname, "/admin/login");
+}
+
+/** True when a `document.cookie` / `Cookie` header string carries the internal marker. */
+export function hasInternalCookie(cookies: string): boolean {
+  return cookies.split(";").some((c) => c.trim() === `${INTERNAL_COOKIE_NAME}=1`);
 }
 
 export interface AnalyticsEnv {

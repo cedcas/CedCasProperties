@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildEventParams,
   buildGtagConfig,
+  hasInternalCookie,
   isAnalyticsHost,
   isInternalMarkerPath,
   isTrackedPath,
@@ -61,6 +62,17 @@ describe("isInternalMarkerPath", () => {
     expect(isInternalMarkerPath("/admin/login")).toBe(false);
     expect(isInternalMarkerPath("/administrator")).toBe(false);
     expect(isInternalMarkerPath("/")).toBe(false);
+  });
+});
+
+describe("hasInternalCookie", () => {
+  it("finds the marker among other cookies, and only with value 1", () => {
+    expect(hasInternalCookie("hil_internal=1")).toBe(true);
+    expect(hasInternalCookie("_ga=GA1.1.1; hil_internal=1; x=y")).toBe(true);
+    expect(hasInternalCookie("")).toBe(false);
+    expect(hasInternalCookie("hil_internal=0")).toBe(false);
+    expect(hasInternalCookie("not_hil_internal=1")).toBe(false);
+    expect(hasInternalCookie("hil_internal=10")).toBe(false);
   });
 });
 
