@@ -5,7 +5,7 @@
  * (DEC-021): production hostname allowlist, never on /admin, and the explicit
  * `?ga_debug=1` opt-in. When those say no, track() is a no-op — nothing is
  * queued and nothing is sent. Devices that have opened the admin panel carry a
- * marker and are tagged `traffic_type: 'internal'` so GA4's Internal Traffic
+ * marker (localStorage, plus a longer-lived cookie set by middleware) and are tagged `traffic_type: 'internal'` so GA4's Internal Traffic
  * filter can exclude them.
  *
  * gtag.js itself is loaded lazily by src/components/Analytics.tsx. ensureGtag()
@@ -16,10 +16,12 @@ import {
   DEBUG_OPT_IN_KEY,
   GA_DISABLE_KEY,
   GA_MEASUREMENT_ID,
+  INTERNAL_COOKIE_NAME,
   INTERNAL_MARKER_KEY,
   INTERNAL_QUERY_PARAM,
   buildEventParams,
   buildGtagConfig,
+  hasInternalCookie,
   isTrackedPath,
   readDebugParam,
   resolveAnalyticsContext,
@@ -46,6 +48,22 @@ function storageSet(kind: "localStorage" | "sessionStorage", key: string, value:
   }
 }
 
+// Same contract as storage: a blocked or absent `document.cookie` must never break the page.
+function readCookies(): string {
+  try {
+    return window.document?.cookie ?? "";
+  } catch {
+    return "";
+  }
+}
+function clearInternalCookie(): void {
+  try {
+    if (window.document) window.document.cookie = `${INTERNAL_COOKIE_NAME}=; Max-Age=0; Path=/`;
+  } catch {
+    /* ignore */
+  }
+}
+
 /**
  * Current gating decision, read fresh from the browser on every call. A
  * `?ga_debug=` param in the current URL wins over the stored opt-in, so the
@@ -60,7 +78,8 @@ export function readAnalyticsContext(pathname?: string): AnalyticsContext {
     debugOptIn:
       readDebugParam(window.location.search) ??
       storageGet("sessionStorage", DEBUG_OPT_IN_KEY) === "1",
-    internal: storageGet("localStorage", INTERNAL_MARKER_KEY) === "1",
+    internal:
+      storageGet("localStorage", INTERNAL_MARKER_KEY) === "1" || hasInternalCookie(readCookies()),
   });
 }
 
@@ -82,6 +101,7 @@ export function applyUrlOptIns(search: string): void {
   if (debug !== null) storageSet("sessionStorage", DEBUG_OPT_IN_KEY, debug ? "1" : null);
   if (new URLSearchParams(search).get(INTERNAL_QUERY_PARAM) === "0") {
     storageSet("localStorage", INTERNAL_MARKER_KEY, null);
+    clearInternalCookie();
   }
 }
 
