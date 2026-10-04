@@ -4,6 +4,30 @@
 
 ---
 
+## 2026-10-04 — GA4 internal-traffic cookie marker; analytics Owner steps closed
+
+Area: Website / SEO (measurement)
+
+Status: **Live.** PR #49, merge `17749db`; CI green and the Production deployment for that SHA succeeded; the served bundle contains the cookie code. The cookie being set was not observed first-hand (needs an admin sign-in).
+
+### Outcome
+- Middleware sets `hil_internal=1` (400 days, renewed per request) on every signed-in `/admin` request; the GA4 gate tags a browser `traffic_type: internal` if either that cookie or the `localStorage` marker is present. `?hil_internal=0` clears both. [Website spec → Internal-traffic marker](HIL%20Website%20Technical%20Specification.md).
+- Why: the Owner's phone still appeared in GA4 on 2026-09-30 – 10-02 with the Internal Traffic filter Active. Safari on iOS drops script-written storage after 7 days without a visit, and the marker is per browser.
+- Closed the DEC-021 Owner steps: both GA4 data filters Active, `booking_confirmed` + `generate_lead` are key events, Stay Match v1.0.2 active.
+- GA4 has recorded no `/admin`, `dev.` or `/pay/<token>` pageviews since 2026-09-29.
+
+### Evidence
+- Local and CI: lint, typecheck, build, 1,425 unit tests.
+- Read through the GA4 / Search Console MCP connection (local `.mcp.json`, gitignored).
+
+### Gotchas worth remembering
+- **`/admin` hits stopping on 2026-09-28 is the code, not the filter** — GA is never loaded there. It is not evidence the Internal Traffic filter works.
+- **The GA4 Data API cannot read data-filter state.** Confirm in the UI.
+- Still per browser: an in-app browser (Google / Facebook app) needs its own admin sign-in. `blog.haveninlipa.com` is not covered.
+- **Stay Match's empty click count was a coverage gap**, not a broken event: none of the 12 high-traffic posts is enrolled. See [Blog spec → Stay Match](HIL%20Blog%20Technical%20Specification.md).
+
+---
+
 ## 2026-10-01 — Admin Guest & Stay Edit, inventory lock, protected reactivation
 
 Area: Website

@@ -441,8 +441,9 @@ after Sep 3 ≈ 15 by ≈ 14 users. `stay_match_click` fired only on 2026-08-27 
 - Is Clarity or GTM actually deployed anywhere on HIL? Not found in `About HIL/` or the
   migrated SEO artifacts. Confirm with the Owner before assuming either exists.
 - Confirm GA4 events in DebugView (use `?ga_debug=1` once DEC-021 is live); mark
-  `booking_confirmed` + `generate_lead` as key events; verify apex-domain collection —
-  Owner GA4-UI steps, still open. (The **Internal Traffic** and **Developer-Traffic**
+  `booking_confirmed` + `generate_lead` as key events (**done** — both report
+  `isKeyEvent = true` in GA4, checked 2026-10-04); verify apex-domain collection —
+  Owner GA4-UI step, still open. (The **Internal Traffic** and **Developer-Traffic**
   data filters are **Active** — Owner-confirmed 2026-10-04; closed.) Note `dev.haveninlipa.com` no longer sends anything after DEC-021, so
   "collection verified on dev" can no longer be re-checked there without `?ga_debug=1`.
 
