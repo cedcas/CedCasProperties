@@ -1,6 +1,6 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
+> **Last updated:** 2026-10-04 (GA4 Internal Traffic and Developer-Traffic data filters confirmed Active by the Owner — open question closed). Prior: 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
 > `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§13/§14 — GA4 gating DEC-021, `stay_match_click` finding, `stay_match_arrival`, open GA4-UI steps; PR #25, merged into `dev`); (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
 > §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
 > cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
@@ -441,9 +441,9 @@ after Sep 3 ≈ 15 by ≈ 14 users. `stay_match_click` fired only on 2026-08-27 
 - Is Clarity or GTM actually deployed anywhere on HIL? Not found in `About HIL/` or the
   migrated SEO artifacts. Confirm with the Owner before assuming either exists.
 - Confirm GA4 events in DebugView (use `?ga_debug=1` once DEC-021 is live); mark
-  `booking_confirmed` + `generate_lead` as key events; set the **Internal Traffic** and
-  **Developer-Traffic** data filters Active; verify apex-domain collection — Owner GA4-UI
-  steps, still open. Note `dev.haveninlipa.com` no longer sends anything after DEC-021, so
+  `booking_confirmed` + `generate_lead` as key events; verify apex-domain collection —
+  Owner GA4-UI steps, still open. (The **Internal Traffic** and **Developer-Traffic**
+  data filters are **Active** — Owner-confirmed 2026-10-04; closed.) Note `dev.haveninlipa.com` no longer sends anything after DEC-021, so
   "collection verified on dev" can no longer be re-checked there without `?ga_debug=1`.
 
 ---
