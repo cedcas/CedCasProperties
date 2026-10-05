@@ -1,6 +1,6 @@
 # Haven in Lipa — Blog Technical Specification
 
-> **Last updated:** 2026-10-04, later (Stay Match v1.0.2 confirmed live; coverage finding — the block is absent from the high-traffic posts). Earlier 2026-10-04 (`hil-seo` 1.1.7 blog-homepage description setting, live; 1.1.8 Facebook `sameAs` artifact, pending upload — see the `hil-seo` notes under Front-end performance and title length). Prior: 2026-09-30 (added [Front-end performance and title length](#front-end-performance-and-title-length-2026-09-30): `hil-seo` 1.1.6 title rule, HIL Performance plugin 1.0.2, LiteSpeed/EWWW settings; blog post PageSpeed mobile 65 → 89). Prior: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
+> **Last updated:** 2026-10-04, latest (Stay Match enrolled on the 12 high-traffic posts). Earlier 2026-10-04, later (Stay Match v1.0.2 confirmed live; coverage finding — the block is absent from the high-traffic posts). Earlier 2026-10-04 (`hil-seo` 1.1.7 blog-homepage description setting, live; 1.1.8 Facebook `sameAs` artifact, pending upload — see the `hil-seo` notes under Front-end performance and title length). Prior: 2026-09-30 (added [Front-end performance and title length](#front-end-performance-and-title-length-2026-09-30): `hil-seo` 1.1.6 title rule, HIL Performance plugin 1.0.2, LiteSpeed/EWWW settings; blog post PageSpeed mobile 65 → 89). Prior: 2026-09-27 evening (Stay Match: `stay_match_click` finding and the v1.0.2 artifact pending WordPress deploy). Earlier 2026-09-27: (Yoast-era wording marked superseded — `hil-seo` v1.1.5 is the sole SEO output since 2026-09-19; added [Publishing workflow — Owner-approved batches](#publishing-workflow--owner-approved-batches-seo-dec-029-2026-09-27)). Prior: 2026-08-26
 >
 > This spec covers the WordPress blog at `blog.haveninlipa.com` and how the main rental app integrates with it. Core app infrastructure lives in [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md); SEO / structured data lives in [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md).
 >
@@ -118,6 +118,17 @@ romantic getaway, family staycation — carry the script but **no block**: none 
 viewers it says nothing about whether the click event works. Whether a real click now
 records `stay_match_click` + `stay_match_arrival` is still unproven (Owner test click
 2026-10-04 not yet visible in GA4 that day). Next step and owner: HIL_PROJECT_STATUS.md.
+
+**Enrollment, 2026-10-04 (Owner-approved).** Those 12 posts now carry a `_hil_stay_intent`
+and render the block live (verified on all 12, cached and uncached). Six general guides
+use `small family or couple` (two-option tier: sleeps-7 + 1-bedroom), three couple-leaning
+posts use `couples weekend getaway` (single: 1-bedroom), Mt. Maculot uses `barkada 6 to 9`
+(single: 2-bedroom), two family posts use `families with kids` (two options: sleeps-11 +
+2-bedroom). Set by REST with a `meta`-only body; this bumps each post's `modified` date.
+Per-post table, reasoning and rollback:
+`content/seo/runs/100426/Stay_Match_Enrollment_100426.md`. ⚠️ Gotcha: the REST account
+name is not in the real `content/seo/.env.seo` (`HIL_WP_USER` is blank there) — it is the
+one documented in `.env.seo.example`, used with `WP_APPLICATION_PASSWORD`.
 
 **v1.0.2 (2026-09-27) — deployed (active by 2026-10-04; upload date not recorded):** `content/seo/runs/092726/hil-stay-match.php` + `Stay_Match_v1.0.2_Deploy_Note.md` (in git, unlike `blog/`). Cedric uploads it (Plugins → Upload → replace, then purge LiteSpeed + Hostinger CDN). Changes:
 - `hil_sm_link()` appends `?hil_sm=<property|book>&hil_sm_post=<post_slug>` (`add_query_arg`) to **every** Stay Match href. The main site records `stay_match_arrival` on landing and strips the params ([Website spec → GA4 Analytics Events](HIL%20Website%20Technical%20Specification.md)), which gives a landing-side confirmation that doesn't depend on the blog-page beacon. Not UTMs: UTMs would start a new GA4 session and overwrite the reader's real source.
