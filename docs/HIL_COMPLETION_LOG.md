@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
+
+Area: Website / Deployment / Database
+
+Status: **Complete — live on production.** Decision: [DEC-026](HIL_DECISIONS.md). Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
+
+### Outcome
+No deployment changes a database schema any more. `npm run build` is the compile-only `build:app`. Schema changes are migrations in `prisma/migrations/`, applied by an operator with `scripts/db-migrate.mjs` before the code is merged. Vercel's `vercel-build` adds a read-only gate that fails the build if a migration in the commit is not applied.
+
+### Evidence
+- **PRs:** #57 → `main`, merge `3798482` (2026-10-06 10:25 UTC; reviewed head `1ddf487`). #58 → `dev`, merge `09f04b9`.
+- **Schema equivalence before any write:** `mariadb-dump --no-data` of production, of dev, and of the baseline applied to an empty database were byte-identical (23 tables; no views, triggers, routines, events). Prisma's diff of each hosted database against `schema.prisma` was empty after the index-prefix correction.
+- **Finding:** `prisma db push` had been dropping and recreating `GuestMessage_messageId_idx` on every deployment (undeclared 768-character prefix). Production build log of `40fbc05` shows the push; `GuestMessage.create_time` matched it (00:58:17 UTC). Fixed in `schema.prisma` only.
+- **Vercel settings (API, read-only):** project `ced-cas-properties`, Build Command and Install Command `null`, production branch `main`. `ced-cas-properties-dev` returns 404 and last deployed 2026-04-05 — not active.
+- **Dev baseline:** 2026-10-06 09:50:37 UTC, commit `53aebc4`. Preview of `4f1554f` failed at the gate before it (`BLOCKED: … no migration history`); `53aebc4` passed after it.
+- **Production backup:** `~/hil-db-backups/hil-production-20261006T101529Z.sql.gz`, sha256 `7809c21c…dc6a`, dump exit 0 through the gzip pipeline (failure detection demonstrated on a deliberate bad dump), restored locally: schema byte-identical, 23 of 23 tables equal in row count and `CHECKSUM TABLE`.
+- **Production baseline:** 2026-10-06 10:17:15 UTC, commit `1ddf487`, `prisma migrate resolve --applied 20261005000000_baseline`. One table and one row added (checksum `0246c5ad…09ef`, equal to the file). Afterwards: application schema dump byte-identical, all 81 index rows identical, 23 of 23 tables equal in row count and checksum, `status` exit 0 with `NO DRIFT`.
+- **Production deployment:** `dpl_E37remzqxLQkeravjAdExwqj2cWt`, commit `3798482`, served at `haveninlipa.com`. Build log: `Running "npm run vercel-build"` → `[migration-gate] environment: production … OK — every migration in this commit is applied` → `next build`. No `db push`. After the build: schema dump, indexes and every table's `create_time` unchanged (`GuestMessage` still 00:58:17), `status` still `NO DRIFT`.
+- **Checks:** Lint, Type Check, Unit Tests (1,509), Build, Migrations green on `1ddf487` and on `main` at `3798482`. `main`'s ruleset now requires all five; nothing else in it changed.
+- **Acceptance:** Owner confirmed the logged-in checks on `dev.haveninlipa.com` (build `09f04b9`) on 2026-10-06 before the merge. Production: signed-out smoke checks only (pages, 5 listings, booking pages, availability, iCal all 200; admin API 401).
+- **Local environment:** `.env` `DATABASE_URL` now points at dev; production moved to `PRODUCTION_DATABASE_URL`. Vercel environment values untouched.
+
+### Not done / limits
+- No GitHub-hosted migration workflow: runner reach to Hostinger was never tested, and no hosted database credential is stored in GitHub.
+- No logged-in action was performed on production.
+- Commits older than `3798482` still contain the old `build` script. Rebuilding one (a push to a stale branch, or Vercel's **Redeploy** on an old deployment) would run `prisma db push` again — against dev for a branch, against production for an old Production deployment. See the runbook, section 8.
+- Local comparisons ran on MariaDB 12.3; the exact 11.8 match is CI's container and the hosted servers themselves.
+
+---
+
 ## 2026-10-05 — ₱200/hour Early Check-In / Late Checkout E2E acceptance
 
 Area: Website / Additional Charges
