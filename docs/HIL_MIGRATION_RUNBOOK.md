@@ -1,6 +1,6 @@
 # Haven in Lipa — Database Migration Runbook
 
-> **Last updated:** 2026-10-06 (after the production release: env key names, Vercel CLI, recovery rules). Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
+> **Last updated:** 2026-10-06 (final closeout). **Status: the build/migration separation is complete and live** — production runs `3798482` or later. Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
 
 **The rule.** A deployment never changes a database's schema. Schema changes are SQL files in `prisma/migrations/`, reviewed in a pull request, and applied by a person running one command against one named database. The Vercel build only *checks* (read-only) that the migrations in the commit are already applied, and refuses to build if they are not.
 
@@ -14,6 +14,8 @@
 ## Where it runs
 
 The command is run by an operator on a machine that can reach Hostinger's MariaDB on port 3306 and has a local MariaDB to build comparison databases. On 2026-10-05/06 the Owner's Mac met both conditions (read access to both hosted databases verified). Both hosted databases were baselined from it on 2026-10-06. GitHub-hosted runners are **not** used: their access to Hostinger was not verified and no hosted database credential is stored in GitHub (see [DEC-012](HIL_DECISIONS.md)). There is no migration workflow and no admin migration endpoint, by design.
+
+*Operational follow-ups (tracked in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md), not blockers):* migrations can currently be run from one machine only, and why that machine can reach Hostinger when DEC-012 says it should not is still unexplained.
 
 Before any hosted run, check the connection first — it has been unreliable historically:
 
@@ -136,7 +138,16 @@ Run `prisma migrate resolve` with the target set explicitly, e.g. `DATABASE_URL=
 
 **The gate blocked a Production build.** Read the build log (`npx vercel inspect <deployment url> --logs --scope cedcas-projects`; the Mac's Vercel CLI login works) and find the line starting `[migration-gate] BLOCKED`. Pending → run section 5, then redeploy. Missing history → the database was never baselined. Cannot read history → the database was unreachable during the build; redeploy.
 
-**The app is broken after a release.** Roll the *application* back in Vercel with Instant Rollback (not Redeploy — see section 8), or revert the offending merge (never PR #57 itself). That does not undo a migration — and does not need to, because migrations are backward compatible (section 3). Only undo schema with a new, reviewed migration.
+**The app is broken after a release — rolling back.** There are two different things called "going back", and only one is safe by default:
+
+| Action | What happens | Use it? |
+|---|---|---|
+| **Instant Rollback / Promote** an earlier deployment (Vercel dashboard, or `npx vercel rollback` / `promote`) | Serves a build that already exists. Nothing is rebuilt; no command runs against the database. | **Yes — this is the rollback.** |
+| Revert the offending merge with a new commit on `main` | Builds a new commit, which contains `vercel-build` and the gate. | Yes, as the follow-up fix. Never revert PR #57 (`3798482`) itself. |
+| **Redeploy** an old deployment, or push/rebuild a commit older than `3798482` | Rebuilds old source, whose `build` script runs `prisma db push` — against production for a Production deployment. | **No.** |
+| Put `prisma db push` back, drop `_prisma_migrations`, restore a database dump | Undoes the separation or loses data. | **No — Owner decision only.** |
+
+Rolling the application back does not undo a migration, and does not need to: migrations are backward compatible (section 3). Only change schema with a new, reviewed migration.
 
 ## 7. Backup and restore
 
@@ -152,12 +163,14 @@ echo "exit=$?"; gzip -t hil-*.sql.gz; gunzip -c hil-*.sql.gz | tail -1   # expec
 - Hostinger's own daily backups (hPanel → Databases → Backups) are the second copy; confirm the latest one exists before a production run.
 - Restoring a dump over production is a last resort that loses every booking made since the dump. Never rehearse it on production.
 
+**Retained backup (2026-10-06 release).** `~/hil-db-backups/hil-production-20261006T101529Z.sql.gz` on the Owner's Mac — outside the repository and outside Dropbox; folder `700`, file `600` (Owner's user only); sha256 `7809c21c…dc6a`; restore-tested. It is a full copy of production as of 10:15 UTC that day and contains guest names, emails and phone numbers. **Retention is the Owner's decision and is pending** — do not delete it, copy it, or move it into Dropbox without that decision. The old local env layout, `.env.bak-20261006-pre-dev-default`, is likewise kept until the Owner removes it.
+
 ## 8. Things that must stay true
 
 - `npm run build` is `npm run build:app` — compile only. `vercel-build` adds only the read-only gate.
 - **Reverting the PR that introduced this would put `prisma db push` back into every deploy.** If the release gate itself must be disabled in an emergency, change `vercel-build` to `npm run build:app` in a new commit; do not revert to the old `build` script. `src/lib/__tests__/build-safety.test.ts` fails if a schema-writing command reappears in an automatic path.
 - Vercel → Project → Settings → Build & Development: Build Command and Install Command overrides must stay **off** (confirmed off 2026-10-06 via the Vercel API: both `null`). An override bypasses `vercel-build` and the gate. A correct build log shows `Running "npm run vercel-build"` followed by `[migration-gate] OK`.
-- **Old commits still contain `prisma db push`.** Anything that *rebuilds* a commit older than `3798482` runs it again: a push to a branch cut before 2026-10-06 (against the dev database), or Vercel's **Redeploy** on an old Production deployment (against production). Merge `main` into a stale branch before pushing to it. To roll production back, use **Instant Rollback / Promote**, which reuses the existing build and runs nothing.
+- **Current builds are safe; old commits are not.** Builds of `3798482` or any later commit are safe: they run only the read-only gate. Rebuilding a commit **older than `3798482`** still runs `prisma db push`: a push to a branch cut before 2026-10-06 (against the dev database), or Vercel's **Redeploy** on an old Production deployment (against production). Merge `main` into a stale branch before pushing to it. Roll back by reusing an existing deployment (section 6), never by rebuilding. 23 remote branches still carried the old script on 2026-10-06 — inventory in [HIL_COMPLETION_LOG.md](HIL_COMPLETION_LOG.md).
 - **Migrations** is a required check on `main`, with Lint, Type Check, Unit Tests and Build.
 - Only one Vercel project builds this repository (`ced-cas-properties`). The old `ced-cas-properties-dev` project no longer exists.
 - No workflow receives a hosted database credential; CI's **Migrations** job uses a throwaway container.
