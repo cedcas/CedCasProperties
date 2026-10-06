@@ -74,7 +74,7 @@ jobs:
       # Parsed by Prisma Client generation and by Next.js env validation at
       # compile time only — never contacted. This job runs `build:app`
       # (prisma generate + next build), never the production `build` script,
-      # so no `prisma db push` / migration / seed ever runs here and no
+      # so no schema push / migration / seed ever runs here and no
       # database connection is ever attempted. See "CI build vs. production
       # build" in the Website Technical Specification.
       DATABASE_URL: mysql://user:password@localhost:3306/haveninlipa
@@ -90,3 +90,36 @@ jobs:
       - run: npm ci
       - name: Build application (compile-only — no database write)
         run: npm run build:app
+
+  # Not hosted-database work: everything here runs against a throwaway MariaDB container on
+  # the runner's own localhost, on the same engine family as production (MariaDB 11.8 / InnoDB).
+  # It proves that the migration history rebuilds a database matching schema.prisma (so a
+  # schema.prisma edit without a migration fails here), and exercises the release gate and the
+  # operator command through their baseline, pending, failing and drift scenarios.
+  migrations:
+    name: Migrations
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: ci-throwaway
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      DATABASE_URL: mysql://root:ci-throwaway@127.0.0.1:3306/ci_unused
+      TEST_DATABASE_SERVER_URL: mysql://root:ci-throwaway@127.0.0.1:3306
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Migration history, release gate and operator command (throwaway database)
+        run: npm run test:migrations

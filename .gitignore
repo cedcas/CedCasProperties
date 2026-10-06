@@ -36,6 +36,11 @@ yarn-error.log*
 # SEO workspace secrets (blog WordPress credentials): real file never committed, placeholder template is
 content/seo/.env.seo
 !content/seo/.env.seo.example
+# WP Post Report pull token (local only): never committed
+/config/secrets.local.php
+# GA4 / Search Console MCP setup (local only): both hold a Google service-account private key
+/.mcp.json
+/digital-marketing-*.json
 
 # vercel
 .vercel
@@ -57,3 +62,6 @@ next-env.d.ts
 
 # WordPress plugin source (deployed separately to blog.haveninlipa.com, not part of the Next.js app)
 /blog/
+
+# Local records of operator migration runs (scripts/db-migrate.mjs); copied into the completion log by hand
+/.migration-runs/

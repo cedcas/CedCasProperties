@@ -1,0 +1,2 @@
+# Prisma stores a checksum of every migration file; a line-ending rewrite would change it.
+prisma/migrations/**/*.sql text eol=lf

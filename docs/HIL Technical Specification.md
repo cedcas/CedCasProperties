@@ -17,6 +17,7 @@
 | [HIL Website Technical Specification](HIL%20Website%20Technical%20Specification.md) | **Primary "home base" spec.** Shared infrastructure (tech stack, env vars, DB schema, email), the public site, the admin panel, guest messaging, pricing, discount codes, RBAC, security, file structure, build/deploy, test plans, and homepage performance/accessibility. |
 | [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md) | The WordPress blog at `blog.haveninlipa.com` — hosting, the `hil-expose-focuskw` plugin, the dynamic footer blog-link integration, and the Stay Match plugin. |
 | [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md) | SEO and structured data — sitemap, canonicals, JSON-LD, the property-page schema builder, image alt text, SEO seed commands, and related SEO docs. |
+| [HIL Migration Runbook](HIL_MIGRATION_RUNBOOK.md) | Operator runbook for database schema changes ([DEC-026](HIL_DECISIONS.md)) — local databases, writing and reviewing a migration, applying to dev and production, release order, drift, failure and recovery. |
 
 ## Layer 4 — Completion history
 
