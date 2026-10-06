@@ -29,7 +29,7 @@
   - `main.css`, after `.footer-bottom__links`: `.footer-bottom { font-size: 0.875rem }`; `a.footer-credit` in `rgba(255,255,255,0.5)` with no underline; on hover/focus-visible `var(--color-primary-light)` plus underline.
   - Mobile stacking/centring at ≤768px already exists.
   - `Version: 1.0.1`.
-  - Prepared 2026-09-29 for the Chief of Staff (Theme File Editor edits, or the optional 1.0.1 zip after comparing with live). **Not applied yet.**
+  - Prepared 2026-09-29 for the Chief of Staff (Theme File Editor edits, or the optional 1.0.1 zip after comparing with live). **Not applied yet (checked live 2026-10-06: no credit in the blog footer; the release session had no WordPress admin access).** Remaining steps: back up live `footer.php` and `main.css`; apply the edits above through the Theme File Editor; purge LiteSpeed and Hostinger CDN; verify logged-out on the blog home and a post.
 
 ## Blog Integration (WordPress)
 

@@ -35,10 +35,17 @@ No branch has unmerged work: every one has a merged PR and is fully contained in
 - **Merged / obsolete — 26.** Safe to delete.
   - *Old build script (22), all contained in `main`:* `chore/hil-performance-plugin`, `chore/remove-fix-drive-times-route`, `chore/remove-manual-fix-route`, `docs/close-hourly-fee-e2e-20261005`, `docs/ga4-mcp-closeout-100426`, `docs/hil-status-reconcile-20261005`, `docs/layered-docs-into-git`, `docs/stay-match-enrollment-100426`, `docs/wrapup-093026`, `feat/hil-seo-1.1.7`, `fix/analytics-tracking`, `fix/ga4-internal-cookie`, `fix/hil-performance-1.0.1`, `fix/messages-booking-date-utc`, `fix/property-drive-times-db`, `fix/seo-audit-093026`, `fix/seo-audit-low-100426`, `fix/verify-stripe-payment-server-side`, `manual-booking-fix-temp`, `release/dev-to-main-2026-09-28`, `remove-manual-fix-route`, `seo/weddings-accommodation-rework`.
   - *New build script (4):* `chore/prisma-migrations-baseline`, `docs/db-migrations-closeout-100626` (in `main`); `integrate/db-migrations-into-dev-100626`, `integrate/main-into-dev-100626` (merge branches, in `dev`).
-- **Active work — 0.** The only unreleased work is the footer credit (DEC-025), and it lives on `dev`.
+- **Active work — 0.** (Footer credit, DEC-025, was released to `main` 2026-10-06 — see Housekeeping decisions below.)
 - **Uncertain — 1.** `feat/netcore-footer-credit` (PR #37, merged into `dev`, not on `main`; **old build script**). Redundant with `dev`, but it is the named branch of work that has not been released. Delete it, or keep it until the footer ships — Owner's call. Do not push to it without merging `main` in first.
 
 **Recommendation:** delete the 26 merged branches; that removes 22 of the 23 places a push could still trigger `db push` (against the dev database). Turning on GitHub's "Automatically delete head branches" would stop the pile re-forming.
+
+### Housekeeping decisions (Owner-confirmed, recorded 2026-10-06)
+- Obsolete remote branches and the final-closeout branch were deleted; GitHub "Automatically delete head branches" is enabled.
+- The old `.env` backup (`.env.bak-20261006-pre-dev-default`) was moved to the trash.
+- The production recovery backup `~/hil-db-backups/hil-production-20261006T101529Z.sql.gz` is **retained for 30 days, through 2026-11-05**. Do not delete it before then.
+- A second migration machine is deferred.
+- `feat/netcore-footer-credit` (old build script, fully contained in `main` after PR #63) is deleted after the footer release; no unique work remained.
 
 ### Not done / limits
 - No GitHub-hosted migration workflow: runner reach to Hostinger was never tested, and no hosted database credential is stored in GitHub.
@@ -173,7 +180,7 @@ Status: **Complete — live on both sites.** Main-site code: PR #38 (`3168324`),
 
 Area: Website | Blog | Brand
 
-Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged or deployed. Blog: change prepared, not applied** (the Chief of Staff applies it in WP admin).
+Status: **Main site: live on production 2026-10-06** (PR #37 → `dev` 2026-09-30; released by PR #63, merge `2ffacaa`, Production deployment `6886658355`; all five required checks passed; verified on dev.haveninlipa.com and live haveninlipa.com `/`, `/privacy`, `/terms`, `/faq`, `/properties`: one credit link each, none on `/admin/login`). Release also tightened the mobile breakpoint from `max-[769px]` to exactly `max-[768px]`. **Blog: not applied** (needs WP admin / Theme File Editor; the live blog footer has no credit as of 2026-10-06).
 
 - **Reference:** the live tribemedspa.com footer, fetched 2026-09-29 (details in DEC-025):
   - the whole phrase "Powered by NetCoreSolutions.com" is one plain link, on a second line under the copyright, on the left of the legal row;
@@ -182,7 +189,7 @@ Status: **Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`),
 - **Main site:** `src/components/layout/Footer.tsx`, bottom row.
   - The legal row is now 14px white/55 (was 12.5px): copyright, then the linked credit on the next line, with Privacy/Terms on the right.
   - The link hovers/focuses to white/85 with an underline.
-  - On mobile it is stacked and centred (`max-[769px]:flex-col text-center`).
+  - On mobile it is stacked and centred (`max-[768px]:flex-col text-center`).
   - It is on every page that renders `<Footer />`, and deliberately not on `/admin/*` or `/pay/[token]`.
   - New test `src/lib/__tests__/footer-credit.test.ts` renders the real Footer and checks link scope, href, no target/rel, placement, 14px/white-55, underline only on hover/focus, the mobile classes and that there is no GeneratePress.
 - **GeneratePress:** the only repo mention was a `CLAUDE.md` note ("not a GeneratePress child theme"), now reworded. Nothing in `content/seo`. None on the live blog (homepage, post, 404, `/wp-json`, theme `style.css`), and `/wp-content/themes/generatepress/` returns 404.
