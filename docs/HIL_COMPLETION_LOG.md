@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-05 — ₱200/hour Early Check-In / Late Checkout E2E acceptance
+
+Area: Website / Additional Charges
+
+Status: **Complete — Owner-attested acceptance.**
+
+### Outcome
+The Owner attests that the ₱200/hour Early Check-In / Late Checkout workflow was exercised end-to-end and works across all supported payment types. During acceptance testing, the Owner also encountered and corrected a Stripe environment-key configuration issue: Development/Preview use Stripe test keys, while Production uses live keys.
+
+### Evidence boundary
+This completion record is **Owner attestation from the 2026-10-05 project session**, not independently reconstructed from GitHub telemetry. The implementation itself remains traceable to the existing Additional Charges/hourly-fee commits and deployment history.
+
+---
+
 ## 2026-10-05 — Durable documentation reconciliation
 
 Area: Project governance / documentation
