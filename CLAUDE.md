@@ -49,11 +49,9 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 
 ## Build & Deployment
 
-**Build command (runs on every Vercel deploy):**
-```
-prisma db push --skip-generate && prisma generate && next build
-```
-This syncs the DB schema and regenerates the Prisma client before every build.
+**No deployment changes the database schema** (DEC-026). `npm run build` is `npm run build:app` (`prisma generate && next build`). Vercel runs `vercel-build`, which adds a read-only release gate (`scripts/migration-gate.mjs`) that fails the build if a migration in the commit is not yet applied.
+
+**Schema changes** are migrations in `prisma/migrations/`, applied by an operator with `npm run db:migrate -- …` *before* the code is merged — see [docs/HIL_MIGRATION_RUNBOOK.md](docs/HIL_MIGRATION_RUNBOOK.md). Never run `prisma db push`, and never run a bare `prisma migrate dev` / `migrate reset` in this folder: the local `.env` `DATABASE_URL` has pointed at production.
 
 **Seed admin user:**
 ```

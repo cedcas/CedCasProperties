@@ -195,7 +195,11 @@ model GuestMessage {
 
   @@index([bookingId, sentAt])
   @@index([sourceQuickReplyId])
-  @@index([messageId])
+  // InnoDB caps an index key at 3072 bytes, so MariaDB has always stored this index as a
+  // 768-character prefix of the 998-character column. Declaring the prefix keeps the schema
+  // equal to the database; without it Prisma sees a difference and drops and recreates the
+  // index on every schema sync (which `prisma db push` did on every deploy until DEC-026).
+  @@index([messageId(length: 768)])
 }
 
 model EmailPollState {

@@ -87,8 +87,8 @@ Required variables:
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in your values
-npx prisma db push
+cp .env.example .env.local   # fill in your values; DATABASE_URL must be a LOCAL database
+DATABASE_URL="mysql://root@127.0.0.1:3306/hil_local" npx prisma migrate deploy   # builds the schema
 npx prisma generate
 npm run dev
 ```

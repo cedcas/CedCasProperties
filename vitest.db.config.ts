@@ -9,7 +9,8 @@ import path from "node:path";
  *
  *   TEST_DATABASE_URL="mysql://root@127.0.0.1:33917/hil_amend_test" npm run test:db
  *
- * (create the schema first: `DATABASE_URL=$TEST_DATABASE_URL npx prisma db push --skip-generate`).
+ * (create the schema first: `DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate deploy` — always with
+ * DATABASE_URL set explicitly on the command line, never from `.env`).
  *
  * SAFETY. Prisma Client falls back to the project `.env` when DATABASE_URL is unset, and
  * that file points at PRODUCTION. So this config sets DATABASE_URL explicitly and refuses
