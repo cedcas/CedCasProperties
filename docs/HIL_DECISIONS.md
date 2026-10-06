@@ -657,7 +657,7 @@ None
 
 Date: 2026-09-29
 Renumbered: was DEC-023 on `dev` until 2026-10-02. It clashed with the blog-loading decision already recorded as DEC-023 on `main`, so this one took the next free number. Commit `18bcdc4` and PR #37 still say DEC-023 in their titles.
-Status: Active. **Main site: LIVE on production 2026-10-06.** PR #37 merged into `dev` 2026-09-30 (`6083e7f`); released to `main` by PR #63 (merge `2ffacaa`, Production deployment `6886658355` success, live footer verified on haveninlipa.com). **Blog: NOT applied** (still outstanding: no WordPress admin / Theme File Editor access in the release session; live blog footer has no credit).
+Status: Active. **Main site: LIVE on production 2026-10-06.** PR #37 merged into `dev` 2026-09-30 (`6083e7f`); released to `main` by PR #63 (merge `2ffacaa`, Production deployment `6886658355` success, live footer verified on haveninlipa.com). **Blog: LIVE 2026-10-06.** Applied on the live blog 2026-10-06 by direct edit of the live theme files over SSH: `footer.php` credit line, `main.css` (0.875rem + `a.footer-credit` rules), `style.css` Version 1.0.1. A pre-change backup of the three files (with checksums) is kept on the hosting account outside the web root; location is in the Owner's notes, not this repo. `php -l` clean; LiteSpeed purged and object cache flushed; verified over HTTP on the blog home, a post and the 404 page (one credit link each, no GeneratePress, new CSS served). Not visually checked in a browser; Hostinger CDN not separately flushed.
 Area: Website | Blog | Brand
 
 ### Decision
