@@ -59,7 +59,7 @@ describe("Footer credit (DEC-025)", () => {
     expect(rowClass).toEqual(
       expect.arrayContaining(["flex", "flex-wrap", "items-center", "justify-between", "text-[14px]", "text-white/55"])
     );
-    expect(rowClass).toEqual(expect.arrayContaining(["max-[769px]:flex-col", "max-[769px]:text-center"]));
+    expect(rowClass).toEqual(expect.arrayContaining(["max-[768px]:flex-col", "max-[768px]:text-center"]));
     const tag = html.match(/<a [^>]*href="https:\/\/netcoresolutions\.com"[^>]*>/)![0];
     const cls = tag.match(/class="([^"]*)"/)![1].split(" ");
     expect(cls).toEqual(

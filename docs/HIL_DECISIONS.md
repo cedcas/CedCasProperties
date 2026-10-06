@@ -678,7 +678,7 @@ A consistent, low-key attribution across every property the Owner runs, without 
 
 ### Implications
 - **Main site:** `src/components/layout/Footer.tsx`, bottom legal row.
-  - The row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[769px]:flex-col max-[769px]:text-center`, i.e. stacked and centred at ≤768px.
+  - The row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[768px]:flex-col max-[768px]:text-center`, i.e. stacked and centred at ≤768px.
   - Left block: copyright, `<br />`, then `<a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>`.
   - The link inherits white/55 and is `no-underline`. On hover/focus-visible it becomes `text-white/85` (HIL's footer hover colour) plus underline.
   - Privacy/Terms stay on the right and are now 14px, since the whole row is 14px as on TMS (was 12.5px). Their hover is unchanged.
