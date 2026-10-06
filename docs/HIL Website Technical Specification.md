@@ -531,7 +531,7 @@ src/
   components/
     layout/
       Navbar.tsx                      # Nav with working anchor links from any page
-      Footer.tsx                      # Async server component; "Plan Your Trip" column fetches latest 5 posts from WP REST API — see HIL Blog Technical Specification
+      Footer.tsx                      # Async server component; "Plan Your Trip" column fetches latest 5 posts from WP REST API — see HIL Blog Technical Specification. Bottom legal row (14px): copyright + "Powered by NetCoreSolutions.com" credit link (DEC-025) on the left, Privacy/Terms on the right
     sections/
       Hero.tsx
       Properties.tsx                  # Property listing cards with pagination
@@ -1661,3 +1661,9 @@ The `haven-pulse` keyframes in [globals.css](../src/app/globals.css) animate `tr
 - Property card "View Details" links carry `aria-label={`View details for ${property.name}`}` so screen readers can distinguish otherwise-identical links.
 - Heading hierarchy on the homepage: `h1` (Hero) → `h2` (each top-level section) → `h3` (sub-sections and footer columns). **Do not introduce `h4`** without an intervening `h3` in the same section.
 - Footer body text uses `text-white/70` and secondary text `text-white/55` on `bg-[#1c1c1c]` to meet WCAG AA contrast; hover state is `text-white/85`.
+- **Footer credit (DEC-025, copied from the live tribemedspa.com footer):**
+  - The bottom legal row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55`. At ≤768px it stacks and centres (`max-[769px]:flex-col max-[769px]:text-center`).
+  - Left block: copyright, `<br />`, then `<a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` (`NETCORE_CREDIT_URL`). The whole phrase is the link, with no target/rel. It inherits white/55 and is `no-underline`; on hover/focus-visible it becomes `text-white/85` plus underline.
+  - Privacy/Terms sit on the right at the same 14px.
+  - It is on every page that renders `<Footer />`, and deliberately not on `/admin/*` or `/pay/[token]`.
+  - Test: `src/lib/__tests__/footer-credit.test.ts`. Keep it subtle: no logo, no accent colour at rest, and never write "NetCore Solutions".

@@ -10,6 +10,9 @@ type WpPost = {
 
 type BlogLink = { label: string; href: string };
 
+/** Footer credit required on every Cedric site (DEC-025; reference: live tribemedspa.com footer). */
+export const NETCORE_CREDIT_URL = "https://netcoresolutions.com";
+
 const STATIC_BLOG_LINKS: BlogLink[] = [
   { label: "15 Things to Do in Lipa",    href: "https://blog.haveninlipa.com/15-best-things-to-do-in-lipa-city-batangas-2026-locals-guide/" },
   { label: "Best Restaurants in Lipa",   href: "https://blog.haveninlipa.com/best-restaurants-cafes-in-lipa-city-batangas-2026-food-guide/" },
@@ -173,11 +176,24 @@ export default async function Footer() {
 
         </div>
 
-        <div className="py-5 flex flex-wrap items-center justify-between gap-3">
-          <p className="text-[12.5px] text-white/55">&copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.</p>
+        {/* Legal row: mirrors the live tribemedspa.com footer (.tms-footer__legal / .tms-footer__credit),
+            DEC-025. Copyright + credit on the left, legal links on the right; 14px in HIL's muted
+            white/55; whole "Powered by NetCoreSolutions.com" is the link, no underline until
+            hover/focus; stacks and centers at <=768px. */}
+        <div className="py-5 flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[768px]:flex-col max-[768px]:text-center">
+          <div>
+            &copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.
+            <br />
+            <a
+              href={NETCORE_CREDIT_URL}
+              className="no-underline hover:underline focus-visible:underline hover:text-white/85 focus-visible:text-white/85 transition-colors duration-200"
+            >
+              Powered by NetCoreSolutions.com
+            </a>
+          </div>
           <div className="flex gap-5">
-            <Link href="/privacy" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
-            <Link href="/terms" className="text-[12.5px] text-white/55 hover:text-white/85 transition-colors duration-200">Terms of Service</Link>
+            <Link href="/privacy" className="hover:text-white/85 transition-colors duration-200">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-white/85 transition-colors duration-200">Terms of Service</Link>
           </div>
         </div>
       </div>

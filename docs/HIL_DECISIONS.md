@@ -653,6 +653,44 @@ None
 
 ---
 
+## DEC-025 — Footer credit brand standard: Powered by NetCoreSolutions.com, no GeneratePress branding
+
+Date: 2026-09-29
+Renumbered: was DEC-023 on `dev` until 2026-10-02. It clashed with the blog-loading decision already recorded as DEC-023 on `main`, so this one — not yet released to `main` — took the next free number. Commit `18bcdc4` and PR #37 still say DEC-023 in their titles.
+Status: Active. Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged. Blog: change prepared for WP admin, not applied.
+Area: Website | Blog | Brand
+
+### Decision
+Owner brand standard for all of Cedric's sites, effective 2026-09-29: every site carries a subtle footer credit, "Powered by NetCoreSolutions.com", written as one word with no spaces. No GeneratePress branding anywhere: footer, theme metadata or visible UI.
+
+**Reference: the live footer on https://tribemedspa.com, as fetched 2026-09-29, HTML plus its theme CSS.** Copy it exactly, except for colour, where each site uses its own muted footer gray. What the live TMS footer does:
+- **Markup:** `<div class="tms-footer__legal"><div class="tms-footer__credit">© 2026 Tribe Med Spa<br><a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a></div><nav class="tms-legal-nav">Privacy Policy · Terms & Conditions</nav></div>`.
+- **Link scope:** the **whole phrase** "Powered by NetCoreSolutions.com" is the link, with no `target`/`rel`.
+- **Size:** the whole legal row is `font-size: 0.875rem` (14px): copyright, credit and legal links.
+- **Colour and hover:** text and link share the muted footer colour (TMS `#4a4a4a`), with `text-decoration: none`. On `:hover` and `:focus-visible` the link turns the stronger text colour (TMS `#1a1a1a`) and gets `text-decoration: underline`.
+- **Placement:** last row of the footer, under a 1px top border. `display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:1rem`. The credit block (copyright, then the credit on a second line) is on the left and the legal nav on the right.
+- **Mobile (`max-width: 768px`):** the row becomes `flex-direction: column; text-align: center`, and the legal list is centred.
+
+The original Owner brief linked only the domain. The live TMS footer, now the authoritative reference, links the whole phrase, so HIL follows TMS.
+
+### Reason
+A consistent, low-key attribution across every property the Owner runs, without competing with the site's own brand or conversion elements.
+
+### Implications
+- **Main site:** `src/components/layout/Footer.tsx`, bottom legal row.
+  - The row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[768px]:flex-col max-[768px]:text-center`, i.e. stacked and centred at ≤768px.
+  - Left block: copyright, `<br />`, then `<a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>`.
+  - The link inherits white/55 and is `no-underline`. On hover/focus-visible it becomes `text-white/85` (HIL's footer hover colour) plus underline.
+  - Privacy/Terms stay on the right and are now 14px, since the whole row is 14px as on TMS (was 12.5px). Their hover is unchanged.
+  - `NETCORE_CREDIT_URL` is guarded by `src/lib/__tests__/footer-credit.test.ts`.
+- **Main-site coverage:** every public page that renders `<Footer />` has the credit. It is deliberately **not** on `/admin/*` (Owner-only UI) or on `/pay/[token]` (a noindex, single-purpose payment screen with no site footer).
+- **Blog (`haveninlipa-blog` theme):**
+  - `footer.php` gets `<br><a class="footer-credit" href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` inside the `.footer-bottom` copyright `<p>`.
+  - `assets/css/main.css` gets `.footer-bottom { font-size: 0.875rem }`, plus `a.footer-credit` in the blog's muted footer gray `rgba(255,255,255,0.5)` with no underline. On hover/focus it becomes `var(--color-primary-light)` plus underline.
+  - Mobile stacking and centring at ≤768px already exists in the theme.
+  - The live `footer.php` has drifted from the Dropbox source, so apply via Theme File Editor rather than reinstalling the old source.
+- **GeneratePress:** as of 2026-09-29 there is no GeneratePress branding in the repo. The only old mention was a `CLAUDE.md` note, now reworded; the remaining mentions are these decision records and a test that asserts its absence. There is none on the live blog either, and `/wp-content/themes/generatepress/` returns 404. Structural references (e.g. a `Template: generatepress` child theme, class names) would be acceptable on other sites, but HIL has none. Re-check whenever a theme changes.
+- A new site, or a footer rewrite, must keep this credit. Do not make it more prominent (no logo, no larger type, no accent colour at rest) without an Owner decision.
 ## DEC-026 — Deployments never change the schema; migrations are version-controlled, applied by an operator, and enforced by a read-only release gate
 
 Date: 2026-10-06

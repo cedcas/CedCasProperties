@@ -18,6 +18,19 @@
 
 ---
 
+## Theme (`haveninlipa-blog`)
+
+- **Theme:** custom `haveninlipa-blog`, "HavenInLipa Blog" v1.0.0 (Author: HavenInLipa), not GeneratePress or any third-party parent theme. There is no GeneratePress anywhere on the live site: `/wp-content/themes/generatepress/` returns 404, and homepage, post, 404, `/wp-json` and theme `style.css` were all checked on 2026-09-29.
+- **Source:** not in this repo. The only copy is Dropbox `/VSCode/old/wordpress-themes/haveninlipa-blog/` (+ `haveninlipa-blog.zip`, dated 2026-04-07). `style.css` and `assets/css/main.css` are byte-identical to live.
+- **Drift:** live `footer.php` has been edited in WP since then. The Quick Links fallback now has /properties, /#why and FAQ, and the legal links are hardcoded to `https://haveninlipa.com/privacy` and `/terms`; the Dropbox source still uses `get_privacy_policy_url()` / `home_url('/terms')`. **Reinstalling the Dropbox zip would revert those edits.** Change the theme with small edits to the live files in Appearance → Theme File Editor, or first export the live theme and make that the new source.
+- **Footer:** `footer.php` is hardcoded: brand column, Quick Links (fallback array unless a `footer-1` menu is assigned), a Contact column from the `footer-col-3` widget area (a Block widget live), and `.footer-bottom` with the copyright `<p>` and `.footer-bottom__links` nav. Styles are in `assets/css/main.css` (`.footer-bottom` ~line 945; mobile stacks and centres it at ≤768px).
+- **Footer credit (DEC-025, copied from the live tribemedspa.com footer):**
+  - `footer.php`: `<br><a class="footer-credit" href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>` inside the `.footer-bottom` copyright `<p>`.
+  - `main.css`, after `.footer-bottom__links`: `.footer-bottom { font-size: 0.875rem }`; `a.footer-credit` in `rgba(255,255,255,0.5)` with no underline; on hover/focus-visible `var(--color-primary-light)` plus underline.
+  - Mobile stacking/centring at ≤768px already exists.
+  - `Version: 1.0.1`.
+  - Prepared 2026-09-29 for the Chief of Staff (Theme File Editor edits, or the optional 1.0.1 zip after comparing with live). **Not applied yet.**
+
 ## Blog Integration (WordPress)
 
 The blog at `blog.haveninlipa.com` is a separate WordPress site on Hostinger (not in this repo). The main rental app reads from its public REST API for the dynamic footer.
