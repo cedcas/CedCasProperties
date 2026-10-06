@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-05 — Durable documentation reconciliation
+
+Area: Project governance / documentation
+
+Status: **Complete as a documentation pass; no application, database, WordPress, payment, or production configuration changes.**
+
+### Outcome
+- Reconciled `HIL_PROJECT_STATUS.md` against GitHub `main` and the durable Dropbox workspace instead of relying on chat history.
+- Corrected stale Stay Match wording: v1.0.2 is active; 12 high-traffic published posts were enrolled on 2026-10-04 and verified rendering the block live (PR #54 / merge `b906939`).
+- Corrected the SEO-audit follow-up state: PR #50 is merged to `main`; production deployment remains a separate verification step, and the manual `hil-seo` 1.1.8 WordPress upload remains pending unless separately verified.
+- Added durable **SHELVED** backlog records for third-party property/payment-profile planning, SMS reactivation, Hostinger MySQL → Supabase evaluation, and broader scheduled-job migration to Vercel. These records authorize no implementation.
+- Added a provenance rule: GrokBot/other AI work is represented through the normal layered docs when it materially affects state; GitHub/production evidence controls implementation status. Existing GrokBot GA4/GSC read-only access remains documented.
+
+### Important evidence boundary
+This reconciliation deliberately does **not** close items solely from conversational recollection when the connectors do not corroborate them. In particular, the durable status still treats the end-to-end hourly-fee workflow test as open until connector-backed evidence or a new recorded acceptance result is added.
+
+---
+
 ## 2026-10-04 — GA4 internal-traffic cookie marker; analytics Owner steps closed
 
 Area: Website / SEO (measurement)
