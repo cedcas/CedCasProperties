@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-04 (GA4 Analytics Events: Internal Traffic and Developer data filters confirmed Active by the Owner; internal-traffic cookie marker live, PR #49). Prior: 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-10-06 (Build & Deployment rewritten: `prisma db push` removed from builds, migration history, release gate, operator command — DEC-026). Prior: 2026-10-04 (GA4 Analytics Events: Internal Traffic and Developer data filters confirmed Active by the Owner; internal-traffic cookie marker live, PR #49). Prior: 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -48,7 +48,7 @@ The site is designed as a direct-booking alternative to Airbnb, with a savings c
 - **TypeScript** — used throughout the codebase
 
 ### Backend & Database
-- **Prisma 5** — ORM for database access and schema management; `prisma db push` runs on every Vercel deploy to sync schema changes automatically
+- **Prisma 5** — ORM for database access. Schema changes are version-controlled migrations in `prisma/migrations/`, applied by an operator; no deployment changes the schema ([DEC-026](HIL_DECISIONS.md), see [Build & Deployment](#build--deployment))
 - **MySQL (Hostinger)** — production database hosted at `[redacted: DB host, stored in Vercel env]`; connection via `DATABASE_URL` environment variable
 
 ### Authentication
@@ -286,7 +286,7 @@ Airbnb-inspired threaded messaging tied to confirmed bookings. One-way in Phase 
 
 **Multi-property migration backfill (2026-06-29, `b190204`).** When QuickReply moved from a single `propertyId` to a `propertyIds` JSON array, the schema change was kept **additive** (new column added, old `propertyId` left vestigial) so the auto-deploy `prisma db push` never hits a destructive drop. Existing rows are migrated by the idempotent one-time script [prisma/backfill-quickreply-propertyids.ts](../prisma/backfill-quickreply-propertyids.ts) (copies each non-null `propertyId` → `propertyIds = [id]`), run **once on prod after the schema is pushed**: `npx ts-node --compiler-options '{"module":"CommonJS"}' prisma/backfill-quickreply-propertyids.ts`. Subject to the same Hostinger DB-access gotcha below — if a laptop can't reach 3306, run it via a temporary admin-gated dev route from inside Vercel.
 
-**Operational gotcha — direct DB access from outside Hostinger is blocked.** Hostinger's shared-hosting firewall silently drops TCP packets to port 3306 from non-allowlisted IPs regardless of the "Remote MySQL" UI setting (even when `%` is granted). Vercel's egress is allowed; external IPs (including developer laptops and Claude's sandbox) are not. Consequences: `prisma db push`, Prisma Studio, and any local script using `DATABASE_URL` may fail with "Can't reach database server". **Workaround:** deploy a temporary admin-gated POST route under `src/app/api/admin/dev/...` that runs the same Prisma logic from inside Vercel's network, call it from the browser devtools console while logged in as admin, then revert the route. This session used this pattern to insert 10 demo-thread bookings — see commit `0319840` → `1100226`.
+**Operational gotcha — direct DB access from outside Hostinger is blocked.** Hostinger's shared-hosting firewall silently drops TCP packets to port 3306 from non-allowlisted IPs regardless of the "Remote MySQL" UI setting (even when `%` is granted). Vercel's egress is allowed; external IPs (including developer laptops and Claude's sandbox) are not. Consequences: Prisma Studio and any local script using `DATABASE_URL` may fail with "Can't reach database server". *(2026-10-06: direct access from the Owner's Mac has worked on several occasions since — see DEC-012's updates. Schema migrations run from an operator machine after a reachability check, never through a temporary route — [runbook](HIL_MIGRATION_RUNBOOK.md).)* **Workaround:** deploy a temporary admin-gated POST route under `src/app/api/admin/dev/...` that runs the same Prisma logic from inside Vercel's network, call it from the browser devtools console while logged in as admin, then revert the route. This session used this pattern to insert 10 demo-thread bookings — see commit `0319840` → `1100226`.
 
 ### Guest Messaging System (Phase 2 — Email-Only with Reply Threading)
 
@@ -621,12 +621,52 @@ public/
 
 ## Build & Deployment
 
-**Build command (package.json):**
-```
-prisma db push --skip-generate && prisma generate && next build
-```
+**Deployments never change the database schema** ([DEC-026](HIL_DECISIONS.md), 2026-10-06). Operating procedure: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
 
-This ensures the database schema is always in sync and the Prisma client is freshly generated on every Vercel deployment.
+| Script (`package.json`) | Runs | Touches a database? |
+|---|---|---|
+| `build` | `npm run build:app` | No |
+| `build:app` | `prisma generate && next build` | No (CI's `Build` job uses this) |
+| `vercel-build` | `prisma generate && node scripts/migration-gate.mjs && npm run build:app` | **Read-only.** Vercel runs this script instead of `build` when it exists |
+| `db:migrate` | `node scripts/db-migrate.mjs` | Yes — the only schema-writing entry point; operator-run, never automatic |
+| `test:migrations` | `node scripts/test-migrations.mjs` | Throwaway loopback databases only |
+
+### Migration history — `prisma/migrations/`
+
+- `20261005000000_baseline/migration.sql` reproduces the schema as it stood on production on 2026-10-05 (23 tables). It was generated from `schema.prisma`, then put in production's physical column and index order, so a database built from it dumps (`mariadb-dump --no-data`) byte-identical to production and dev. One foreign-key index (`GuestMessage_quickReplyId_fkey`) is declared explicitly for that reason.
+- The existing dev and production databases are **marked** as having the baseline (`prisma migrate resolve --applied`): one `_prisma_migrations` table, one row, no application DDL. The baseline's SQL is only ever executed on an empty database.
+- `.gitattributes` pins migration SQL to LF line endings — Prisma stores a checksum of each file.
+- **Gotcha — index prefix lengths.** `GuestMessage.messageId` is `VARCHAR(998)`; InnoDB caps an index key at 3072 bytes, so MariaDB stores its index as a 768-character prefix. Until 2026-10-06 `schema.prisma` did not declare that, so every `prisma db push` build dropped and recreated the index. It is now `@@index([messageId(length: 768)])`. Any future index on a long string column needs its prefix declared.
+
+### Release gate — [scripts/migration-gate.mjs](../scripts/migration-gate.mjs)
+
+Runs in the Vercel build before `next build`, for Production and Preview alike, against that environment's `DATABASE_URL`. It issues `SELECT`s only. It compares the migrations in the commit with `_prisma_migrations` (shared logic in [scripts/lib/migration-history.mjs](../scripts/lib/migration-history.mjs)) and exits non-zero — failing the build, leaving the previous deployment live — when:
+
+- the database has no migration history (never baselined);
+- a migration in the commit is not applied (pending);
+- a migration failed or was interrupted;
+- an applied migration's file was edited (checksum mismatch);
+- the history cannot be read (database unreachable — fails closed).
+
+A database that is *ahead* of the commit only warns, so rollbacks and branches that are behind the dev database still build. Log lines start with `[migration-gate]`.
+
+This is what orders a release: Vercel deploys `main` on its own, so a migration job elsewhere could finish after the build. With the gate, schema-dependent code cannot build until its migration has been applied. **The Vercel dashboard's Build/Install Command overrides must stay off**; an override would skip `vercel-build`.
+
+### Operator command — [scripts/db-migrate.mjs](../scripts/db-migrate.mjs)
+
+`status` (read-only), `baseline` (one-time), `deploy`, `new` (authoring; loopback database only). Common behaviour:
+
+- **Target.** URL from `MIGRATE_DATABASE_URL` or one named key of an env file — never `DATABASE_URL`. The server is asked which database it is; a mismatch with `--expect-database` stops the run. `--target production` writes also need `--confirm-production`.
+- **Commit.** `baseline`/`deploy` need `--commit <sha>` equal to the checked-out commit, with no uncommitted change under `prisma/`, `scripts/`, `package.json`, `package-lock.json`.
+- **Drift check.** Builds a scratch database on a loopback MariaDB (`--reference-url`) from the relevant migrations and compares the target with it two ways: Prisma's `migrate diff`, and an `information_schema` fingerprint that also covers what Prisma ignores (column order, collations, engines, views, triggers, routines, events, check constraints). Runs before any write and again after `deploy`.
+- **Deploy.** Lists pending migrations and stops; applies only when `--apply` names exactly those. Refuses on a failed row, an edited migration, a database ahead of the commit, or out-of-order history. Uses the locked Prisma CLI from `node_modules` (not `npx`). Prisma's own advisory lock serializes concurrent runs against one database.
+- **Failure.** Exits non-zero, never marks anything applied, never retries. A second run refuses while the failed row exists.
+- **Record.** Writes `.migration-runs/<time>-<target>-<command>.json` (gitignored): target, database, commit, migrations before/after, result. Connection strings and passwords are redacted from all output.
+
+### Guardrails
+
+- [src/lib/__tests__/build-safety.test.ts](../src/lib/__tests__/build-safety.test.ts) (in `npm test`, no database): no schema-writing command in any npm lifecycle/build script, `vercel.json`, or workflow; no workflow references a hosted database secret; the gate script contains only `SELECT`s; the baseline's checksum is pinned; history-evaluation rules.
+- [scripts/test-migrations.mjs](../scripts/test-migrations.mjs) (`npm run test:migrations`; CI job **Migrations**, MariaDB 11.8 container): empty database → `migrate deploy` → equals `schema.prisma`; a `schema.prisma` edit without a migration is detected; baselining a populated database is metadata-only and leaves data checksums unchanged; a drifted database is not baselined; a pending migration blocks the gate until applied; a failing migration fails closed and is not re-run.
 
 **Seed admin user:**
 ```
@@ -682,9 +722,9 @@ npm run qr:hash
 
 ### CI (GitHub Actions) — repaired 2026-09-07
 
-[.github/workflows/ci.yml](../.github/workflows/ci.yml) runs four jobs on every push/PR to `main` or `dev`: **Lint**, **Type Check**, **Unit Tests**, **Build**. These are separate, stably-named status checks (suitable for branch protection), not one combined job.
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) runs five jobs on every push/PR to `main` or `dev`: **Lint**, **Type Check**, **Unit Tests**, **Build**, and (since 2026-10-06) **Migrations**, which tests the migration history against a throwaway MariaDB 11.8 container on the runner — never a hosted database. These are separate, stably-named status checks (suitable for branch protection), not one combined job.
 
-**The CI `Build` job never runs the production `build` script.** It runs `npm run build:app` (`prisma generate && next build`) — application compilation only. `build` (`prisma db push --skip-generate && prisma generate && next build`, unchanged) stays Vercel's production-only entry point; no CI job ever invokes it, so no PR build can write to any database, run a migration, or seed anything. The Build job's `DATABASE_URL`/`NEXTAUTH_SECRET`/`NEXTAUTH_URL` are placeholders, parsed by Prisma Client generation and Next's env validation but never contacted — never a production credential.
+**The CI `Build` job never runs the production `build` script.** It runs `npm run build:app` (`prisma generate && next build`) — application compilation only. Since 2026-10-06 `build` is the same thing (`npm run build:app`), and Vercel's own entry point, `vercel-build`, adds only a read-only check ([DEC-026](HIL_DECISIONS.md)). No PR build can write to any hosted database, run a migration against one, or seed anything. The Build job's `DATABASE_URL`/`NEXTAUTH_SECRET`/`NEXTAUTH_URL` are placeholders, parsed by Prisma Client generation and Next's env validation but never contacted — never a production credential.
 
 **Why this needed repair:** both were failing on every PR (confirmed identical on #16 and #17, unrelated to either PR's content):
 - **Build** — `/sitemap.xml` queried Prisma directly at static-export time, and `getChatTree()` (mounted in the root layout via `ChatWidgetServer`, so it runs for *every* route) did the same, unguarded. Any statically-prerendered page — including the shared `/_not-found` — crashed the whole build against CI's placeholder DB. Fixed by pointing `/sitemap.xml` at the existing cached `getPublicListings()` helper with `export const dynamic = "force-dynamic"` (same precedent as `/about`/`/properties`, DEC-005), and by having `getChatTree()` ([src/lib/chat/get-chat-tree.ts](../src/lib/chat/get-chat-tree.ts)) fall back to the generic (non-DB) chat tree if the property query throws, instead of crashing the page. See [DEC-017](HIL_DECISIONS.md).
@@ -870,7 +910,7 @@ Dev and production now use **separate Hostinger databases**. Preview no longer i
 | `DATABASE_URL` | Production | `[redacted: production DB name]` |
 | `DATABASE_URL` | Preview + Development | `[redacted: dev DB name]` (user `[redacted: dev DB user]`) |
 
-No code change was required — `DATABASE_URL` is consumed solely by `prisma/schema.prisma`, nothing in `src/` reads it. `prisma db push` builds the schema on first deploy; production was cloned in via phpMyAdmin to carry admin logins and properties. `airbnbIcsUrl` is cleared on the dev copies so dev neither reads from nor writes toward a live channel.
+No code change was required — `DATABASE_URL` is consumed solely by `prisma/schema.prisma`, nothing in `src/` reads it. At the time, `prisma db push` built the schema on first deploy (no longer — a new database is built with `prisma migrate deploy`, [runbook](HIL_MIGRATION_RUNBOOK.md)); production was cloned in via phpMyAdmin to carry admin logins and properties. `airbnbIcsUrl` is cleared on the dev copies so dev neither reads from nor writes toward a live channel.
 
 **Still shared with production:** `SMTP_*`, Stripe and Blob credentials. A dev booking sends a real email from `customerservice@haveninlipa.com`, and live Stripe keys mean a real charge. Twilio is safe by default (console-only unless `SMS_FORCE_SEND=1`).
 
@@ -936,7 +976,7 @@ Current status of these items (owner/tester actions, not implementation work) is
 
 ### Deploying safely
 
-**Preferred: a dedicated dev database.** Point `DATABASE_URL` at its own database for the Vercel **Preview** environment only. No code changes are required — `DATABASE_URL` is consumed solely by `prisma/schema.prisma`, nothing in `src/` reads it, and no host is hardcoded. `prisma db push` builds the schema on first deploy. Cloning production via phpMyAdmin avoids the empty-DB deadlock (no `AdminUser` → no admin login, and Hostinger blocks `npm run seed` from a laptop unless the IP is whitelisted under Remote MySQL). Clear `airbnbIcsUrl` on the dev copies so dev neither reads from nor writes toward a live channel. Note that `SMTP_*`, Stripe and Blob credentials remain **shared** with production regardless.
+**Preferred: a dedicated dev database.** Point `DATABASE_URL` at its own database for the Vercel **Preview** environment only. No code changes are required — `DATABASE_URL` is consumed solely by `prisma/schema.prisma`, nothing in `src/` reads it, and no host is hardcoded. Build the schema with `prisma migrate deploy` run by an operator ([runbook](HIL_MIGRATION_RUNBOOK.md)) — a Vercel build will not create it, and fails at the release gate until the database has migration history. Cloning production via phpMyAdmin (which carries `_prisma_migrations` along) avoids the empty-DB deadlock (no `AdminUser` → no admin login, and Hostinger blocks `npm run seed` from a laptop unless the IP is whitelisted under Remote MySQL). Clear `airbnbIcsUrl` on the dev copies so dev neither reads from nor writes toward a live channel. Note that `SMTP_*`, Stripe and Blob credentials remain **shared** with production regardless.
 
 **If the database is shared**, the dangerous artefact is a test **`Booking`**, not a test block. Production cannot read `AvailabilityBlock`, but `Booking` is shared and production's pre-existing `.ics` feed **exports it** — which is exactly how a test booking reached live Airbnb listings on 2026-08-06 and kept real dates closed after it was deleted (Airbnb had not re-polled). Create test bookings only on properties no channel subscribes to, and verify the production feeds are empty afterwards with `curl -s https://haveninlipa.com/api/calendar/<slug>.ics`.
 
@@ -1179,7 +1219,7 @@ Optional per-property fee charged per extra guest, per night, once a booking exc
 **Tests.** `src/lib/__tests__/stripe-payment.test.ts` (pure verifier) and `src/lib/__tests__/stripe-payment-routes.test.ts` (routes with mocked Stripe/Prisma). PR #23 changed 9 files, +952/−130.
 
 **Open follow-ups (not part of PR #23).**
-- **Unique constraint on `stripePaymentIntentId`** — the reuse check is a read-then-insert, so two concurrent requests with the same intent could both pass it; only a DB unique constraint closes that fully. Schema change → **needs Cedric's approval**, and it would reach production through the `prisma db push` in the Vercel build (see Build & Deployment).
+- **Unique constraint on `stripePaymentIntentId`** — the reuse check is a read-then-insert, so two concurrent requests with the same intent could both pass it; only a DB unique constraint closes that fully. Schema change → **needs Cedric's approval**, and it would reach production as a reviewed migration applied by an operator before the code is merged (see [Build & Deployment](#build--deployment)).
 - **Stripe webhook** — there is still no webhook; a card payment that succeeds but whose booking request never arrives (or fails verification) leaves money in Stripe with no booking. Until then, reconcile in the Stripe dashboard.
 - **Weekend-rate guard uses server-local time** — the "weekend rate required" loop in `computeBookingQuote` (moved verbatim from `/api/bookings`) calls `Date.getDay()` on UTC-midnight dates, i.e. server-local time rather than UTC. Harmless on Vercel (runs in UTC); would misclassify days on a server/dev machine west of UTC.
 
@@ -1200,7 +1240,7 @@ Optional per-property fee charged per extra guest, per night, once a booking exc
 - A guest who is simply slow (still paying at minute 10) produces an alert followed by the normal New Booking email — expected; the alert copy tells the Owner to check admin.
 - A late booking after an alert still links (`bookingId` is set whenever it is null), but no "resolved" email is sent.
 - Public endpoint with no rate limiting (none exists site-wide): every row needs a real property, valid dates, email and phone, and alerts dedupe per guest/stay — but a determined script could still generate alert emails.
-- Once this table exists, a build from any branch **without** `CheckoutAttempt` in `schema.prisma` against the same DB makes the build's `prisma db push` try to drop it → Prisma refuses (data loss) → **build fails**. Keep `dev` merged up with `main` (done 2026-09-28: `dev` fast-forwarded to `cbfd123`).
+- *(Historical — no longer applies since builds stopped pushing the schema, DEC-026.)* Once this table exists, a build from any branch **without** `CheckoutAttempt` in `schema.prisma` against the same DB makes the build's `prisma db push` try to drop it → Prisma refuses (data loss) → **build fails**. Keep `dev` merged up with `main` (done 2026-09-28: `dev` fast-forwarded to `cbfd123`).
 - Tests: [checkout-abandonment.test.ts](../src/lib/__tests__/checkout-abandonment.test.ts) (selection/dedupe, email escaping + both timezones, a cron pass over mocked Prisma, the endpoint, the booking link), run under UTC/Chicago/Manila.
 
 ---

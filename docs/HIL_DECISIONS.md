@@ -243,6 +243,8 @@ Never assume a local or CI script can reach the production DB. This also means D
 
 **⚠️ Update, 2026-09-06 — observed contradiction, cause unconfirmed.** During a Claude Code session (same day as DEC-015), `npm run dev` from this repo's working directory successfully read live data from the production database (`[redacted: production DB name]`) — the active `DATABASE_URL` in `.env` points at prod, not `DEV_DATABASE_URL`. This was a **read only** — no write, migration, or seed script was run, and no write was authorized. Cause is unknown: could mean Hostinger's allowlist changed, this specific harness's egress IP differs from whatever environment this decision was originally written against, or something else entirely. **Do not treat this as "DB access is now reliably available"** — the original reasoning (silent TCP drop from non-allowlisted IPs) may still hold in other environments or for write paths specifically. Any session that finds itself with apparent DB access should still get explicit Owner authorization before running anything beyond a read-only query, and should flag it the same way rather than assuming it's now the norm. Investigating *why* this happened is an open item — see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
 
+**Update, 2026-10-06 ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)).** Direct access from the Owner's Mac was observed again on 2026-10-05/06: TCP 3306 reachable, and read-only queries succeeded against both the production and dev databases (each identified by asking the server, not by variable name). Both database users are granted from any host (`@%`), so the remaining control is Hostinger's network filter, whose behaviour is still not understood. Schema migrations are therefore run from an operator machine after a reachability check ([runbook](HIL_MIGRATION_RUNBOOK.md)); reach from GitHub-hosted runners was **not** tested. This decision's temporary-admin-route pattern still applies to one-off data scripts when no operator machine can connect; it must not be used for schema migrations.
+
 2026-09-27: `manual-fix` route (`src/app/api/admin/dev/manual-fix/route.ts`) also removed from `dev` (it had been deleted on `main` 2026-09-17 via PR #21 but survived on `dev`).
 
 ### Supersedes
@@ -263,7 +265,7 @@ Vercel Preview/Development builds point `DATABASE_URL` at a dedicated dev databa
 Before the split, dev's `prisma db push` ran against the production database, creating tables `main`'s schema didn't declare and blocking every production deploy behind a data-loss guard until `dev` was merged to `main` to realign the schema.
 
 ### Implications
-A dev booking still sends a real email from `customerservice@haveninlipa.com` and can trigger a real Stripe charge — dev testing of payment flows must stay test-safe by convention, not by environment isolation. Never add `--accept-data-loss` to the build command to work around a schema-drift error; the guard is correct and the drift is the thing to fix.
+A dev booking still sends a real email from `customerservice@haveninlipa.com` and can trigger a real Stripe charge — dev testing of payment flows must stay test-safe by convention, not by environment isolation. Never add `--accept-data-loss` to the build command to work around a schema-drift error; the guard is correct and the drift is the thing to fix. *(2026-10-06: the build no longer runs `prisma db push` at all — [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate). `--accept-data-loss` remains forbidden everywhere.)*
 
 ### Supersedes
 None
@@ -350,6 +352,8 @@ GitHub Actions' "Build" and "Lint" checks failed on every PR for months (confirm
 - Never point a CI validation job at a real database, and never add `prisma db push` (or any write path) to a script a CI job runs — `build:app` exists specifically so `build` (Vercel-only) doesn't have to be touched or duplicated with drift risk.
 - Any new server component or helper mounted in `src/app/layout.tsx` (or another shared layout) that reads the database must handle a failed query gracefully — it runs on literally every route, static or dynamic, and an unguarded throw there is a site-wide build/render failure, not a contained one. `getChatTree()`'s try/catch-and-fall-back-to-the-static-tree is the reference pattern.
 - A public *page* that needs live DB data (as opposed to a layout-level component) uses the existing `export const dynamic = "force-dynamic"` + `unstable_cache`-wrapped-query pattern from [DEC-004](#dec-004--public-pages-read-prisma-directly-the-app-never-self-fetches-its-own-feed-route)/[DEC-005](#dec-005--cache-the-query-not-the-response-a-page-cannot-set-its-own-cache-control-on-vercel) instead — that pattern alone does not help a *layout*-level component, since making the whole root layout dynamic would force every route in the app to skip static generation.
+
+**⚠️ Amended 2026-10-06 by [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate).** The "database sync stays Vercel-only" half of this decision is obsolete: Vercel no longer syncs the schema either. `build` is now `npm run build:app`, and `prisma db push` runs nowhere. What stands unchanged: CI validation never touches a hosted database or receives its credentials, the four check names (`Lint`, `Type Check`, `Unit Tests`, `Build`) are stable, and layout-level code must tolerate a build-time database outage. The added `Migrations` check keeps to the same rule — it uses a throwaway MariaDB container on the runner.
 
 ### Supersedes
 None
@@ -571,7 +575,7 @@ Booking #140 (2026-09-27): the guest paid by GCash at 11:15 AM PHT but tapped "I
 ### Implications
 - `CheckoutAttempt` holds guest PII: 30-day purge, no PII sent to GA4. Alert recipient is `customerservice@haveninlipa.com`.
 - New time-sensitive cron jobs should use Vercel Cron in `vercel.json`. The three existing jobs still run on GitHub Actions / cron-job.org and could migrate later. That is not done.
-- Keep `dev` merged up with `main`: building a branch that lacks the model makes the production-style `prisma db push` fail, rather than drop the table.
+- Keep `dev` merged up with `main`: building a branch that lacks the model makes the production-style `prisma db push` fail, rather than drop the table. *(Obsolete since [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate): builds no longer push the schema, and a branch that is behind the dev database still builds.)*
 - Possible later upgrade (not built): hold dates at the QR screen with a short expiry, if alerts prove insufficient.
 
 ### Supersedes
@@ -646,6 +650,46 @@ Area: Website
 
 ### Supersedes
 None
+
+---
+
+## DEC-026 — Deployments never change the schema; migrations are version-controlled, applied by an operator, and enforced by a read-only release gate
+
+Date: 2026-10-06
+Status: Active — built and verified on dev; production baseline pending Owner approval (see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md))
+Area: Website | Cross-Workstream
+
+*(DEC-025 is the footer-credit brand standard, currently recorded on `dev` only.)*
+
+### Decision
+- **Builds do not write.** `npm run build` is `npm run build:app` (`prisma generate && next build`). `prisma db push` is removed from every automatic path and is not replaced by `prisma migrate deploy` in the build.
+- **Schema changes are migrations.** `prisma/migrations/` is the history. `20261005000000_baseline` reproduces the schema as it stood on production on 2026-10-05; the existing dev and production databases are *marked* as having it (`prisma migrate resolve --applied`, a metadata write), never re-created from it.
+- **Migrations are applied by a person, on purpose.** `scripts/db-migrate.mjs` is the only entry point: it confirms the database with the server, requires the reviewed commit, lists pending migrations and applies only those named, compares the real schema with one built from the migrations before and after, records the run, and stops on any failure without marking anything applied. It runs on an operator machine that can reach Hostinger. There is no migration workflow and no migration endpoint.
+- **Order is enforced by a gate, not by timing.** Vercel's build runs `vercel-build`, which adds `scripts/migration-gate.mjs`: a read-only check that every migration in the commit is applied to that environment's database. If not, the build fails and the previous deployment keeps serving. So the release order is: review → migrate → merge.
+- **Schema changes are backward compatible** (expand, then contract in a later release), because old code runs against the new schema between "migrate" and "merge".
+
+Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
+
+### Reason
+- `db push` on every deploy made each release a schema operation against production, with no review of the SQL, no history, and a data-loss prompt as the only guard ([DEC-013](#dec-013--dev-and-production-use-separate-hostinger-databases-smtpstripeblob-stay-shared)'s incident).
+- It was not the no-op it was believed to be. `GuestMessage.messageId` is `VARCHAR(998)` with an index; InnoDB caps index keys at 3072 bytes, so MariaDB stores a 768-character prefix index. `schema.prisma` did not declare the prefix, so Prisma saw a difference on every run and **dropped and recreated that index on every deployment**, on production and dev. Found 2026-10-05 by diffing both databases against the schema; fixed by declaring `@@index([messageId(length: 768)])` — a schema-file correction with no database change.
+- A GitHub job and a Vercel build triggered by the same merge run independently, so "run the migration in CI on merge" does not order the release. Failing the build until the migration is applied does.
+- GitHub-hosted runners were not adopted as the migration host: their reach to Hostinger is unverified ([DEC-012](#dec-012--hostinger-blocks-direct-db-access-from-outside-vercel-one-off-prod-scripts-run-via-a-temporary-admin-gated-route)) and it would put the production database credential in a public repository's secret store. A workflow that might not work was not left behind.
+- The baseline was put in production's physical column and index order (columns added by `db push` over time sit at the end of their tables), so a database built from migrations dumps byte-identical to production. Prisma ignores column order; future tooling may not.
+
+### Implications
+- Never add a schema-writing command to an install hook, `build`, `build:app`, `vercel-build`, `vercel.json`, or any workflow. `src/lib/__tests__/build-safety.test.ts` fails if one appears. The Vercel dashboard's Build/Install Command overrides must stay off — an override would bypass the gate.
+- **Reverting the PR that introduced this restores `db push` on every deploy.** To disable the gate in an emergency, set `vercel-build` to `npm run build:app` in a new commit instead.
+- A new environment or database must be baselined (or built with `prisma migrate deploy`) before a Vercel build can succeed against it.
+- Never edit an applied migration — the gate compares checksums and blocks. The baseline's checksum is pinned in the guardrail test.
+- `prisma migrate status`/`deploy` compare history rows only. Schema equivalence is checked separately (`db-migrate.mjs`'s drift check; CI's **Migrations** job for `schema.prisma` vs migrations).
+- An index on a long string column must declare its prefix length in `schema.prisma`.
+- Bare `npx prisma migrate dev` / `db push` / `migrate reset` in the working copy are unsafe while the local `.env` `DATABASE_URL` points at production. Use `npm run db:migrate -- new` (loopback only) and explicit URLs.
+- The new **Migrations** CI check uses a throwaway MariaDB container; it is not yet a required check on `main` (Owner setting).
+- MariaDB DDL is not transactional: a failed migration can be partly applied, and rolling the application back does not undo a migration. Recovery is manual and documented in the runbook.
+
+### Supersedes
+Amends [DEC-017](#dec-017--cis-build-job-compiles-the-app-only-database-sync-stays-vercel-only-and-every-route-tree-code-path-must-tolerate-a-build-time-db-outage) (its "database sync stays Vercel-only" half — the CI-isolation half stands). Updates the build-command guidance in [DEC-013](#dec-013--dev-and-production-use-separate-hostinger-databases-smtpstripeblob-stay-shared) and [DEC-022](#dec-022--unfinished-checkouts-are-recorded-before-the-booking-exists-and-alerted-after-10-minutes-via-vercel-cron-add_payment_info-is-a-funnel-step-not-a-key-event).
 
 ---
 
