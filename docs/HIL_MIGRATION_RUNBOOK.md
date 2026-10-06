@@ -1,6 +1,6 @@
 # Haven in Lipa — Database Migration Runbook
 
-> **Last updated:** 2026-10-06. Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
+> **Last updated:** 2026-10-06 (after the production release: env key names, Vercel CLI, recovery rules). Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
 
 **The rule.** A deployment never changes a database's schema. Schema changes are SQL files in `prisma/migrations/`, reviewed in a pull request, and applied by a person running one command against one named database. The Vercel build only *checks* (read-only) that the migrations in the commit are already applied, and refuses to build if they are not.
 
@@ -13,7 +13,7 @@
 
 ## Where it runs
 
-The command is run by an operator on a machine that can reach Hostinger's MariaDB on port 3306 and has a local MariaDB to build comparison databases. On 2026-10-05/06 the Owner's Mac met both conditions (read access to both hosted databases verified). GitHub-hosted runners are **not** used: their access to Hostinger was not verified and no hosted database credential is stored in GitHub (see [DEC-012](HIL_DECISIONS.md)). There is no migration workflow and no admin migration endpoint, by design.
+The command is run by an operator on a machine that can reach Hostinger's MariaDB on port 3306 and has a local MariaDB to build comparison databases. On 2026-10-05/06 the Owner's Mac met both conditions (read access to both hosted databases verified). Both hosted databases were baselined from it on 2026-10-06. GitHub-hosted runners are **not** used: their access to Hostinger was not verified and no hosted database credential is stored in GitHub (see [DEC-012](HIL_DECISIONS.md)). There is no migration workflow and no admin migration endpoint, by design.
 
 Before any hosted run, check the connection first — it has been unreliable historically:
 
@@ -24,7 +24,7 @@ nc -z -G 8 <db host> 3306 && echo reachable
 ## The database URL — read this once
 
 - The command takes its URL from `MIGRATE_DATABASE_URL`, or from one named key of an env file (`--url-env-file .env --url-env-key DEV_DATABASE_URL`). It never reads `DATABASE_URL`.
-- **The local `.env` file's `DATABASE_URL` has pointed at production.** A bare `npx prisma migrate dev`, `prisma db push` or `prisma migrate reset` in this folder would therefore act on production. Do not run bare Prisma schema commands here. Use the commands below, which always set the target explicitly.
+- **Local `.env` layout (since 2026-10-06).** `DATABASE_URL` is the **dev** database, so `npm run dev` and any bare Prisma command reach dev, not production. Production is under `PRODUCTION_DATABASE_URL`, which nothing reads automatically — only this command, and only when given `--url-env-key PRODUCTION_DATABASE_URL`. `DEV_DATABASE_URL` is kept as an explicit alias for dev. Vercel's own environment values are separate and were not changed. Still do not run bare `prisma db push`, `prisma migrate dev` or `prisma migrate reset` here: they would now alter the shared dev database. (`.env.bak-20261006-pre-dev-default` holds the old layout; do not restore it.)
 - The target is confirmed by the server, not by a name: the command asks the server which database it is and stops unless that equals `--expect-database`.
 - Every command needs `--reference-url`: a **local** MariaDB server (loopback only) where it builds a scratch database from the migrations to compare against. On the Owner's Mac: `mysql://root@127.0.0.1:3306` (Homebrew MariaDB), or any throwaway instance.
 
@@ -99,7 +99,9 @@ Only after the Owner approves the exact commit and migration names.
 2. Run `status` with `--target production` (read-only) and read the output: database name, applied, pending, `NO DRIFT`.
 3. Run `deploy` with `--target production --confirm-production --commit <sha> --apply <names>`.
 4. Copy the run record (`.migration-runs/…json`: target, commit, migration names, result) into [HIL_COMPLETION_LOG.md](HIL_COMPLETION_LOG.md).
-5. Merge to `main`, then verify the Production deployment SHA.
+5. Merge to `main`, then verify the Production deployment: the SHA ([DEC-006](HIL_DECISIONS.md)), the build log (below), and that the schema is unchanged — re-run `status` and expect `NO DRIFT`. Table `create_time` alone is not proof.
+
+For production use `--url-env-file .env --url-env-key PRODUCTION_DATABASE_URL`.
 
 `status` exit codes: `0` up to date and no drift, `3` pending or not baselined, `1` a problem.
 
@@ -110,10 +112,12 @@ An existing database is told that the baseline is already applied. This creates 
 ```
 npm run db:migrate -- baseline --target <dev|production> [--confirm-production] \
   --expect-database <name> --commit <sha> \
-  --url-env-file .env --url-env-key <DEV_DATABASE_URL|DATABASE_URL> --reference-url mysql://root@127.0.0.1:3306
+  --url-env-file .env --url-env-key <DEV_DATABASE_URL|PRODUCTION_DATABASE_URL> --reference-url mysql://root@127.0.0.1:3306
 ```
 
-It refuses unless the database's schema equals the baseline exactly (Prisma's diff, plus tables, columns and their order, types, defaults, collations, indexes, foreign keys, views, triggers, routines and events). Undo: `DROP TABLE _prisma_migrations;` — the application does not use that table.
+It refuses unless the database's schema equals the baseline exactly (Prisma's diff, plus tables, columns and their order, types, defaults, collations, indexes, foreign keys, views, triggers, routines and events). Done for dev (09:50 UTC) and production (10:17 UTC) on 2026-10-06; it never needs running again for these two databases.
+
+**`_prisma_migrations` is now permanent.** Dropping it is not a rollback: every Vercel build would fail at the gate and the history would have to be re-proven. Do not drop it, do not restore a production dump, and do not put `prisma db push` back into a build as a reaction to a problem. Each of those needs the Owner's explicit approval.
 
 ## 6. When something is wrong
 
@@ -130,19 +134,21 @@ It refuses unless the database's schema equals the baseline exactly (Prisma's di
 
 Run `prisma migrate resolve` with the target set explicitly, e.g. `DATABASE_URL="$(…)" npx prisma migrate resolve …`. The command never does this for you.
 
-**The gate blocked a Production build.** Read the build log line starting `[migration-gate] BLOCKED`. Pending → run section 5, then redeploy. Missing history → the database was never baselined. Cannot read history → the database was unreachable during the build; redeploy.
+**The gate blocked a Production build.** Read the build log (`npx vercel inspect <deployment url> --logs --scope cedcas-projects`; the Mac's Vercel CLI login works) and find the line starting `[migration-gate] BLOCKED`. Pending → run section 5, then redeploy. Missing history → the database was never baselined. Cannot read history → the database was unreachable during the build; redeploy.
 
-**The app is broken after a release.** Roll the *application* back in Vercel (Instant Rollback, or revert the merge). That does not undo a migration — and does not need to, because migrations are backward compatible (section 3). Only undo schema with a new, reviewed migration.
+**The app is broken after a release.** Roll the *application* back in Vercel with Instant Rollback (not Redeploy — see section 8), or revert the offending merge (never PR #57 itself). That does not undo a migration — and does not need to, because migrations are backward compatible (section 3). Only undo schema with a new, reviewed migration.
 
 ## 7. Backup and restore
 
 ```
+set -o pipefail   # without this a failed dump still exits 0, because gzip succeeds
 mariadb-dump --defaults-extra-file=<client.cnf> --single-transaction --skip-lock-tables \
   --routines --triggers --no-tablespaces <database> | gzip > hil-<target>-<UTC timestamp>.sql.gz
+echo "exit=$?"; gzip -t hil-*.sql.gz; gunzip -c hil-*.sql.gz | tail -1   # expect 0, no error, "-- Dump completed"
 ```
 
 - Keep the file outside the repository and outside Dropbox. It contains guest names, emails and phone numbers; delete it once the change is verified.
-- Prove it restores before relying on it: load it into a scratch database on the local MariaDB and compare table row counts with the source.
+- Prove it restores before relying on it: load it into a scratch database on the local MariaDB, then compare the schema dump and each table's row count and `CHECKSUM TABLE` with the source (on 2026-10-06 all 23 production tables matched).
 - Hostinger's own daily backups (hPanel → Databases → Backups) are the second copy; confirm the latest one exists before a production run.
 - Restoring a dump over production is a last resort that loses every booking made since the dump. Never rehearse it on production.
 
@@ -150,6 +156,9 @@ mariadb-dump --defaults-extra-file=<client.cnf> --single-transaction --skip-lock
 
 - `npm run build` is `npm run build:app` — compile only. `vercel-build` adds only the read-only gate.
 - **Reverting the PR that introduced this would put `prisma db push` back into every deploy.** If the release gate itself must be disabled in an emergency, change `vercel-build` to `npm run build:app` in a new commit; do not revert to the old `build` script. `src/lib/__tests__/build-safety.test.ts` fails if a schema-writing command reappears in an automatic path.
-- Vercel → Project → Settings → Build & Development: Build Command and Install Command overrides must stay **off**. An override bypasses `vercel-build` and the gate.
+- Vercel → Project → Settings → Build & Development: Build Command and Install Command overrides must stay **off** (confirmed off 2026-10-06 via the Vercel API: both `null`). An override bypasses `vercel-build` and the gate. A correct build log shows `Running "npm run vercel-build"` followed by `[migration-gate] OK`.
+- **Old commits still contain `prisma db push`.** Anything that *rebuilds* a commit older than `3798482` runs it again: a push to a branch cut before 2026-10-06 (against the dev database), or Vercel's **Redeploy** on an old Production deployment (against production). Merge `main` into a stale branch before pushing to it. To roll production back, use **Instant Rollback / Promote**, which reuses the existing build and runs nothing.
+- **Migrations** is a required check on `main`, with Lint, Type Check, Unit Tests and Build.
+- Only one Vercel project builds this repository (`ced-cas-properties`). The old `ced-cas-properties-dev` project no longer exists.
 - No workflow receives a hosted database credential; CI's **Migrations** job uses a throwaway container.
 - `--accept-data-loss` is never used ([DEC-013](HIL_DECISIONS.md)).
