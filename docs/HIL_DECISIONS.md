@@ -694,7 +694,7 @@ A consistent, low-key attribution across every property the Owner runs, without 
 ## DEC-026 — Deployments never change the schema; migrations are version-controlled, applied by an operator, and enforced by a read-only release gate
 
 Date: 2026-10-06
-Status: Active — **live on production since 2026-10-06** (PR #57, merge `3798482`). Dev baselined 09:50 UTC and production 10:17 UTC the same day, both metadata-only; Owner acceptance on `dev.haveninlipa.com` (build `09f04b9`) passed before the merge
+Status: Active — **complete and live on production since 2026-10-06** (PR #57, merge `3798482`). Dev baselined 09:50 UTC and production 10:17 UTC the same day, both metadata-only; Owner acceptance on `dev.haveninlipa.com` (build `09f04b9`) passed before the merge
 Area: Website | Cross-Workstream
 
 *(DEC-025 is the footer-credit brand standard, currently recorded on `dev` only.)*
@@ -717,6 +717,8 @@ Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
 
 ### Implications
 - Never add a schema-writing command to an install hook, `build`, `build:app`, `vercel-build`, `vercel.json`, or any workflow. `src/lib/__tests__/build-safety.test.ts` fails if one appears. The Vercel dashboard's Build/Install Command overrides must stay off — an override would bypass the gate.
+- **Current builds are safe; old commits are not.** Builds of `3798482` or any later commit are safe: they run only the read-only gate. Rebuilding a commit **older than `3798482`** still runs `prisma db push` (a push to a stale branch → dev database; Vercel's Redeploy on an old Production deployment → production).
+- **Rollback means reusing an existing deployment** (Vercel Instant Rollback / Promote), which rebuilds nothing. Never roll back by rebuilding an old commit, and never by restoring `db push`.
 - **Reverting the PR that introduced this restores `db push` on every deploy.** To disable the gate in an emergency, set `vercel-build` to `npm run build:app` in a new commit instead.
 - A new environment or database must be baselined (or built with `prisma migrate deploy`) before a Vercel build can succeed against it.
 - Never edit an applied migration — the gate compares checksums and blocks. The baseline's checksum is pinned in the guardrail test.
@@ -725,6 +727,7 @@ Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
 - Local `.env` (changed 2026-10-06): `DATABASE_URL` is the dev database; production is under `PRODUCTION_DATABASE_URL`, read only by the operator command when named explicitly. Bare `prisma migrate dev` / `db push` / `migrate reset` are still not to be run — they would alter the shared dev database. Use `npm run db:migrate -- new` (loopback only).
 - The **Migrations** CI check uses a throwaway MariaDB container and is a required check on `main` since 2026-10-06, alongside the original four.
 - **`_prisma_migrations` is permanent.** Dropping it, restoring a production dump, or putting `db push` back into a build are not routine rollbacks; each needs explicit Owner approval.
+- Operational follow-ups, not part of this decision's completion: migrations run from the Owner's Mac only (single point of dependence), and the DEC-012 connectivity question is still open.
 - MariaDB DDL is not transactional: a failed migration can be partly applied, and rolling the application back does not undo a migration. Recovery is manual and documented in the runbook.
 
 ### Supersedes
