@@ -180,7 +180,7 @@ export default async function Footer() {
             DEC-025. Copyright + credit on the left, legal links on the right; 14px in HIL's muted
             white/55; whole "Powered by NetCoreSolutions.com" is the link, no underline until
             hover/focus; stacks and centers at <=768px. */}
-        <div className="py-5 flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[769px]:flex-col max-[769px]:text-center">
+        <div className="py-5 flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[768px]:flex-col max-[768px]:text-center">
           <div>
             &copy; {new Date().getFullYear()} HavenInLipa. All rights reserved.
             <br />

@@ -656,8 +656,8 @@ None
 ## DEC-025 — Footer credit brand standard: Powered by NetCoreSolutions.com, no GeneratePress branding
 
 Date: 2026-09-29
-Renumbered: was DEC-023 on `dev` until 2026-10-02. It clashed with the blog-loading decision already recorded as DEC-023 on `main`, so this one — not yet released to `main` — took the next free number. Commit `18bcdc4` and PR #37 still say DEC-023 in their titles.
-Status: Active. Main site: PR #37 against `dev` (branch `feat/netcore-footer-credit`), not merged. Blog: change prepared for WP admin, not applied.
+Renumbered: was DEC-023 on `dev` until 2026-10-02. It clashed with the blog-loading decision already recorded as DEC-023 on `main`, so this one took the next free number. Commit `18bcdc4` and PR #37 still say DEC-023 in their titles.
+Status: Active. **Main site: LIVE on production 2026-10-06.** PR #37 merged into `dev` 2026-09-30 (`6083e7f`); released to `main` by PR #63 (merge `2ffacaa`, Production deployment `6886658355` success, live footer verified on haveninlipa.com). **Blog: NOT applied** (still outstanding: no WordPress admin / Theme File Editor access in the release session; live blog footer has no credit).
 Area: Website | Blog | Brand
 
 ### Decision
@@ -678,7 +678,7 @@ A consistent, low-key attribution across every property the Owner runs, without 
 
 ### Implications
 - **Main site:** `src/components/layout/Footer.tsx`, bottom legal row.
-  - The row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[769px]:flex-col max-[769px]:text-center`, i.e. stacked and centred at ≤768px.
+  - The row is `flex flex-wrap items-center justify-between gap-4 text-[14px] text-white/55 max-[768px]:flex-col max-[768px]:text-center`, i.e. stacked and centred at ≤768px.
   - Left block: copyright, `<br />`, then `<a href="https://netcoresolutions.com">Powered by NetCoreSolutions.com</a>`.
   - The link inherits white/55 and is `no-underline`. On hover/focus-visible it becomes `text-white/85` (HIL's footer hover colour) plus underline.
   - Privacy/Terms stay on the right and are now 14px, since the whole row is 14px as on TMS (was 12.5px). Their hover is unchanged.
@@ -697,7 +697,6 @@ Date: 2026-10-06
 Status: Active — **complete and live on production since 2026-10-06** (PR #57, merge `3798482`). Dev baselined 09:50 UTC and production 10:17 UTC the same day, both metadata-only; Owner acceptance on `dev.haveninlipa.com` (build `09f04b9`) passed before the merge
 Area: Website | Cross-Workstream
 
-*(DEC-025 is the footer-credit brand standard, currently recorded on `dev` only.)*
 
 ### Decision
 - **Builds do not write.** `npm run build` is `npm run build:app` (`prisma generate && next build`). `prisma db push` is removed from every automatic path and is not replaced by `prisma migrate deploy` in the build.
