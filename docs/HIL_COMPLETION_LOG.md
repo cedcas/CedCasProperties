@@ -14,7 +14,7 @@ Status: **Complete — live on production.** Decision: [DEC-026](HIL_DECISIONS.m
 No deployment changes a database schema any more. `npm run build` is the compile-only `build:app`. Schema changes are migrations in `prisma/migrations/`, applied by an operator with `scripts/db-migrate.mjs` before the code is merged. Vercel's `vercel-build` adds a read-only gate that fails the build if a migration in the commit is not applied.
 
 ### Evidence
-- **PRs:** #57 → `main`, merge `3798482` (2026-10-06 10:25 UTC; reviewed head `1ddf487`). #58 → `dev`, merge `09f04b9`.
+- **PRs:** #57 → `main`, merge `3798482` (2026-10-06 10:25 UTC; reviewed head `1ddf487`). #58 → `dev`, merge `09f04b9`. Closeout docs #59 → `main`, merge `e7f296e` (Production deployment `6881637494`, success, gate OK, database unchanged). Back-merge #60 → `dev`, merge `d61395b` (dev deployment `6881695376`, success); dev-only footer work preserved.
 - **Schema equivalence before any write:** `mariadb-dump --no-data` of production, of dev, and of the baseline applied to an empty database were byte-identical (23 tables; no views, triggers, routines, events). Prisma's diff of each hosted database against `schema.prisma` was empty after the index-prefix correction.
 - **Finding:** `prisma db push` had been dropping and recreating `GuestMessage_messageId_idx` on every deployment (undeclared 768-character prefix). Production build log of `40fbc05` shows the push; `GuestMessage.create_time` matched it (00:58:17 UTC). Fixed in `schema.prisma` only.
 - **Vercel settings (API, read-only):** project `ced-cas-properties`, Build Command and Install Command `null`, production branch `main`. `ced-cas-properties-dev` returns 404 and last deployed 2026-04-05 — not active.
@@ -26,10 +26,25 @@ No deployment changes a database schema any more. `npm run build` is the compile
 - **Acceptance:** Owner confirmed the logged-in checks on `dev.haveninlipa.com` (build `09f04b9`) on 2026-10-06 before the merge. Production: signed-out smoke checks only (pages, 5 listings, booking pages, availability, iCal all 200; admin API 401).
 - **Local environment:** `.env` `DATABASE_URL` now points at dev; production moved to `PRODUCTION_DATABASE_URL`. Vercel environment values untouched.
 
+### Retained backup
+`~/hil-db-backups/hil-production-20261006T101529Z.sql.gz` (Owner's Mac; outside the repo and Dropbox; folder `700`, file `600`; sha256 `7809c21c…dc6a`; restore-tested). Contains guest personal data. **Retention pending the Owner's decision.** The temporary dev backup was deleted after the release. `.env.bak-20261006-pre-dev-default` (old local layout, production as `DATABASE_URL`) is kept until the Owner removes it.
+
+### Remote branch inventory (2026-10-06, 27 branches besides `main`/`dev`)
+No branch has unmerged work: every one has a merged PR and is fully contained in `dev`. Nothing was deleted or changed.
+
+- **Merged / obsolete — 26.** Safe to delete.
+  - *Old build script (22), all contained in `main`:* `chore/hil-performance-plugin`, `chore/remove-fix-drive-times-route`, `chore/remove-manual-fix-route`, `docs/close-hourly-fee-e2e-20261005`, `docs/ga4-mcp-closeout-100426`, `docs/hil-status-reconcile-20261005`, `docs/layered-docs-into-git`, `docs/stay-match-enrollment-100426`, `docs/wrapup-093026`, `feat/hil-seo-1.1.7`, `fix/analytics-tracking`, `fix/ga4-internal-cookie`, `fix/hil-performance-1.0.1`, `fix/messages-booking-date-utc`, `fix/property-drive-times-db`, `fix/seo-audit-093026`, `fix/seo-audit-low-100426`, `fix/verify-stripe-payment-server-side`, `manual-booking-fix-temp`, `release/dev-to-main-2026-09-28`, `remove-manual-fix-route`, `seo/weddings-accommodation-rework`.
+  - *New build script (4):* `chore/prisma-migrations-baseline`, `docs/db-migrations-closeout-100626` (in `main`); `integrate/db-migrations-into-dev-100626`, `integrate/main-into-dev-100626` (merge branches, in `dev`).
+- **Active work — 0.** The only unreleased work is the footer credit (DEC-025), and it lives on `dev`.
+- **Uncertain — 1.** `feat/netcore-footer-credit` (PR #37, merged into `dev`, not on `main`; **old build script**). Redundant with `dev`, but it is the named branch of work that has not been released. Delete it, or keep it until the footer ships — Owner's call. Do not push to it without merging `main` in first.
+
+**Recommendation:** delete the 26 merged branches; that removes 22 of the 23 places a push could still trigger `db push` (against the dev database). Turning on GitHub's "Automatically delete head branches" would stop the pile re-forming.
+
 ### Not done / limits
 - No GitHub-hosted migration workflow: runner reach to Hostinger was never tested, and no hosted database credential is stored in GitHub.
 - No logged-in action was performed on production.
-- Commits older than `3798482` still contain the old `build` script. Rebuilding one (a push to a stale branch, or Vercel's **Redeploy** on an old deployment) would run `prisma db push` again — against dev for a branch, against production for an old Production deployment. See the runbook, section 8.
+- **Current builds are safe; old commits are not.** Builds of `3798482` or any later commit are safe: they run only the read-only gate. Rebuilding a commit **older than `3798482`** still runs `prisma db push` — against dev for a push to a stale branch, against production for Vercel's **Redeploy** on an old Production deployment. Roll back by reusing an existing deployment (Instant Rollback / Promote), never by rebuilding. Runbook, sections 6 and 8.
+- Operational follow-ups, not blockers: migrations run from the Owner's Mac only; DEC-012 connectivity is still unexplained.
 - Local comparisons ran on MariaDB 12.3; the exact 11.8 match is CI's container and the hosted servers themselves.
 
 ---
