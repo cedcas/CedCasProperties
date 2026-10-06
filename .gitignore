@@ -62,3 +62,6 @@ next-env.d.ts
 
 # WordPress plugin source (deployed separately to blog.haveninlipa.com, not part of the Next.js app)
 /blog/
+
+# Local records of operator migration runs (scripts/db-migrate.mjs); copied into the completion log by hand
+/.migration-runs/
