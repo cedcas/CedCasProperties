@@ -23,6 +23,7 @@ import {
 } from "@/lib/paid-unavailable";
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
+import { sendBookingConfirmedMeasurementEvent } from "@/lib/ga4-measurement-protocol";
 
 export async function POST(req: NextRequest) {
   // Client-sent totalPrice / nightlyTotal / discountAmount are deliberately NOT read:
@@ -305,6 +306,13 @@ export async function POST(req: NextRequest) {
     } catch (err) {
       console.error("[bookings] Scheduled message materialize/flush failed:", err);
     }
+
+    // GA4 server-side reconciliation (off by default — see src/lib/ga4-measurement-protocol.ts).
+    await sendBookingConfirmedMeasurementEvent({
+      bookingId: booking.id,
+      propertySlug: booking.property.slug,
+      total: computedTotal,
+    });
   }
 
   const nights = dailyRates.length;
