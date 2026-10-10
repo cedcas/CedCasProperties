@@ -29,6 +29,94 @@ Lint clean, `tsc --noEmit` clean, `vitest run`: 111 files / 1629 tests passed (1
 
 ---
 
+## 2026-10-10 — Newsletter signup → Hostinger Reach
+
+Area: Website
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean, 1776 tests), committed on `feature/newsletter-signup-101026`, not yet merged.** Owner-approved 2026-10-10; to be linked from a future SMS campaign.
+
+### Outcome
+A standalone `/newsletter` page plus email-only signup strips on the homepage and in the
+footer, all backed by one `NewsletterSignup.tsx` client component (`variant="page"|"strip"`,
+`source`) and one route, `POST /api/newsletter`. No `Booking`/DB table is created — the
+contact is written directly into **Hostinger Reach** (`src/lib/hostinger-reach.ts`), HIL's
+mailing-list tool, so this ships with **no Prisma schema change**.
+- **Validation** (`src/lib/newsletter.ts`, pure/unit-tested): email required; optional
+  first name (≤50 chars) and PH mobile — the phone path reuses the existing
+  `src/lib/phone.ts` `normalizePhone()` rather than a second parser, requiring a
+  `+639XXXXXXXXX` mobile shape.
+- **Honeypot** (`company`, hidden) and a **per-IP in-memory rate limiter** (5 / 10 min,
+  same best-effort pattern as `/api/security-alert`) guard the route.
+- **UTM passthrough:** the client captures `utm_source/medium/campaign/content/term` from
+  the landing URL into `sessionStorage`, so a signup later in the same session (e.g. the
+  footer, after landing via a tagged link) still carries the original attribution; the
+  server re-whitelists/length-caps them before folding into Reach's free-text `note`
+  alongside `source` and `page`.
+- **Hostinger Reach client:** duplicate contact (409, or 422 mentioning
+  "already"/"exists"/"taken") is treated as a friendly success
+  (`alreadySubscribed: true`); a missing `HOSTINGER_REACH_API_TOKEN` never throws — 503,
+  logged as a warning with no secret value; other upstream failures/timeouts (8 s
+  `AbortController`) are 502 with a friendly message, never echoing the upstream body or
+  the token.
+- **GA4:** `generate_lead` fires on success (including `alreadySubscribed`) with
+  `{ method: "newsletter", lead_source: <source> }`, no PII — added to the Website spec's
+  GA4 events table.
+- `/newsletter` added to `sitemap.ts` (priority 0.3, yearly, no `lastModified` — fixed-copy
+  treatment, like `/privacy`/`/terms`); title/description pinned under the SERP length caps.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 120 files / 1776 tests passed (18 new in
+`src/lib/__tests__/newsletter.test.ts`, `hostinger-reach.test.ts`, `newsletter-route.test.ts`,
+`newsletter-page.test.ts`, `newsletter-signup-render.test.ts`; `sitemap.test.ts` extended for
+`/newsletter`). `npm run build:app` not exercised this session — same documented
+environment-only Turbopack/`node_modules`-symlink limitation as the 2026-10-10 `purchase`
+event session, not a code defect. No real call to the Hostinger Reach API was made from this
+session (constraint of the task); `fetch` is mocked in every test that reaches
+`subscribeToReach()`.
+
+---
+
+## 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed` (ecommerce revenue reporting fix)
+
+Area: Website / Analytics
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean), committed, not yet merged.** Owner-approved 2026-10-10.
+
+### Outcome
+A GA4 Data API reconciliation (property 532187541) found `booking_confirmed` arriving
+correctly with its custom params (14 events, `eventValue` 61,627, `Booking Ref`/`Listing`
+dimensions populated) but GA4's **built-in** `transactionId` stayed `(not set)` and
+`purchaseRevenue` stayed 0 — those fields, and the Monetization → Ecommerce purchases
+reports, are only populated by the recommended `purchase` event
+(`transaction_id`/`value`/`currency`/`items`), which had never been sent. Fix: fire
+`purchase` **alongside** `booking_confirmed` (never replacing it — continuity preserved,
+same key event):
+- **Client:** [BookingForm.tsx](HIL%20Website%20Technical%20Specification.md)'s existing
+  `booking_confirmed` effect also calls the new `trackPurchaseOnce()` from
+  `src/lib/ga4-purchase.ts` — pure param builder (`buildPurchaseParams`, with a
+  nights-unknown fallback to `quantity: 1`) plus a `sessionStorage`-backed per-`transaction_id`
+  dedup guard (`shouldSendPurchase`/`markPurchaseSent`, fails open if storage throws).
+- **Server (still OFF by default):** `src/lib/ga4-measurement-protocol.ts`'s
+  `sendBookingConfirmedMeasurementEvent` optionally queues a `purchase` event in the same
+  Measurement Protocol request when given `propertyName`/`nights` — both call sites
+  (`POST /api/bookings` Stripe auto-confirm; `PUT /api/admin/bookings/[id]`
+  `becameConfirmed`) now supply them, so if `GA4_MP_ENABLED` is ever turned on the
+  GCash/BPI admin-confirm path also reports `purchase` revenue. GA4 de-duplicates
+  `purchase` by `transaction_id`; `booking_confirmed` is a custom event and is not
+  de-duplicated.
+- Full write-up, params, and Owner verification steps: [GA4 Analytics Events → `purchase`](HIL%20Website%20Technical%20Specification.md#purchase--fired-alongside-booking_confirmed-2026-10-10).
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 105 files / 1632 tests passed (9 new in
+`src/lib/__tests__/ga4-purchase.test.ts`; 2 new in `ga4-measurement-protocol.test.ts`;
+existing `booking_confirmed`/MP tests unchanged and still pass). `npm run build:app` could
+not be exercised in this session — the worktree's `node_modules` is a symlink into a
+different workspace root, which Turbopack's sandboxed build rejects (`Symlink node_modules
+is invalid`); this is an environment limitation, not a code issue, and `tsc --noEmit`
+already covers the type-level surface `next build` would check.
+
+---
+
 ## 2026-10-10 — Mickey Sleeps 11 "Groups of 12 or more" segment retitled (Stay Match false-positive fix)
 
 Area: Website / Content / Blog (Stay Match)
