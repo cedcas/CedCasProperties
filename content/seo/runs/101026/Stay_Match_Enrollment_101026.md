@@ -6,8 +6,7 @@ meta-only, backups taken) on posts 27, 602, 489 (`small family or couple`), 75
 plus a CTA and an intent on the four scheduled posts 847–850. Block verified rendering on
 27, 75, 763 (per the brief). **This record is written by the engineering session that
 received that brief, not by the session that performed the WordPress writes** — this
-session has no WordPress REST credentials, so the table below was **not** independently
-re-verified against live `blog.haveninlipa.com` postmeta. It documents the brief's claims and
+session has no WordPress REST credentials, so the table below was later completed and verified by HIL Marketing (see "Verification" below). It documents the brief's claims and
 adds the plugin-scoring columns (tier/confidence/properties shown), computed against this
 repo's real `bestForSegments` content, the same way `content/seo/runs/100426/Stay_Match_Enrollment_100426.md`
 did for the prior batch.
@@ -26,16 +25,16 @@ did for the prior batch.
 
 | Post ID | Slug | Intent set | Tier | Confidence | Properties shown |
 |---|---|---|---|---|---|
-| 27 | *(not available to this session)* | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
-| 602 | *(not available to this session)* | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
-| 489 | *(not available to this session)* | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
-| 75 | *(not available to this session)* | `remote workers` | single | 1.00 | `cozy-1-bedroom` |
-| 307 | *(not available to this session)* | `families with kids` | double | 1.00 | `mickey-in-lipa--family-house--sleeps-11`, `spacious-2-bedroom` |
-| 763 | *(not available to this session)* | `multi-generation family trips` | double | 0.75 | `mickey-in-lipa--full-family-house--sleeps-15`, `spacious-2-bedroom` |
-| 847 | `milestone-birthday-staycation-lipa` | *(value not supplied to this session)* | — | — | — |
-| 848 | `business-trip-accommodation-lipa-lima-estate` | *(value not supplied to this session)* | — | — | — |
-| 849 | `sports-team-accommodation-lipa-2027-raam` | *(value not supplied to this session)* | — | — | — |
-| 850 | `group-accommodation-lipa-booking-checklist` | *(value not supplied to this session)* | — | — | — |
+| 27 | `weekend-getaway-in-lipa-city-batangas-your-chill-escape-near-manila` | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
+| 602 | `lipa-charter-day-history-coffee-town-to-city` | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
+| 489 | `lipa-pilgrimage-guide` | `small family or couple` | double | 0.67 | `mickey-in-lipa--family-staycation--sleeps-7`, `cozy-1-bedroom` |
+| 75 | `work-from-lipa-the-affordable-remote-work-staycation-near-manila` | `remote workers` | single | 1.00 | `cozy-1-bedroom` |
+| 307 | `family-weekend-batangas-without-beach-crowds` | `families with kids` | double | 1.00 | `mickey-in-lipa--family-house--sleeps-11`, `spacious-2-bedroom` |
+| 763 | `senior-friendly-staycation-guide-lipa` | `multi-generation family trips` | double | 0.75 | `mickey-in-lipa--full-family-house--sleeps-15`, `spacious-2-bedroom` |
+| 847 | `milestone-birthday-staycation-lipa` | `reunions birthday celebrations` | double | 0.78 | `mickey-in-lipa--full-family-house--sleeps-15`, `mickey-in-lipa--family-house--sleeps-11` |
+| 848 | `business-trip-accommodation-lipa-lima-estate` | `business work trip remote workers` | double | 0.80 | `spacious-2-bedroom`, `cozy-1-bedroom` |
+| 849 | `sports-team-accommodation-lipa-2027-raam` | `groups 12 to 15 people` | single | 0.75 | `mickey-in-lipa--full-family-house--sleeps-15` |
+| 850 | `group-accommodation-lipa-booking-checklist` | `barkada weekends 12 to 15` | single | 1.00 | `mickey-in-lipa--full-family-house--sleeps-15` |
 
 Tier and confidence for posts 27/602/489/75/307/763 were computed by running `hil_sm_score_properties()`
 from the live plugin version (v1.0.2 — v1.0.3's upsell-segment fix, built in this same session,
@@ -63,6 +62,21 @@ repeats (`small family or couple`, `families with kids`).
 
 **Not performed by this session** (no WordPress credentials). The brief states block rendering
 was verified live on 27, 75, and 763; this record does not independently confirm that.
+
+## Re-tuned weak intents (2026-10-10, HIL Marketing, REST meta-only, backups taken)
+
+| Post ID | Slug | Status | Before | After | Tier | Confidence | Properties shown |
+|---|---|---|---|---|---|---|---|
+| 764 | `solo-travel-guide-lipa` | publish | `Solo` (ladder, 0.00) | `remote workers` | single | 1.00 | `cozy-1-bedroom` |
+| 766 | `team-building-house-rentals-lipa` | future 2026-10-12 | `Company Team Building 15 or more` (ladder, 0.27) | `groups 12 to 15 people` | single | 0.75 | `mickey-in-lipa--full-family-house--sleeps-15` |
+| 767 | `wedding-guest-accommodation-lipa` | future 2026-10-19 | `Wedding entourage of 15 or more` (ladder, 0.33) | `reunions birthday celebrations` | double | 0.78 | `mickey-in-lipa--full-family-house--sleeps-15`, `mickey-in-lipa--family-house--sleeps-11` |
+
+## Verification (added by HIL Marketing, which performed the writes)
+
+- All values above were read back via REST (`context=edit`) after the write; status, date, title and content were unchanged on every post; only `meta._hil_stay_intent` (plus the approved closing CTA on 847–850) changed.
+- Live render confirmed on 27, 75, 763 and 764 (764 shows one card → `cozy-1-bedroom`). 766/767/847–850 are `future` and were verified via REST only.
+- Tier/confidence computed against the live `/api/properties.json` on 2026-10-10 with plugin **v1.0.2** scoring. **v1.0.3 (if uploaded) changes several of these** — see the v1.0.3 PR review note.
+- Backups: `/workspace/hil-backups/<id>-pre-staymatch.json` and `<id>-pre-cta.json` on the HIL box (not in the repo; they contain full post bodies).
 
 ## Rollback
 
