@@ -312,6 +312,8 @@ export async function POST(req: NextRequest) {
       bookingId: booking.id,
       propertySlug: booking.property.slug,
       total: computedTotal,
+      propertyName: booking.property.name,
+      nights: dailyRates.length,
     });
   }
 

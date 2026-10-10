@@ -100,4 +100,46 @@ describe("sendBookingConfirmedMeasurementEvent", () => {
       sendBookingConfirmedMeasurementEvent({ bookingId: 2, propertySlug: "cozy-1-bedroom", total: 1000 })
     ).resolves.toBeUndefined();
   });
+
+  it("queues a `purchase` event alongside booking_confirmed when propertyName/nights are supplied", async () => {
+    process.env.GA4_MP_ENABLED = "true";
+    process.env.GA4_MP_API_SECRET = "test-secret";
+    fetchMock.mockResolvedValue({ ok: true });
+
+    await sendBookingConfirmedMeasurementEvent({
+      bookingId: 140,
+      propertySlug: "mickey-in-lipa",
+      total: 12345.6,
+      propertyName: "Mickey in Lipa",
+      nights: 3,
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.events).toHaveLength(2);
+    expect(body.events[0].name).toBe("booking_confirmed");
+    expect(body.events[1].name).toBe("purchase");
+    expect(body.events[1].params).toMatchObject({
+      transaction_id: "HIL-140",
+      value: 12346,
+      currency: "PHP",
+      event_source: "measurement_protocol",
+      items: [
+        { item_id: "mickey-in-lipa", item_name: "Mickey in Lipa", item_category: "stay", price: 4115.2, quantity: 3 },
+      ],
+    });
+  });
+
+  it("omits `purchase` when propertyName/nights are not supplied (backward compatible)", async () => {
+    process.env.GA4_MP_ENABLED = "true";
+    process.env.GA4_MP_API_SECRET = "test-secret";
+    fetchMock.mockResolvedValue({ ok: true });
+
+    await sendBookingConfirmedMeasurementEvent({ bookingId: 141, propertySlug: "cozy-1-bedroom", total: 1000 });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.events).toHaveLength(1);
+    expect(body.events[0].name).toBe("booking_confirmed");
+  });
 });

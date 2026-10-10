@@ -270,6 +270,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       bookingId: booking.id,
       propertySlug: booking.property.slug,
       total: Number(booking.totalPrice),
+      propertyName: booking.property.name,
+      nights: Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000),
     });
   }
 

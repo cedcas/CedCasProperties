@@ -1,6 +1,13 @@
 # Haven in Lipa — Project Status
 
-Last updated: 2026-10-10 — marketing-measurement session (branches built, not yet merged):
+Last updated: 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed`
+(Owner-approved) so GA4's built-in `transactionId`/`purchaseRevenue` populate — client-side
+`src/lib/ga4-purchase.ts` (dedup via sessionStorage) wired into `BookingForm.tsx`;
+`ga4-measurement-protocol.ts` extended to optionally queue `purchase` too (still
+`GA4_MP_ENABLED`-gated, off by default); lint/typecheck/tests clean (1632 tests), build
+not exercised this session (worktree `node_modules` symlink rejected by Turbopack —
+environment limitation); not yet merged. Prior, same day — marketing-measurement session
+(branches built, not yet merged):
 GA4/GSC booking-conversion reconciliation tooling + a disabled (flag-off) server-side GA4
 Measurement Protocol fallback (`src/lib/ga4-measurement-protocol.ts`); Stay Match v1.0.3
 fixes the Sleeps-11 "Groups of 12 or more" segment wrongly winning its own recommendation
@@ -31,6 +38,7 @@ available to this session — confirm against WordPress). Prior: 2026-10-06, fin
 
 | Workstream | Item | Executor | Status | Blocker |
 |---|---|---|---|---|
+| Website / Analytics | GA4 `purchase` event added alongside `booking_confirmed` so GA4's built-in `transactionId`/`purchaseRevenue` populate (`src/lib/ga4-purchase.ts`, `BookingForm.tsx`, `ga4-measurement-protocol.ts`) | Website Developer → Owner | **Built and tested (lint/typecheck/`vitest run` clean, 1632 tests), committed, not yet merged.** `build:app` not exercised this session (environment-only Turbopack/symlink issue, not a code defect) | Owner: review/merge PR; then verify via `?ga_debug=1` DebugView or Realtime on a real booking, and Monetization → Ecommerce purchases / Key events after ~24–48 h |
 | Website / Analytics / SEO | 2026-10-10 marketing-measurement session: (a) GA4 booking-conversion reconciliation script + disabled GA4 Measurement Protocol fallback; (b) Stay Match v1.0.3 upsell-segment fix; (c) main-site `LodgingBusiness` JSON-LD `hasMap`/`geo` from the verified GBP; (d) `/properties`/`/staycation` booking-intent SEO copy proposal | Website Developer → Owner | **Four branches built, tested (lint/typecheck/test/build clean), not merged.** (a) `scripts/reconcile-ga4-bookings.ts` not yet run against production (no operator DB access from this session, DEC-012/026); MP send stays `GA4_MP_ENABLED` unset. (b) `content/seo/runs/101026/hil-stay-match.php` v1.0.3 not yet uploaded to WordPress. (c) PR not yet opened/merged; Airbnb `sameAs` entry needs an Owner decision. (d) Proposal only — see `Booking_Intent_SEO_Proposal_101026.md`, implementation needs Owner sign-off on copy | Owner: review/merge 4 PRs; run the reconciliation script from an operator machine; upload the Stay Match artifact; approve or decline the SEO copy and the Airbnb `sameAs` question |
 | Website / Blog | Footer credit brand standard (DEC-025): "Powered by NetCoreSolutions.com", copied from the live tribemedspa.com footer (whole phrase linked, 14px, muted gray, underline on hover/focus, stacks and centres at ≤768px); no GeneratePress branding | Website Developer → Chief of Staff / Owner | **Main site: PR #37 against `dev`, not merged.** Blog: Theme File Editor edits prepared (`footer.php` line + 4 CSS rules in `main.css` + Version 1.0.1); the live footer has drifted from the Dropbox source, so don't reinstall the old zip. Not applied. GeneratePress: none in repo or on the live blog | Owner review/merge; Chief of Staff WP-admin edit + LiteSpeed/CDN purge |
 | Website / Release | Release `dev` → `main` (PRs #24–#28: docs/SEO workspace, analytics DEC-021, `/weddings-accommodation` rework + drive times, `manual-fix` removal, drive-time correction tooling incl. TEMPORARY `/api/admin/dev/fix-drive-times`) | Website Developer → Owner | **Merged and live** (PR #30, merge commit `41d666a`). Back-merge done: `dev` fast-forwarded to `main` (`cbfd123`) and PR #33 closed as merged. `prisma/schema.prisma` was identical to before, so the production `db push` was a no-op | None |
