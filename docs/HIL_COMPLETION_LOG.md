@@ -28,6 +28,36 @@ Keep or drop the Airbnb `sameAs` entry (`https://airbnb.com/h/fullhousebellavita
 
 ---
 
+## 2026-10-10 — Main-site booking-intent SEO proposal (not implemented)
+
+Area: Website / SEO
+
+Status: **Proposal only — no code changed.** Awaiting Owner approval of the exact wording.
+
+### Outcome
+2026-10-10 GSC measurement found main-site booking-intent queries ranking poorly despite all money pages being indexed: "apartment for rent lipa city" pos 28, "airbnb lipa" pos 16–38, "transient house in lipa batangas" pos 16–29. `content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md` proposes specific title/description/H1/intro-block text for `/properties` and `/staycation` (one primary keyword per page, per SEO-DEC-012) and a missing homepage → `/properties` internal link (the homepage already links `/staycation`; the navbar's "Properties" link only goes to the on-page `/#properties` anchor, not the dedicated index page). Also fixes, as part of the same proposed titles, that `/properties`'s current rendered `<title>` is 68 characters — already over the 60-char budget the `/weddings-accommodation` page follows — independent of the keyword additions.
+
+### Not done
+No file under `src/app/properties`, `src/app/staycation`, or `src/components/sections/Properties.tsx` was touched. Per CLAUDE.md, implementation waits for the Owner's sign-off on the proposed copy.
+
+---
+
+## 2026-10-10 — Verification closures (PR #50, hil-seo 1.1.8, post 205) and Stay Match enrollment additions
+
+Area: SEO / Blog
+
+Status: **Documentation only — confirms prior work and records a prior session's WordPress writes; no code in this entry.**
+
+### Outcome
+Per the 2026-10-10 marketing-measurement brief: **PR #50** (sitemap real `lastModified` + `/ambassadors`) and **`hil-seo` 1.1.8** (blog Organization `sameAs` → `facebook.com/haveninlipa`) are confirmed live on production, closing the "merged but not independently verified live" caveat `HIL_PROJECT_STATUS.md` had been carrying since 2026-10-04 (DEC-006: a merge is not a deploy). **Post 205's SEO title paste slip is closed** — it reads "Mickey in Lipa: A Mickey-Themed Family House in Lipa" (the Owner's 2026-10-05 revision); no paste error visible as of 2026-10-10, pending the Owner's final confirmation.
+
+`content/seo/runs/101026/Stay_Match_Enrollment_101026.md` records a second Stay Match enrollment batch from the same brief: `_hil_stay_intent` set on posts 27, 602, 489, 75, 307, 763 plus a CTA+intent on scheduled posts 847–850. **This session has no WordPress credentials**, so unlike the 2026-10-04 batch's own record, this one could not independently verify the writes or fetch slugs — it records the brief's claims, adds tier/confidence/properties-shown computed by running the live plugin's scorer (v1.0.2) against this repo's real `bestForSegments` content, and explicitly flags what it could not confirm (post slugs; the specific intent text used on 847–850).
+
+### Evidence
+`docs/HIL_PROJECT_STATUS.md` updated (two rows, "Last updated" line); `content/seo/runs/101026/Stay_Match_Enrollment_101026.md` new.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
