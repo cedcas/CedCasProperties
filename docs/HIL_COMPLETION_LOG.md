@@ -18,6 +18,22 @@ No file under `src/app/properties`, `src/app/staycation`, or `src/components/sec
 
 ---
 
+## 2026-10-10 — Verification closures (PR #50, hil-seo 1.1.8, post 205) and Stay Match enrollment additions
+
+Area: SEO / Blog
+
+Status: **Documentation only — confirms prior work and records a prior session's WordPress writes; no code in this entry.**
+
+### Outcome
+Per the 2026-10-10 marketing-measurement brief: **PR #50** (sitemap real `lastModified` + `/ambassadors`) and **`hil-seo` 1.1.8** (blog Organization `sameAs` → `facebook.com/haveninlipa`) are confirmed live on production, closing the "merged but not independently verified live" caveat `HIL_PROJECT_STATUS.md` had been carrying since 2026-10-04 (DEC-006: a merge is not a deploy). **Post 205's SEO title paste slip is closed** — it reads "Mickey in Lipa: A Mickey-Themed Family House in Lipa" (the Owner's 2026-10-05 revision); no paste error visible as of 2026-10-10, pending the Owner's final confirmation.
+
+`content/seo/runs/101026/Stay_Match_Enrollment_101026.md` records a second Stay Match enrollment batch from the same brief: `_hil_stay_intent` set on posts 27, 602, 489, 75, 307, 763 plus a CTA+intent on scheduled posts 847–850. **This session has no WordPress credentials**, so unlike the 2026-10-04 batch's own record, this one could not independently verify the writes or fetch slugs — it records the brief's claims, adds tier/confidence/properties-shown computed by running the live plugin's scorer (v1.0.2) against this repo's real `bestForSegments` content, and explicitly flags what it could not confirm (post slugs; the specific intent text used on 847–850).
+
+### Evidence
+`docs/HIL_PROJECT_STATUS.md` updated (two rows, "Last updated" line); `content/seo/runs/101026/Stay_Match_Enrollment_101026.md` new.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
