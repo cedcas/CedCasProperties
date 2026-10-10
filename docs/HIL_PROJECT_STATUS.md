@@ -1,6 +1,12 @@
 # Haven in Lipa — Project Status
 
-Last updated: 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed`
+Last updated: 2026-10-10 — Newsletter signup → Hostinger Reach built: `/newsletter` page,
+homepage/footer signup strips (`NewsletterSignup.tsx`), `POST /api/newsletter`, Reach
+client (`src/lib/hostinger-reach.ts`); no DB table, no schema change; Owner-approved, to
+be linked from a future SMS campaign; lint/typecheck/tests clean (1776 tests), `build:app`
+not exercised (same worktree `node_modules` symlink/Turbopack limitation as below); on
+branch `feature/newsletter-signup-101026`, not yet merged. Prior, same day — GA4 `purchase`
+event added alongside `booking_confirmed`
 (Owner-approved) so GA4's built-in `transactionId`/`purchaseRevenue` populate — client-side
 `src/lib/ga4-purchase.ts` (dedup via sessionStorage) wired into `BookingForm.tsx`;
 `ga4-measurement-protocol.ts` extended to optionally queue `purchase` too (still
@@ -38,6 +44,7 @@ available to this session — confirm against WordPress). Prior: 2026-10-06, fin
 
 | Workstream | Item | Executor | Status | Blocker |
 |---|---|---|---|---|
+| Website | Newsletter signup → Hostinger Reach (`/newsletter` page, homepage/footer strips, `POST /api/newsletter`, `src/lib/hostinger-reach.ts`) | Website Developer → Owner | **Built and tested (lint/typecheck/`vitest run` clean, 1776 tests), committed on `feature/newsletter-signup-101026`, not yet merged.** No DB table, no schema change. `build:app` not exercised (worktree Turbopack/symlink limitation, not a code defect) | Owner: review/merge PR; add `HOSTINGER_REACH_API_TOKEN` in Vercel Production **and** Preview (optional: the three per-source `HOSTINGER_REACH_TAG_*` tag UUIDs); until the token is set, the route returns a friendly 503 rather than failing silently |
 | Website / Analytics | GA4 `purchase` event added alongside `booking_confirmed` so GA4's built-in `transactionId`/`purchaseRevenue` populate (`src/lib/ga4-purchase.ts`, `BookingForm.tsx`, `ga4-measurement-protocol.ts`) | Website Developer → Owner | **Built and tested (lint/typecheck/`vitest run` clean, 1632 tests), committed, not yet merged.** `build:app` not exercised this session (environment-only Turbopack/symlink issue, not a code defect) | Owner: review/merge PR; then verify via `?ga_debug=1` DebugView or Realtime on a real booking, and Monetization → Ecommerce purchases / Key events after ~24–48 h |
 | Website / Analytics / SEO | 2026-10-10 marketing-measurement session: (a) GA4 booking-conversion reconciliation script + disabled GA4 Measurement Protocol fallback; (b) Stay Match v1.0.3 upsell-segment fix; (c) main-site `LodgingBusiness` JSON-LD `hasMap`/`geo` from the verified GBP; (d) `/properties`/`/staycation` booking-intent SEO copy proposal | Website Developer → Owner | **Four branches built, tested (lint/typecheck/test/build clean), not merged.** (a) `scripts/reconcile-ga4-bookings.ts` not yet run against production (no operator DB access from this session, DEC-012/026); MP send stays `GA4_MP_ENABLED` unset. (b) `content/seo/runs/101026/hil-stay-match.php` v1.0.3 not yet uploaded to WordPress. (c) PR not yet opened/merged; Airbnb `sameAs` entry needs an Owner decision. (d) Proposal only — see `Booking_Intent_SEO_Proposal_101026.md`, implementation needs Owner sign-off on copy | Owner: review/merge 4 PRs; run the reconciliation script from an operator machine; upload the Stay Match artifact; approve or decline the SEO copy and the Airbnb `sameAs` question |
 | Website / Blog | Footer credit brand standard (DEC-025): "Powered by NetCoreSolutions.com", copied from the live tribemedspa.com footer (whole phrase linked, 14px, muted gray, underline on hover/focus, stacks and centres at ≤768px); no GeneratePress branding | Website Developer → Chief of Staff / Owner | **Main site: PR #37 against `dev`, not merged.** Blog: Theme File Editor edits prepared (`footer.php` line + 4 CSS rules in `main.css` + Version 1.0.1); the live footer has drifted from the Dropbox source, so don't reinstall the old zip. Not applied. GeneratePress: none in repo or on the live blog | Owner review/merge; Chief of Staff WP-admin edit + LiteSpeed/CDN purge |

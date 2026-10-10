@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-10 — Newsletter signup → Hostinger Reach
+
+Area: Website
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean, 1776 tests), committed on `feature/newsletter-signup-101026`, not yet merged.** Owner-approved 2026-10-10; to be linked from a future SMS campaign.
+
+### Outcome
+A standalone `/newsletter` page plus email-only signup strips on the homepage and in the
+footer, all backed by one `NewsletterSignup.tsx` client component (`variant="page"|"strip"`,
+`source`) and one route, `POST /api/newsletter`. No `Booking`/DB table is created — the
+contact is written directly into **Hostinger Reach** (`src/lib/hostinger-reach.ts`), HIL's
+mailing-list tool, so this ships with **no Prisma schema change**.
+- **Validation** (`src/lib/newsletter.ts`, pure/unit-tested): email required; optional
+  first name (≤50 chars) and PH mobile — the phone path reuses the existing
+  `src/lib/phone.ts` `normalizePhone()` rather than a second parser, requiring a
+  `+639XXXXXXXXX` mobile shape.
+- **Honeypot** (`company`, hidden) and a **per-IP in-memory rate limiter** (5 / 10 min,
+  same best-effort pattern as `/api/security-alert`) guard the route.
+- **UTM passthrough:** the client captures `utm_source/medium/campaign/content/term` from
+  the landing URL into `sessionStorage`, so a signup later in the same session (e.g. the
+  footer, after landing via a tagged link) still carries the original attribution; the
+  server re-whitelists/length-caps them before folding into Reach's free-text `note`
+  alongside `source` and `page`.
+- **Hostinger Reach client:** duplicate contact (409, or 422 mentioning
+  "already"/"exists"/"taken") is treated as a friendly success
+  (`alreadySubscribed: true`); a missing `HOSTINGER_REACH_API_TOKEN` never throws — 503,
+  logged as a warning with no secret value; other upstream failures/timeouts (8 s
+  `AbortController`) are 502 with a friendly message, never echoing the upstream body or
+  the token.
+- **GA4:** `generate_lead` fires on success (including `alreadySubscribed`) with
+  `{ method: "newsletter", lead_source: <source> }`, no PII — added to the Website spec's
+  GA4 events table.
+- `/newsletter` added to `sitemap.ts` (priority 0.3, yearly, no `lastModified` — fixed-copy
+  treatment, like `/privacy`/`/terms`); title/description pinned under the SERP length caps.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 120 files / 1776 tests passed (18 new in
+`src/lib/__tests__/newsletter.test.ts`, `hostinger-reach.test.ts`, `newsletter-route.test.ts`,
+`newsletter-page.test.ts`, `newsletter-signup-render.test.ts`; `sitemap.test.ts` extended for
+`/newsletter`). `npm run build:app` not exercised this session — same documented
+environment-only Turbopack/`node_modules`-symlink limitation as the 2026-10-10 `purchase`
+event session, not a code defect. No real call to the Hostinger Reach API was made from this
+session (constraint of the task); `fetch` is mocked in every test that reaches
+`subscribeToReach()`.
+
+---
+
 ## 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed` (ecommerce revenue reporting fix)
 
 Area: Website / Analytics

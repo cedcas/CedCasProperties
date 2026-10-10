@@ -1,6 +1,10 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-10 (GA4 Analytics Events: added the `purchase` event, fired
+> **Last updated:** 2026-10-10 (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
+> `/newsletter` page, homepage/footer signup strips (`NewsletterSignup.tsx`),
+> `POST /api/newsletter`, Hostinger Reach client (`src/lib/hostinger-reach.ts`), GA4
+> `generate_lead` on signup; Owner-approved, not yet merged to `main`). Prior, same day:
+> GA4 Analytics Events: added the `purchase` event, fired
 > alongside `booking_confirmed` from `BookingForm.tsx` so GA4's built-in
 > `transactionId`/`purchaseRevenue` populate — `src/lib/ga4-purchase.ts`; server-side
 > `ga4-measurement-protocol.ts` extended to optionally queue `purchase` too, still off by
@@ -120,6 +124,10 @@ The site is designed as a direct-booking alternative to Airbnb, with a savings c
 | `IMAP_USER` | Hostinger email address (defaults to `SMTP_USER` if unset) |
 | `IMAP_PASS` | Hostinger email password (defaults to `SMTP_PASS` if unset) |
 | `IMAP_MAILBOX` | Optional, default `INBOX` — mailbox to poll |
+| `HOSTINGER_REACH_API_TOKEN` | Bearer token for the Hostinger Reach contacts API (newsletter signup) — unset degrades to a 503, never throws |
+| `HOSTINGER_REACH_TAG_NEWSLETTER_PAGE` | Optional Reach tag UUID appended for `/newsletter` signups, alongside the base tag |
+| `HOSTINGER_REACH_TAG_FOOTER` | Optional Reach tag UUID appended for footer-strip signups |
+| `HOSTINGER_REACH_TAG_HOMEPAGE` | Optional Reach tag UUID appended for homepage-strip signups |
 
 ---
 
@@ -212,6 +220,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - Privacy policy, Terms of Service, **standalone /faq page** (14 questions, FAQPage JSON-LD, [src/lib/faqs.ts](../src/lib/faqs.ts) is single source of truth) and **/about page** (host bio for E-E-A-T with Person JSON-LD anchored to LocalBusiness)
 - SEO: dynamic `robots.ts` and `sitemap.ts`, per-page canonicals, full schema.org coverage — see [HIL SEO Technical Specification](HIL%20SEO%20Technical%20Specification.md)
 - Google Analytics (G-2SV2PXYB7T) — production host only, never on `/admin` ([DEC-021](HIL_DECISIONS.md); see [GA4 Analytics Events](#ga4-analytics-events-gtagjs))
+- **Newsletter signup** — standalone `/newsletter` page plus homepage/footer strips, creating a contact in Hostinger Reach (no DB table); see [Newsletter Signup](#newsletter-signup-hostinger-reach)
 
 ### Admin Panel (`/admin`)
 - Protected by NextAuth JWT session with role-based access control
@@ -1456,7 +1465,7 @@ Traffic filter, which was never Active, so dev/preview hits (incl. 4 test
 |---|---|---|---|
 | `booking_confirmed` | "Booking Received!" screen, [BookingForm.tsx](../src/components/booking/BookingForm.tsx) | ✅ | `property`, `value`, `currency`, `transaction_id` |
 | `purchase` *(2026-10-10)* | same screen, fired alongside `booking_confirmed` (never instead of it) | ✅ (GA4 default for `purchase`) | `transaction_id`, `value`, `currency`, `items` (`item_id`=slug, `item_name`, `item_category`=`"stay"`, `price`, `quantity`=nights) |
-| `generate_lead` | contact form success, [ContactForm.tsx](../src/components/sections/ContactForm.tsx) — the site's **only** lead form | ✅ (to be marked in GA4 UI — Owner) | `form_subject`, `form_location`, `lead_source` (`contact_form`) |
+| `generate_lead` | contact form success, [ContactForm.tsx](../src/components/sections/ContactForm.tsx) — **and** newsletter signup success/`alreadySubscribed`, [NewsletterSignup.tsx](../src/components/sections/NewsletterSignup.tsx) *(2026-10-10)* | ✅ (to be marked in GA4 UI — Owner) | Contact form: `form_subject`, `form_location`, `lead_source` (`contact_form`). Newsletter: `method` (`newsletter`), `lead_source` (`site:newsletter-page`\|`site:footer`\|`site:homepage`) — no PII |
 | `add_payment_info` *(2026-09-28)* | payment screen shown, and again on each method change there, [BookingForm.tsx](../src/components/booking/BookingForm.tsx) | ❌ — **deliberately not a key event** ([DEC-022](HIL_DECISIONS.md)) | `property`, `payment_type` (`gcash`\|`bpi`\|`stripe`), `value` (client-estimated total), `currency` |
 | `book_click` | booking-submit CTAs — property-card Book CTA **and** the payment screen's "I've Paid" / card Pay buttons (not the details-form Continue button) | ❌ | `property` |
 | `check_availability` | property card + sticky bar | ❌ | `property` |
@@ -1643,6 +1652,54 @@ destinations and non-slug `post_slug` values are dropped, not sent.
   `config`, so the landing `page_view` usually reports the clean URL; if gtag.js is already
   loaded first, `page_location` may include them (harmless).
 - The main-site code is inert until the plugin ships.
+
+---
+
+## Newsletter Signup (Hostinger Reach)
+
+**Added 2026-10-10, Owner-approved — to be linked from a future SMS campaign.** Lets a
+visitor subscribe to email (and optionally SMS) marketing without creating a `Booking` or
+touching the database — the contact is created directly in **Hostinger Reach**, HIL's
+mailing-list tool, via its public API.
+
+**Three entry points, one component.** [NewsletterSignup.tsx](../src/components/sections/NewsletterSignup.tsx)
+(client) takes `variant` (`"page"` — email + optional first name + optional PH mobile —
+or `"strip"` — email only) and `source`:
+- `/newsletter` ([page.tsx](../src/app/newsletter/page.tsx)), `variant="page"`, `source="site:newsletter-page"` — the standalone, indexable landing page (in `sitemap.ts`).
+- Homepage strip ([src/app/page.tsx](../src/app/page.tsx), between Discover Lipa and the contact section), `variant="strip"`, `source="site:homepage"`.
+- Footer strip ([Footer.tsx](../src/components/layout/Footer.tsx), `theme="dark"`), `variant="strip"`, `source="site:footer"`.
+
+**UTM passthrough.** On mount the component reads `utm_source/medium/campaign/content/term`
+from the current URL and persists them to `sessionStorage` (`hil_newsletter_utm`), so a
+visitor who lands via a tagged SMS/social link and signs up later in the same session from
+the footer still carries the original attribution. Sent to the API as a `utm` object;
+the server re-whitelists and length-caps it (`sanitizeUtm` in
+[src/lib/newsletter.ts](../src/lib/newsletter.ts)) rather than trusting the client's keys.
+
+**`POST /api/newsletter`** ([route.ts](../src/app/api/newsletter/route.ts)), `runtime = "nodejs"`:
+1. Honeypot (`company`, hidden field) — if filled, returns the normal success shape without calling Reach.
+2. In-memory per-IP rate limit, 5 requests / 10 minutes (same best-effort pattern as `/api/security-alert`; resets on cold start, not shared across instances).
+3. Validates `email` (required), `firstName` (optional, ≤50 chars), `phone` (optional PH mobile — reuses [src/lib/phone.ts](../src/lib/phone.ts)'s `normalizePhone`, requires the parsed number to be a `+639XXXXXXXXX` PH mobile) — all in [src/lib/newsletter.ts](../src/lib/newsletter.ts), pure and unit-tested.
+4. Builds `note` (`source=…; utm_source=…; …; page=…`) and calls `subscribeToReach()` in [src/lib/hostinger-reach.ts](../src/lib/hostinger-reach.ts).
+
+**Hostinger Reach client** (`src/lib/hostinger-reach.ts`, server-only): `POST`s to
+`https://developers.hostinger.com/api/reach/v1/profiles/<profile-uuid>/contacts` with
+`Authorization: Bearer ${HOSTINGER_REACH_API_TOKEN}`, body
+`{ email, name?, phone?, tag_uuids, note }`. `tag_uuids` always includes one base tag;
+an optional per-source tag (`HOSTINGER_REACH_TAG_NEWSLETTER_PAGE`/`_FOOTER`/`_HOMEPAGE`,
+tag UUIDs) is appended only if its env var is set — the route never creates tags via the
+API. An 8-second `AbortController` timeout guards the call.
+- **Duplicate contact** (409, or 422 whose message mentions "already"/"exists"/"taken") → treated as success: `{ ok: true, alreadySubscribed: true }`, friendly message.
+- **Missing `HOSTINGER_REACH_API_TOKEN`** → never throws; logs a server warning (no secret value) and returns `503 { ok: false, error: "Signups are temporarily unavailable. Please try again later." }`.
+- **Other upstream errors/timeouts** → `502` with a friendly message. The upstream response body is never echoed to the client, and the token is never logged or returned.
+
+**GA4:** on success (including `alreadySubscribed`) the client fires `generate_lead` via
+`track()` with `{ method: "newsletter", lead_source: <source> }` — no PII. See
+[GA4 Analytics Events](#ga4-analytics-events-gtagjs) → Events table.
+
+**Not yet wired:** no admin UI lists newsletter signups (Reach is the system of record);
+no DB table backs this feature by design (DEC-007-style "don't duplicate a system of
+record" reasoning, though no formal `DEC-###` was opened for this small a feature).
 
 ---
 

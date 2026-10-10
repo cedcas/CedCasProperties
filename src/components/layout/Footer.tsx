@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import NewsletterSignup from "@/components/sections/NewsletterSignup";
 
 type WpPost = {
   id: number;
@@ -79,7 +80,15 @@ export default async function Footer() {
   return (
     <footer className="bg-[#1c1c1c] pt-[72px]">
       <div className="max-w-6xl mx-auto px-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-14 pb-16 border-b border-white/[.08]">
+        <div className="pb-16 border-b border-white/[.08]">
+          <div className="max-w-md mx-auto text-center">
+            <h3 className="font-serif font-semibold text-white text-[1.1rem] mb-1.5">Stay in the Loop</h3>
+            <p className="text-[13px] text-white/55 mb-5">Holiday stay ideas and direct-booking deals, straight to your inbox.</p>
+            <NewsletterSignup variant="strip" source="site:footer" theme="dark" />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-14 pt-16 pb-16 border-b border-white/[.08]">
 
           {/* Brand */}
           <div>
