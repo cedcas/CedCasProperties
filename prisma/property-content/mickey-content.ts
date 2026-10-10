@@ -300,8 +300,8 @@ export const SLEEPS_11: PropertySeoContent = {
         "https://blog.haveninlipa.com/taal-volcano-day-trip-from-lipa-city-2026-updated-guide/",
     },
     {
-      title: "Groups of 12 or more",
-      body: "The rate covers 9 guests and this configuration sleeps up to 11 (an extra per-guest fee for the 10th and 11th). For a bigger reunion or barkada, the full-house configuration opens a second bunk room and sleeps up to 15.",
+      title: "Need more room? See the full house",
+      body: "The rate covers 9 guests and this configuration sleeps up to 11, with an extra per-guest fee for the 10th and 11th guests. If you need more space, the full-house configuration opens a second bunk room.",
       internalLinkLabel: "See the Sleeps-15 full house",
       internalLinkUrl: "/properties/mickey-in-lipa--full-family-house--sleeps-15",
     },
