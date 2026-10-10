@@ -69,7 +69,9 @@ const personJsonLd = {
     // change to the Person / Place / LocalBusiness graph.
     "Batangas-raised nurse and Memory Care Director based in Chicago, Illinois. Owner and host of Haven in Lipa, short-term rental homes in Lipa City, Batangas.",
   worksFor: {
-    "@type": "LocalBusiness",
+    // LodgingBusiness (a schema.org LocalBusiness subtype) — matches the
+    // root-layout business node this @id references (src/lib/local-business-schema.ts).
+    "@type": "LodgingBusiness",
     "@id": BASE_URL,
     name: "Haven in Lipa",
     url: BASE_URL,

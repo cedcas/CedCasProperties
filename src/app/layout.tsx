@@ -7,6 +7,7 @@ import ChatWidgetGate from "@/components/chat/ChatWidgetGate";
 import AnalyticsClickTracker from "@/components/AnalyticsClickTracker";
 import Analytics from "@/components/Analytics";
 import { DEFAULT_OG_IMAGE } from "@/lib/seo-metadata";
+import { buildLocalBusinessJsonLd } from "@/lib/local-business-schema";
 import "./globals.css";
 
 // Server-side QR integrity check — runs once on first request
@@ -14,43 +15,7 @@ runQrIntegrityCheck();
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
-const localBusinessSchema = {
-  "@context": "https://schema.org",
-  "@type": "LocalBusiness",
-  "@id": BASE_URL,
-  name: "Haven in Lipa",
-  description:
-    "Short-term vacation rentals in Lipa City, Batangas, Philippines.",
-  url: BASE_URL,
-  email: "customerservice@haveninlipa.com",
-  telephone: "+639066554415",
-  image: `${BASE_URL}/brand-assets/Logo.png`,
-  logo: `${BASE_URL}/brand-assets/Logo.png`,
-  priceRange: "₱₱",
-  openingHours: "Mo-Su 00:00-23:59",
-  address: {
-    "@type": "PostalAddress",
-    streetAddress: "BellaVita Subdivision",
-    addressLocality: "Lipa City",
-    addressRegion: "Batangas",
-    postalCode: "4217",
-    addressCountry: "PH",
-  },
-  contactPoint: {
-    "@type": "ContactPoint",
-    telephone: "+639066554415",
-    email: "customerservice@haveninlipa.com",
-    contactType: "customer service",
-    availableLanguage: ["English", "Filipino"],
-    hoursAvailable: "Mo-Su 00:00-23:59",
-  },
-  sameAs: [
-    "https://www.facebook.com/haveninlipa",
-    "https://www.instagram.com/haven_inlipa/",
-    "https://www.tiktok.com/@haven_inlipa",
-    "https://airbnb.com/h/fullhousebellavita",
-  ],
-};
+const localBusinessSchema = buildLocalBusinessJsonLd();
 
 // Montserrat is used by the Hero <h1> (the LCP element on every page).
 // `display: "swap"` paints the H1 with next/font's auto-adjusted fallback

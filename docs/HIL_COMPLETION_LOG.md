@@ -29,6 +29,30 @@ Lint clean, `tsc --noEmit` clean, `vitest run`: 96 files / 1554 tests passed (11
 
 ---
 
+## 2026-10-10 — Main-site LodgingBusiness JSON-LD: GBP hasMap/geo, LodgingBusiness type
+
+Area: Website / SEO
+
+Status: **Built, tested, not yet merged.**
+
+### Outcome
+`src/lib/local-business-schema.ts` replaces the inline `LocalBusiness` object literal in `src/app/layout.tsx` (and the matching `worksFor` stub on `/about`) with a shared `buildLocalBusinessJsonLd()`:
+- `@type` changed `LocalBusiness` → **`LodgingBusiness`** (a schema.org subtype of `LocalBusiness` — valid everywhere a `LocalBusiness` was, more specific for a short-term rental operator).
+- Added **`hasMap`** and **`geo`** pointing at the verified Google Business Profile pin ("Haven in Lipa", kgmid `/g/11vcxkyhh4`, 4.6★/11 reviews) — this node previously carried no map reference at all.
+- **`telephone`** already matched the GBP's number exactly (`+639066554415` ≡ `+63 906 655 4415`) — confirmed, not changed.
+- **`sameAs`** already matches the blog's Organization graph (`hil-seo` 1.1.8) for Facebook, Instagram, and TikTok. **Not changed:** the Airbnb listing link — the blog's Organization `sameAs` doesn't carry it, so the two sites are not yet fully aligned on this one entry; left as-is pending an explicit Owner decision (CLAUDE.md: ask before customer-visible/public claim changes).
+- **Deliberately not added:** a business-level `aggregateRating` from the GBP snapshot — it would go stale the moment a new Google review lands, the same staleness DEC-007 exists to prevent for prose.
+- The "cedcasproperties.com redirect check" referenced in the task brief was searched for across `src/`, `docs/`, and `content/seo/` and not found — nothing to drop; the domain's retirement is already recorded in `docs/HIL Commits.md`/`HIL_COMPLETION_LOG.md` as historical only.
+- 7 new unit tests (`src/lib/__tests__/local-business-schema.test.ts`).
+
+### Owner decision needed
+Keep or drop the Airbnb `sameAs` entry (`https://airbnb.com/h/fullhousebellavita`) on the main site's business node, to match the blog exactly.
+
+### Evidence
+`npm run lint`, `npm run typecheck`, `npm test` (1,542/1,542), `npm run build:app` all clean on this branch.
+
+---
+
 ## 2026-10-10 — Booking/GA4 reconciliation tooling; proposed (disabled) server-side GA4 send
 
 Area: Website / Analytics
