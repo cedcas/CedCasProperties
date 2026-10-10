@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-10 — Stay Match v1.0.3: stop an upsell segment from winning the recommendation
+
+Area: Blog / SEO
+
+Status: **Artifact built and verified with a standalone harness; not yet uploaded to WordPress (Owner action).**
+
+### Outcome
+Mickey Sleeps 11's `bestForSegments` includes a "Groups of 12 or more" entry whose `internalLinkUrl` points at Sleeps 15's property page — an upsell ("too small, see the bigger house"), not a claim that Sleeps 11 itself fits 12+ people. Stay Match's scorer treated it as a normal segment, so a "barkada 12 to 15" / "groups of 12 or more" blog intent confidently recommended the smaller, wrong-capacity house (tier `single`, confidence 0.73). `content/seo/runs/101026/hil-stay-match.php` (v1.0.3) adds `hil_sm_segment_points_to_other_property()`, which skips a segment during scoring when its `internalLinkUrl` resolves to a different property's `/properties/<slug>` page — every other property's segments and every blog-link segment score unaffected.
+
+Verified with `content/seo/runs/101026/stay-match-upsell-harness.php` (standalone PHP, no WordPress needed, fixture mirrors the real Sleeps 7/11/15 `bestForSegments` from `prisma/property-content/mickey-content.ts`): running the same harness against v1.0.2 reproduces the bug (Sleeps 11 wins, 0.73), against v1.0.3 it's fixed (Sleeps 15 wins, 0.40, tier `double`).
+
+Deploy note: `content/seo/runs/101026/Stay_Match_v1.0.3_Deploy_Note.md` — also proposes (Owner decision, not applied) retitling the Sleeps 11 segment to something that doesn't read as its own capacity claim.
+
+### Blocker
+Not deployed — `blog/` is gitignored and WordPress is a separate deploy target. The Owner uploads the artifact and purges LiteSpeed + the Hostinger CDN per the deploy note.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
