@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-10 — Booking/GA4 reconciliation tooling; proposed (disabled) server-side GA4 send
+
+Area: Website / Analytics
+
+Status: **Code and tests built and merged; the Measurement Protocol send stays off (`GA4_MP_ENABLED` unset).** No production data was read by this session — see Blocker below.
+
+### Outcome
+2026-10-10 HIL Marketing measured 10 `booking_confirmed` events on `haveninlipa.com` in GA4 for Aug 22 → Sep 28, 2026 (90-day window; 4 more hits were pre-DEC-021 test traffic from `dev.haveninlipa.com`/a laptop host). To let a human compare that figure against production, `scripts/reconcile-ga4-bookings.ts` lists confirmed bookings in a date range with their `HIL-<bookingId>` transaction IDs (the same format `BookingForm.tsx` sends client-side) — **read-only, prints only, excludes nothing automatically**. There is no `Booking.isTest` flag (DEC-021 proposal declined), so it only *flags* guest emails that look like a test/admin address for manual review.
+
+If the comparison finds GA4 undercounting real confirmed bookings (plausible causes: guest leaves before the "done" screen renders, ad blockers, or a GCash/BPI booking that only becomes `confirmed` later via the admin panel with no browser present at all), `src/lib/ga4-measurement-protocol.ts` is a proposed fix: a server-side GA4 Measurement Protocol `booking_confirmed` send from the two places the server itself knows a booking just became confirmed — the Stripe auto-confirm branch of `POST /api/bookings`, and the `becameConfirmed` transition in `PUT /api/admin/bookings/[id]`. It is **built, tested, and wired in, but inert**: `isGa4MpEnabled()` requires both `GA4_MP_ENABLED=true` and a `GA4_MP_API_SECRET` (an Owner-created GA4 MP API secret), and neither is set anywhere. 8 unit tests cover the disabled-by-default state, the exact request shape when enabled, and that a fetch failure never throws.
+
+**Known limitation, stated in the code comments, not hidden:** GA4 does not automatically deduplicate a server-sent hit against a client-sent one sharing the same `transaction_id` — "dedup" here means the two call sites never double-fire for the same booking, and the shared transaction ID lets a human reconciling an export filter overlaps. True automatic dedup is not implemented and would need a decision about which side wins.
+
+### Blocker — production data not read
+Per DEC-012/DEC-026, production MySQL is reachable only from an operator machine (and this change does not alter that); this session had no `PRODUCTION_DATABASE_URL` and made no attempt to use one. `scripts/reconcile-ga4-bookings.ts` is written but has **not been run against production** — the actual Aug 22 → Oct 9 reconciliation is a Next step for the Owner/operator, per the runbook pattern in [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
+
+### Evidence
+- New: `src/lib/ga4-measurement-protocol.ts`, `src/lib/__tests__/ga4-measurement-protocol.test.ts` (8 tests), `scripts/reconcile-ga4-bookings.ts`.
+- Changed: `src/app/api/bookings/route.ts` (Stripe auto-confirm branch), `src/app/api/admin/bookings/[id]/route.ts` (`becameConfirmed` branch) — one `sendBookingConfirmedMeasurementEvent(...)` call added to each, both no-ops while the flag is unset.
+- `npm run lint`, `npm run typecheck`, `npm test` (1,545/1,545), `npm run build:app` all clean on this branch.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
