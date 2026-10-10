@@ -4,6 +4,47 @@
 
 ---
 
+## 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed` (ecommerce revenue reporting fix)
+
+Area: Website / Analytics
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean), committed, not yet merged.** Owner-approved 2026-10-10.
+
+### Outcome
+A GA4 Data API reconciliation (property 532187541) found `booking_confirmed` arriving
+correctly with its custom params (14 events, `eventValue` 61,627, `Booking Ref`/`Listing`
+dimensions populated) but GA4's **built-in** `transactionId` stayed `(not set)` and
+`purchaseRevenue` stayed 0 — those fields, and the Monetization → Ecommerce purchases
+reports, are only populated by the recommended `purchase` event
+(`transaction_id`/`value`/`currency`/`items`), which had never been sent. Fix: fire
+`purchase` **alongside** `booking_confirmed` (never replacing it — continuity preserved,
+same key event):
+- **Client:** [BookingForm.tsx](HIL%20Website%20Technical%20Specification.md)'s existing
+  `booking_confirmed` effect also calls the new `trackPurchaseOnce()` from
+  `src/lib/ga4-purchase.ts` — pure param builder (`buildPurchaseParams`, with a
+  nights-unknown fallback to `quantity: 1`) plus a `sessionStorage`-backed per-`transaction_id`
+  dedup guard (`shouldSendPurchase`/`markPurchaseSent`, fails open if storage throws).
+- **Server (still OFF by default):** `src/lib/ga4-measurement-protocol.ts`'s
+  `sendBookingConfirmedMeasurementEvent` optionally queues a `purchase` event in the same
+  Measurement Protocol request when given `propertyName`/`nights` — both call sites
+  (`POST /api/bookings` Stripe auto-confirm; `PUT /api/admin/bookings/[id]`
+  `becameConfirmed`) now supply them, so if `GA4_MP_ENABLED` is ever turned on the
+  GCash/BPI admin-confirm path also reports `purchase` revenue. GA4 de-duplicates
+  `purchase` by `transaction_id`; `booking_confirmed` is a custom event and is not
+  de-duplicated.
+- Full write-up, params, and Owner verification steps: [GA4 Analytics Events → `purchase`](HIL%20Website%20Technical%20Specification.md#purchase--fired-alongside-booking_confirmed-2026-10-10).
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 105 files / 1632 tests passed (9 new in
+`src/lib/__tests__/ga4-purchase.test.ts`; 2 new in `ga4-measurement-protocol.test.ts`;
+existing `booking_confirmed`/MP tests unchanged and still pass). `npm run build:app` could
+not be exercised in this session — the worktree's `node_modules` is a symlink into a
+different workspace root, which Turbopack's sandboxed build rejects (`Symlink node_modules
+is invalid`); this is an environment limitation, not a code issue, and `tsc --noEmit`
+already covers the type-level surface `next build` would check.
+
+---
+
 ## 2026-10-10 — Mickey Sleeps 11 "Groups of 12 or more" segment retitled (Stay Match false-positive fix)
 
 Area: Website / Content / Blog (Stay Match)

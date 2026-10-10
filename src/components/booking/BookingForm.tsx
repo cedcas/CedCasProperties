@@ -13,6 +13,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import PaymentQR from "./PaymentQR";
 import { formatStayDate } from "@/lib/dates";
 import { track } from "@/lib/analytics";
+import { trackPurchaseOnce } from "@/lib/ga4-purchase";
 
 // Build-time key (may be undefined if env var wasn't set when Vercel built this bundle).
 // We also accept a runtime key returned from the payment-intent API as a fallback.
@@ -527,7 +528,17 @@ export default function BookingForm({
       currency: "PHP",
       transaction_id: `HIL-${confirmed.bookingId}`,
     });
-  }, [step, confirmed, slug]);
+    // GA4's built-in ecommerce reports (transactionId/purchaseRevenue) only populate from
+    // the recommended `purchase` event, not booking_confirmed's custom params — fired
+    // alongside it, deduped per transaction_id (src/lib/ga4-purchase.ts).
+    trackPurchaseOnce(track, {
+      bookingId: confirmed.bookingId,
+      propertySlug: confirmed.propertySlug || slug,
+      propertyName,
+      total: Number(confirmed.total),
+      nights,
+    });
+  }, [step, confirmed, slug, propertyName, nights]);
 
   const inputCls = "w-full px-4 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
   const selectCls = "px-3 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";

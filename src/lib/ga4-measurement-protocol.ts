@@ -14,6 +14,7 @@
  * gating this complements, not replaces.
  */
 import { GA_MEASUREMENT_ID } from "@/lib/analytics-config";
+import { buildPurchaseParams } from "@/lib/ga4-purchase";
 
 const MP_ENDPOINT = "https://www.google-analytics.com/mp/collect";
 
@@ -22,6 +23,19 @@ export interface BookingConfirmedMpEvent {
   propertySlug: string;
   /** Server-computed total (never client-supplied — same figure the booking was saved with). */
   total: number;
+  /**
+   * Optional. When both `propertyName` and `nights` are supplied, a `purchase`
+   * event is queued in the same request alongside `booking_confirmed`, so that
+   * if this helper is ever enabled (`GA4_MP_ENABLED=true`), the GCash/BPI
+   * admin-confirm path also reports ecommerce revenue — the only client path
+   * (BookingForm.tsx) already sends `purchase` for the Stripe/auto-confirm case.
+   * GA4 de-duplicates `purchase` by `transaction_id`; `booking_confirmed` is a
+   * custom event and is NOT de-duplicated, so a booking that already sent a
+   * client-side `booking_confirmed` and later gets this server-side send too
+   * will double-count `booking_confirmed` but not `purchase` revenue.
+   */
+  propertyName?: string;
+  nights?: number;
 }
 
 export function isGa4MpEnabled(): boolean {
@@ -57,27 +71,40 @@ export async function sendBookingConfirmedMeasurementEvent(event: BookingConfirm
   // reconciliation, not session attribution or audience building.
   const clientId = `server.booking.${event.bookingId}`;
 
+  const events: Array<{ name: string; params: Record<string, unknown> }> = [
+    {
+      name: "booking_confirmed",
+      params: {
+        property: event.propertySlug,
+        value: Math.round(event.total),
+        currency: "PHP",
+        transaction_id: bookingTransactionId(event.bookingId),
+        // Analyst-side filter only — not a GA4 built-in filter value like
+        // "internal": this is a real guest conversion, just sent server-side.
+        event_source: "measurement_protocol",
+      },
+    },
+  ];
+
+  if (event.propertyName && typeof event.nights === "number") {
+    const purchase = buildPurchaseParams({
+      bookingId: event.bookingId,
+      propertySlug: event.propertySlug,
+      propertyName: event.propertyName,
+      total: event.total,
+      nights: event.nights,
+    });
+    events.push({
+      name: "purchase",
+      params: { ...purchase, event_source: "measurement_protocol" },
+    });
+  }
+
   try {
     await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: clientId,
-        events: [
-          {
-            name: "booking_confirmed",
-            params: {
-              property: event.propertySlug,
-              value: Math.round(event.total),
-              currency: "PHP",
-              transaction_id: bookingTransactionId(event.bookingId),
-              // Analyst-side filter only — not a GA4 built-in filter value like
-              // "internal": this is a real guest conversion, just sent server-side.
-              event_source: "measurement_protocol",
-            },
-          },
-        ],
-      }),
+      body: JSON.stringify({ client_id: clientId, events }),
     });
   } catch (err) {
     console.error("[ga4-mp] booking_confirmed send failed:", err);

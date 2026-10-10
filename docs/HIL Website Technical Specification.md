@@ -1,6 +1,10 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-06 (DEC-026 live on production — release facts added; Build & Deployment rewritten: `prisma db push` removed from builds, migration history, release gate, operator command — DEC-026). Prior: 2026-10-04 (GA4 Analytics Events: Internal Traffic and Developer data filters confirmed Active by the Owner; internal-traffic cookie marker live, PR #49). Prior: 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
+> **Last updated:** 2026-10-10 (GA4 Analytics Events: added the `purchase` event, fired
+> alongside `booking_confirmed` from `BookingForm.tsx` so GA4's built-in
+> `transactionId`/`purchaseRevenue` populate — `src/lib/ga4-purchase.ts`; server-side
+> `ga4-measurement-protocol.ts` extended to optionally queue `purchase` too, still off by
+> default; not yet merged to `main`). Prior: 2026-10-06 (DEC-026 live on production — release facts added; Build & Deployment rewritten: `prisma db push` removed from builds, migration history, release gate, operator command — DEC-026). Prior: 2026-10-04 (GA4 Analytics Events: Internal Traffic and Developer data filters confirmed Active by the Owner; internal-traffic cookie marker live, PR #49). Prior: 2026-10-02 (Booking Amendments: first-release policies approved by the Owner, DEC-024 — no behaviour change). Prior: 2026-10-01 (added [Booking Amendments](#booking-amendments-guest--stay-edit), the inventory lock, protected reactivation and the paid-but-unavailable card alert; PR #43, Owner-accepted on `dev.haveninlipa.com` — [DEC-024](HIL_DECISIONS.md)). Prior: 2026-09-30 (`seoTitle`/`seoDescription` became admin-editable — PR #38; see Database Schema → Property). Prior: 2026-09-28 (added [Checkout-Abandonment Alerts](#checkout-abandonment-alerts) — `CheckoutAttempt`, `POST /api/checkout-attempts`, `/api/cron/checkout-abandonment` on **Vercel Cron**, GA4 `add_payment_info`; PR #32 / `cbfd123`, **live on production**, [DEC-022](HIL_DECISIONS.md)). Prior: 2026-09-28 (the drive-time pass ran once on production 2026-09-28 00:11 CT via the temporary DEC-012 route, planHash `db895ae4f17708a6`, 20 fields / 5 properties, verified live; the route has been removed, and the CLI path remains). Earlier: 2026-09-27 (late — added the production property-content correction script to Build & Deployment, including the new targeted SM Lipa / Casa Marikit drive-time pass and its TEMPORARY DEC-012 route; branch `fix/property-drive-times-db`, PR against `dev`, **not merged, not run against any database**). Earlier that evening: ([GA4 Analytics Events](#ga4-analytics-events-gtagjs) rewritten for the production-host / no-admin gate, internal-traffic marker and `stay_match_arrival`, DEC-021; branch `fix/analytics-tracking`, PR against `dev`, **not yet merged or deployed**). Earlier the same day: added [Payment Verification](#payment-verification-server-side-pricing--stripe-paymentintent-checks) — server-side pricing and Stripe PaymentIntent verification, PR #23 / `480053f`). Prior: 2026-09-07 (repaired the CI Build/Lint checks — see Build & Deployment → CI)
 >
 > This is the primary "home base" spec for the Haven in Lipa rental application — shared infrastructure, the public site, and the admin panel. Blog (WordPress) and SEO / structured-data concerns live in their own specs:
 > - [HIL Blog Technical Specification](HIL%20Blog%20Technical%20Specification.md)
@@ -1451,6 +1455,7 @@ Traffic filter, which was never Active, so dev/preview hits (incl. 4 test
 | Event | Fires on | Key event | Params |
 |---|---|---|---|
 | `booking_confirmed` | "Booking Received!" screen, [BookingForm.tsx](../src/components/booking/BookingForm.tsx) | ✅ | `property`, `value`, `currency`, `transaction_id` |
+| `purchase` *(2026-10-10)* | same screen, fired alongside `booking_confirmed` (never instead of it) | ✅ (GA4 default for `purchase`) | `transaction_id`, `value`, `currency`, `items` (`item_id`=slug, `item_name`, `item_category`=`"stay"`, `price`, `quantity`=nights) |
 | `generate_lead` | contact form success, [ContactForm.tsx](../src/components/sections/ContactForm.tsx) — the site's **only** lead form | ✅ (to be marked in GA4 UI — Owner) | `form_subject`, `form_location`, `lead_source` (`contact_form`) |
 | `add_payment_info` *(2026-09-28)* | payment screen shown, and again on each method change there, [BookingForm.tsx](../src/components/booking/BookingForm.tsx) | ❌ — **deliberately not a key event** ([DEC-022](HIL_DECISIONS.md)) | `property`, `payment_type` (`gcash`\|`bpi`\|`stripe`), `value` (client-estimated total), `currency` |
 | `book_click` | booking-submit CTAs — property-card Book CTA **and** the payment screen's "I've Paid" / card Pay buttons (not the details-form Continue button) | ❌ | `property` |
@@ -1493,9 +1498,70 @@ Analytics must never break the conversion it measures.
 > **Semantics:** `booking_confirmed` means *booking request submitted*, not
 > *payment verified*. Stripe bookings are paid and auto-confirmed; GCash/BPI are
 > `pending` and some fraction never pay — so the conversion count and its value
-> total run somewhat ahead of money collected. This is why GA4's standard
-> `purchase` event is deliberately **not** fired. Adding a `payment_method` param
-> would let the two be separated in reports; deferred as of 2026-08-08.
+> total run somewhat ahead of money collected. Adding a `payment_method` param
+> would let the two be separated in reports; still deferred.
+
+### `purchase` — fired alongside `booking_confirmed` (2026-10-10)
+
+A 2026-10-10 GA4 Data API reconciliation (property 532187541) found `booking_confirmed`
+arriving correctly with its params (14 events, `eventValue` summing to 61,627; the
+`Booking Ref`/`Listing` custom dimensions populated) — but GA4's **built-in**
+`transactionId` stayed `(not set)` and `purchaseRevenue` stayed 0, because those fields
+and the Monetization → Ecommerce purchases reports are only populated by the recommended
+`purchase` event with `transaction_id`/`value`/`currency`/`items` — a different event from
+any custom one. No `purchase` event had ever been sent. Owner-approved 2026-10-10 to add
+it **in addition to** `booking_confirmed`, not as a replacement — `booking_confirmed`
+keeps the continuity of the existing funnel/reports and the `booking_confirmed` *key
+event is unchanged*.
+
+- **Where:** same effect as `booking_confirmed` in
+  [BookingForm.tsx](../src/components/booking/BookingForm.tsx) — the "Booking Received!"
+  screen, a client-side state with no route change (same reasoning as `booking_confirmed`
+  above).
+- **Params:** `transaction_id` (`HIL-<bookingId>`, same format as `booking_confirmed` so
+  the two can be matched), `value` (server-authoritative total, rounded), `currency`
+  (`"PHP"`), `items`: one line item per booking — `item_id` (property slug), `item_name`
+  (property name), `item_category` (`"stay"`), `price` (total ÷ nights, 2dp), `quantity`
+  (nights). If nights is 0/unknown, `quantity: 1` and `price` is the full total — never a
+  divide-by-zero.
+- **Dedup:** before sending, [src/lib/ga4-purchase.ts](../src/lib/ga4-purchase.ts) checks
+  `sessionStorage` key `hil_ga4_purchase_<transaction_id>`; it skips the send if already
+  marked, and marks it right after a successful `track()` call. Storage access is wrapped
+  in the same try/catch pattern as `analytics.ts` (private-mode/blocked storage must not
+  break the booking flow) — if storage throws, the guard fails open (sends) rather than
+  silently dropping real revenue. **This is a client-side, per-tab guard, not a server-side
+  one** — GA4 itself also de-duplicates `purchase` by `transaction_id` (its one built-in
+  exception among custom-shaped events); `booking_confirmed` is a custom event and is
+  **not** de-duplicated by GA4, so the two events' counts can diverge if a send is ever
+  retried.
+- **Pure logic split out for testing:** `buildPurchaseParams`, `shouldSendPurchase`,
+  `markPurchaseSent`, and `trackPurchaseOnce` (which takes `track` as a parameter so it's
+  testable without mocking `window.gtag`) live in
+  [src/lib/ga4-purchase.ts](../src/lib/ga4-purchase.ts), unit-tested in
+  `src/lib/__tests__/ga4-purchase.test.ts`.
+- **Server-side (still OFF by default):**
+  [ga4-measurement-protocol.ts](../src/lib/ga4-measurement-protocol.ts)'s
+  `sendBookingConfirmedMeasurementEvent` now optionally queues a `purchase` event in the
+  *same* Measurement Protocol request when the caller supplies `propertyName`/`nights` (both
+  call sites — the Stripe auto-confirm branch of `POST /api/bookings` and the
+  `becameConfirmed` transition in `PUT /api/admin/bookings/[id]` — do). This stays inert
+  while `GA4_MP_ENABLED` is unset; if the Owner ever turns it on, the GCash/BPI
+  admin-confirm path (which has no guest browser to fire the client-side event) would also
+  report `purchase` revenue, not just `booking_confirmed`.
+- **GA4 admin note:** `purchase` is a **key event by default** in GA4 — unlike
+  `booking_confirmed`/`generate_lead`, which needed manual marking (see Implications
+  above), no Owner UI step should be required here, but check Admin → Key events to
+  confirm it shows up marked once real data arrives.
+
+**Owner verification steps:**
+1. **Immediate:** make (or have the Owner make) a real booking with `?ga_debug=1` on the
+   `/book` URL, then check GA4 DebugView for both `booking_confirmed` and `purchase` on the
+   same "Booking Received!" screen — or watch Realtime for the live site without the debug
+   param.
+2. **After ~24–48 h:** check Admin → Key events (`purchase` should already be marked) and
+   Monetization → Ecommerce purchases (or an Explore report with Transaction ID) for a
+   non-zero `purchaseRevenue` / populated `transactionId` matching the `HIL-<bookingId>`
+   format.
 
 ### `book_click` / `check_availability` — markup-driven
 
