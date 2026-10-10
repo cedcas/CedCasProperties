@@ -6,7 +6,7 @@ export default function FAQ() {
   const visible = faqs.slice(0, HOMEPAGE_FAQ_LIMIT);
 
   return (
-    <section className="py-24 bg-cream">
+    <section className="py-24 bg-offwhite">
       <div className="max-w-5xl mx-auto px-6">
 
         <div className="flex flex-col items-center text-center reveal mb-16">

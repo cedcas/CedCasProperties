@@ -1,9 +1,18 @@
 # Main-site booking-intent SEO — proposal (2026-10-10)
 
-**Not implemented. Proposal only — Cedric approves copy before any of this ships**, per CLAUDE.md
-("ask the Owner before any customer-visible copy change; propose exact text in the PR body").
-This file is that proposed text. Nothing in `/properties`, `/staycation`, or the homepage has
-been changed by this task.
+**Status: Partially implemented (PR pending). Approved by Cedric 2026-10-10.** Shipped exactly as
+written below: `/properties` title/description/H1/intro, `/staycation` title/H1/intro, and the
+homepage `/properties` link. **NOT shipped: `/staycation`'s proposed meta description** — as
+rendered it measures 187 chars (fallback) / 213–214 chars (`count === 5`, with a real peso
+amount), both over the 160-char budget this same proposal commits to respecting. This proposal's
+own "already measured" note under that bullet (159 chars) described the *pre-existing* copy, not
+the new text — the new text was never re-measured before approval. Per this proposal's own
+instruction ("if any proposed string fails a length rule as rendered, stop and report it rather
+than rewording"), the description was left unchanged rather than shipped or silently reworded.
+See `docs/HIL_COMPLETION_LOG.md` (2026-10-10 entry) for the full implementation record, and
+`docs/HIL SEO Technical Specification.md` → `/staycation` → "Booking-intent SEO rework" for the
+exact character counts. **Needs:** a new, shorter Owner-approved description before `/staycation`'s
+meta description can be reworded.
 
 ## Why
 

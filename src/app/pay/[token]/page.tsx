@@ -15,7 +15,7 @@ const firstName = (full: string) => full.trim().split(/\s+/)[0] || full;
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className="min-h-screen bg-cream flex flex-col items-center px-4 py-10">
+    <main className="min-h-screen bg-offwhite flex flex-col items-center px-4 py-10">
       <div className="w-full max-w-[440px]">
         <div className="text-center mb-6">
           <h1 className="font-serif text-[1.5rem] text-forest font-semibold">Haven in Lipa</h1>

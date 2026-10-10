@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-10 — Booking-intent SEO copy on `/properties`/`/staycation` + homepage link; dark-pink backgrounds → homepage pink
+
+Area: Website / SEO
+
+Status: **Built, tested, not yet merged.** Owner approved both parts same-day (copy proposal `content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md`; background change requested directly).
+
+### Outcome — booking-intent copy (Part 1)
+Shipped exactly as Owner-approved, with one exception found and held rather than shipped:
+- `/properties`: fixed title `Apartments for Rent in Lipa City, Batangas` (58 rendered, was 68 — over budget), DB-count-gated description (160 / 153 chars), new H1 `Apartments & Transient Houses for Rent in Lipa City`, reworded intro paragraph (still `numberWord(count)`-derived, DEC-007).
+- `/staycation`: fixed title `Lipa City Staycation & Vacation Rental Homes` (60 rendered), H1 keeps the DB-derived count/plural pattern with a renamed prefix, one sentence appended to the existing intro.
+- **Held, not shipped:** `/staycation`'s proposed meta description. As rendered it measures 187 chars (fallback) / 213–214 chars (`count === 5`, with a real peso amount) — both well over the 160-char budget the proposal itself was supposed to respect. The proposal's own length note (159 chars) described the pre-existing copy, not the new text, which was never re-measured before Owner approval. Per the task's own rule ("stop and report rather than reword"), the description was left exactly as it was. Also found in passing: the *pre-existing, unchanged* fallback description already renders at 167 chars, over budget independently of this work — a separate, pre-existing issue, not introduced here.
+- Homepage ("Our Rentals" section) gained a second button, "Browse all homes" → `/properties`, next to the existing "See staycation options" → `/staycation`. Confirmed by grep that no direct homepage link to `/properties` existed before (the navbar's "Properties" link is the on-page anchor `/#properties`).
+- New tests: `src/lib/__tests__/properties-page.test.ts`, `src/lib/__tests__/staycation-page.test.ts`, `src/lib/__tests__/homepage-properties-link.test.ts` — title/H1/intro content and rendered-length budgets, with and without a database.
+
+### Outcome — dark-pink background → homepage pink (Part 2)
+The Owner flagged `/properties`' background as a dark pink that should match the homepage's lighter pink. Evidence: `bg-cream`/`bg-sand` (`#F5BECA`, alias tokens, same hex) is a saturated pink despite the name; `bg-offwhite` (`#FFF8FA`) is the homepage body color and the color `/staycation`/`/weddings-accommodation` already use for the same reason (their own code comments predate this task and already call out the `#F5BECA` naming trap).
+- Changed the Tailwind **class usage**, not the token definitions — `cream`/`sand` are still the right color for small accents (icon chips, hover states, admin chat UI) that were deliberately left untouched.
+- `bg-cream` → `bg-offwhite` on 7 full-page `<main>` backgrounds (`/properties`, `/about`, `/faq`, `/terms`, `/privacy`, `/ambassadors`, `/pay/[token]`) and the homepage's own `FAQ.tsx` section background.
+- **Contrast (WCAG AA):** every text/background pair measured improves after the swap (never regresses) — e.g. full-opacity `charcoal` on the old dark pink was 5.45:1, now 8.34:1 on the new background; the worst-case `charcoal/35` muted text goes 1.67:1 → 1.81:1. Some sub-AA pairs pre-dated this change and remain sub-AA after it (most `charcoal/*` opacity levels below ~80%, the `forest` link color, and the `coral` accent color, against either background) — these are a known, already-tracked gap (`HIL_PROJECT_STATUS.md`'s "main-site property-page accessibility items (contrast…)" item), not something this background-only change attempted to fix, since doing so would mean changing brand accent/link colors site-wide, which is out of this task's scope and not Owner-authorized.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 111 files / 1629 tests passed (10 new, across 3 of 3 timezone configs). `npm run build:app` could not be verified in this sandboxed git worktree — Turbopack fails on a pre-existing cross-worktree `node_modules` symlink ("Symlink node_modules is invalid, it points out of the filesystem root"), unrelated to this change and reproducible on an unmodified checkout of the same worktree.
+
+---
+
 ## 2026-10-10 — Mickey Sleeps 11 "Groups of 12 or more" segment retitled (Stay Match false-positive fix)
 
 Area: Website / Content / Blog (Stay Match)
