@@ -86,6 +86,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.5,
     },
     {
+      // Newsletter signup (src/app/newsletter/page.tsx) — linked from a future SMS campaign.
+      url: `${BASE_URL}/newsletter`,
+      changeFrequency: "yearly" as const,
+      priority: 0.3,
+    },
+    {
       url: `${BASE_URL}/privacy`,
       changeFrequency: "yearly" as const,
       priority: 0.3,
