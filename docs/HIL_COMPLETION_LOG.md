@@ -4,6 +4,31 @@
 
 ---
 
+## 2026-10-10 — Mickey Sleeps 11 "Groups of 12 or more" segment retitled (Stay Match false-positive fix)
+
+Area: Website / Content / Blog (Stay Match)
+
+Status: **Code complete and tested; production update pending the Owner running a new targeted script.** PR #67 (plugin v1.0.3) closed as superseded by this content fix.
+
+### Outcome
+Stay Match (blog plugin) scores an intent phrase against each property's `bestForSegments` title (3x) + body (1x). Sleeps 11's upsell segment was titled "Groups of 12 or more," so a reader's "groups of 12 or more" phrase recommended the 11-guest house for a group it can't actually fit. Retitled/reworded in `prisma/property-content/mickey-content.ts` (slug `mickey-in-lipa--family-house--sleeps-11`, property id 4):
+- Title: "Groups of 12 or more" → "Need more room? See the full house"
+- Body: now states the rate covers 9 / sleeps up to 11 / extra per-guest fee for guests 10–11, then points to the full-house configuration — no longer implying this house fits 12+.
+- `internalLinkLabel`/`internalLinkUrl` (→ the Sleeps-15 full house) unchanged.
+- Body stays number-free (no peso amount, per [DEC-007](HIL_DECISIONS.md)) and keeps the exact `"covers 9 guests"` substring so `normalizePricingProse`'s `/covers \d+(?= guests?)/gi` rewrite still applies at render time.
+
+**HIL Marketing re-scored all 31 enrolled Stay Match intents against the proposed feed: no change in recommendation for any real enrolled intent.** Only synthetic test phrases like "groups of 12 or more" stop matching Sleeps 11 — the fix is scoped to exactly the false-positive case.
+
+### What shipped vs. what's pending
+- **Shipped (this repo, committed, not pushed):** the content-module edit above; `src/lib/sleeps11-segment-fix.ts` (pure transform: finds the one segment titled exactly "Groups of 12 or more," replaces only its title/body, refuses on anything unexpected — round-trip JSON check, wrong id/slug, zero or multiple matches); unit tests in `src/lib/__tests__/sleeps11-segment-fix.test.ts`; `scripts/fix-sleeps11-segment.ts`, a dry-run-by-default CLI modeled on `scripts/fix-property-content.ts` ([DEC-016](HIL_DECISIONS.md)'s targeted-substring-replacement pattern) that asserts property id 4 + slug before writing.
+- **Not run against any database** — `bestForSegments` has no admin UI ([DEC-015](HIL_DECISIONS.md)), so production still carries the old title until the Owner runs `scripts/fix-sleeps11-segment.ts` (dry run first, then `--execute`) from an operator machine that can reach Hostinger, per [DEC-012](HIL_DECISIONS.md)/the migration runbook's reachability posture. Re-running the full Mickey seed instead would overwrite any admin edits on all three Mickey listings and was explicitly avoided.
+- **PR #67** (an earlier plugin-side fix, Stay Match v1.0.3) was closed in favor of this content-level fix.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 96 files / 1554 tests passed (11 new).
+
+---
+
 ## 2026-10-10 — Main-site LodgingBusiness JSON-LD: GBP hasMap/geo, LodgingBusiness type
 
 Area: Website / SEO
