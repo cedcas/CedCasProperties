@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-10-10 — Main-site booking-intent SEO proposal (not implemented)
+
+Area: Website / SEO
+
+Status: **Proposal only — no code changed.** Awaiting Owner approval of the exact wording.
+
+### Outcome
+2026-10-10 GSC measurement found main-site booking-intent queries ranking poorly despite all money pages being indexed: "apartment for rent lipa city" pos 28, "airbnb lipa" pos 16–38, "transient house in lipa batangas" pos 16–29. `content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md` proposes specific title/description/H1/intro-block text for `/properties` and `/staycation` (one primary keyword per page, per SEO-DEC-012) and a missing homepage → `/properties` internal link (the homepage already links `/staycation`; the navbar's "Properties" link only goes to the on-page `/#properties` anchor, not the dedicated index page). Also fixes, as part of the same proposed titles, that `/properties`'s current rendered `<title>` is 68 characters — already over the 60-char budget the `/weddings-accommodation` page follows — independent of the keyword additions.
+
+### Not done
+No file under `src/app/properties`, `src/app/staycation`, or `src/components/sections/Properties.tsx` was touched. Per CLAUDE.md, implementation waits for the Owner's sign-off on the proposed copy.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
