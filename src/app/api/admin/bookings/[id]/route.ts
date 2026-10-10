@@ -19,6 +19,7 @@ import {
   type Conflict,
 } from "@/lib/availability";
 import { withInventoryLock } from "@/lib/inventory-lock";
+import { sendBookingConfirmedMeasurementEvent } from "@/lib/ga4-measurement-protocol";
 
 /** Thrown inside the reactivation transaction to roll it back and report why. */
 class ReactivationConflict extends Error {
@@ -263,6 +264,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     } catch (err) {
       console.error("Scheduled message materialize/flush failed:", err);
     }
+
+    // GA4 server-side reconciliation (off by default — see src/lib/ga4-measurement-protocol.ts).
+    await sendBookingConfirmedMeasurementEvent({
+      bookingId: booking.id,
+      propertySlug: booking.property.slug,
+      total: Number(booking.totalPrice),
+    });
   }
 
   // If booking is no longer confirmed, cancel any pending scheduled sends.
