@@ -122,11 +122,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const { listings } = await loadInventory();
   const count = listings.length;
 
-  // The count renders from the DB so the title can't claim "5 Private Homes"
-  // the day a sixth is published or one is deactivated.
-  const title = count > 0
-    ? `Staycation in Lipa City: ${count} Private ${plural(count, "Home")}, Booked Direct`
-    : "Staycation in Lipa City — Private Homes, Booked Direct";
+  // Fixed — no dynamic count. 60 rendered chars with the " | Haven in Lipa"
+  // suffix regardless of count. Targets "vacation rental" / "airbnb lipa"
+  // framing (booking-intent SEO proposal,
+  // content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md).
+  const title = "Lipa City Staycation & Vacation Rental Homes";
 
   const cheapest = listings.length
     ? Math.min(...listings.map((p) => Number(p.pricePerNight)))
@@ -134,6 +134,15 @@ export async function generateMetadata(): Promise<Metadata> {
 
   // Draft copy (159 chars). It names the inventory count and the entry rate, so
   // it is only served while both still hold.
+  //
+  // NOT reworded to the 101026 booking-intent proposal's Airbnb-alternative
+  // framing: that text rendered at 187 (fallback) / 213–214 (count===5, incl.
+  // a real peso amount) chars, both over the 160-char budget — the proposal's
+  // own "already measured" note (159 chars) described the OLD copy below, not
+  // the new text. Per the proposal task's own rule ("if any proposed string
+  // fails a length rule as rendered, stop and report it rather than
+  // rewording"), this description is left unchanged pending an Owner-approved
+  // shorter rewrite — see Booking_Intent_SEO_Proposal_101026.md.
   const description = count === 5 && cheapest > 0
     ? `Five private homes for a Lipa City staycation — couples, families, barkadas and remote workers. Book direct from ${peso(cheapest)}/night and skip the 14–20% platform fee.`
     : "Private homes for a Lipa City staycation — couples, families, barkadas and remote workers. Book direct and skip the 14–20% platform fee, with no service charge on top.";
@@ -380,8 +389,8 @@ export default async function StaycationPage() {
               style={{ fontSize: "clamp(2rem,4vw,2.8rem)" }}
             >
               {hasInventory
-                ? `Staycation in Lipa City: ${count} Private ${plural(count, "Home")}, Booked Direct`
-                : "Staycation in Lipa City — Private Homes, Booked Direct"}
+                ? `Lipa City Staycation & Vacation Rentals: ${count} Private ${plural(count, "Home")}, Booked Direct`
+                : "Lipa City Staycation & Vacation Rentals — Private Homes, Booked Direct"}
             </h1>
             <div className={`${prose} space-y-4`}>
               <p>
@@ -391,7 +400,8 @@ export default async function StaycationPage() {
                 the way Tagaytay does on a long weekend. It&rsquo;s where we live, and it&rsquo;s where
                 we run {hasInventory ? `${numberWord(count)} private ${plural(count, "home")}` : "private homes"}{" "}
                 you can book directly — no platform, no service fee, no bidding against a hundred other
-                listings.
+                listings. If you&rsquo;d normally search Airbnb for a Lipa getaway, these are the same
+                homes — direct, with live availability and no service fee.
               </p>
               <p>
                 This page is the honest version: what each home costs, who each one actually suits, and

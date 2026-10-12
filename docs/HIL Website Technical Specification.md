@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-10 (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
+> **Last updated:** 2026-10-10 (booking-intent SEO copy on `/properties`/`/staycation` plus a homepage `/properties` link, PR pending; the stale brand-token table corrected and a background-usage rule added — dark-pink `bg-cream` backgrounds on 7 pages + the homepage `FAQ` section switched to the lighter `bg-offwhite`, matching `/staycation`/`/weddings-accommodation`'s existing precedent — see Tech Stack → Frontend & Framework). Prior, same day: (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
 > `/newsletter` page, homepage/footer signup strips (`NewsletterSignup.tsx`),
 > `POST /api/newsletter`, Hostinger Reach client (`src/lib/hostinger-reach.ts`), GA4
 > `generate_lead` on signup; Owner-approved, not yet merged to `main`). Prior, same day:
@@ -48,11 +48,14 @@ The site is designed as a direct-booking alternative to Airbnb, with a savings c
 ### Frontend & Framework
 - **Next.js 16** (App Router) — full-stack React framework; handles pages, API routes, and server components
 - **React 19** — latest React with server components support
-- **Tailwind CSS v4** — utility-first styling with custom brand tokens:
-  - `--color-charcoal: #2C2C2C`
-  - `--color-forest: #3B5323`
-  - `--color-gold: #C4A862`
-  - `--color-cream: #F9F5EE`
+- **Tailwind CSS v4** — utility-first styling with custom brand tokens (`src/app/globals.css`'s `@theme inline`; this table was stale against the live palette until 2026-10-10 — verify against the CSS file, not this list, if they ever drift again):
+  - `--color-charcoal: #335238`
+  - `--color-forest: #4CA750`
+  - `--color-coral: #FF5371` / `--color-coral-dark: #E03D5A`
+  - `--color-cream: #F5BECA` (alias: `--color-sand`, same hex) — a **saturated pink**, despite the name. Reserved for small accents (icon chips, hover states, admin UI) and the homepage's `FAQ` section/card contrast — **not** a full-page/section background since 2026-10-10 (see below). `--color-gold: #C4A862` still exists in code as a literal `#C4A862` (border-left accents, numbered badges), not promoted to a token.
+  - `--color-offwhite: #FFF8FA` — the **page background** (`body` in `globals.css`) and the lighter pink the homepage's own sections use (`Properties.tsx`, `ContactForm.tsx`).
+  - `--color-sky-blue: #8BCDB8`, `--color-sunshine: #FFDD3F`, `--color-palm: #4CA750` (same hex as forest) — decorative accents, not backgrounds.
+  - **Background usage rule (2026-10-10):** every full-page `<main>` background and the homepage `FAQ` section background that used to be `bg-cream` (`/properties`, `/about`, `/faq`, `/terms`, `/privacy`, `/ambassadors`, `/pay/[token]`, and the homepage's `FAQ.tsx` section) is now `bg-offwhite`, matching `/staycation` and `/weddings-accommodation`'s pre-existing precedent (their own code comments already called out `bg-cream`'s hex as "a saturated pink despite the name" and chose `bg-offwhite` instead — see `src/app/staycation/page.tsx`). `bg-cream`/`bg-sand` usages that are small accents (icon chips, card backgrounds inside a grid, admin UI, hover/focus states) were deliberately left unchanged — only the class usages changed, not the token definitions, since `cream`/`sand` are still the right color for those accents.
 - **TypeScript** — used throughout the codebase
 
 ### Backend & Database

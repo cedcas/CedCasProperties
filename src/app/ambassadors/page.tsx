@@ -22,7 +22,7 @@ export default function AmbassadorsPage() {
   return (
     <>
       <Navbar />
-      <main className="bg-cream min-h-screen pt-28 pb-20">
+      <main className="bg-offwhite min-h-screen pt-28 pb-20">
 
         {/* Hero */}
         <section className="max-w-5xl mx-auto px-6 text-center">

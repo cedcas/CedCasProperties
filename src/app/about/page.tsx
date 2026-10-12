@@ -141,7 +141,7 @@ export default async function AboutPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(personJsonLd) }}
       />
       <Navbar />
-      <main className="bg-cream min-h-screen pt-28 pb-20">
+      <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-3xl mx-auto px-6">
           <span
             className="flex items-center gap-2 text-[11px] font-semibold tracking-[.18em] uppercase mb-3"
