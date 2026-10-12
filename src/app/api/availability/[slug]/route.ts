@@ -10,6 +10,8 @@ import { assertBookingPolicy, earliestCheckIn, normalizeBookingPolicy } from "@/
 //     advance notice allows (src/lib/booking-policy.ts) — `available` is false then too.
 // GET /api/availability/[slug]  (no dates)
 //   → { blockedRanges: [{ start, end }], earliestCheckIn }  — every unavailable range from today
+// GET /api/availability/[slug]?earliest=1
+//   → { earliestCheckIn }  — just the date pickers' `min`, without reading any calendar
 //
 // PUBLIC route. Fields are only ever added to the original response shape, and it
 // deliberately exposes only opaque date ranges — never guest names or block reasons. Admin
@@ -44,6 +46,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const policy = normalizeBookingPolicy(property);
   const now = new Date();
   const earliest = utcDateKey(earliestCheckIn(now, policy));
+
+  if (searchParams.get("earliest") === "1") {
+    return NextResponse.json({ earliestCheckIn: earliest });
+  }
 
   // ── Specific dates: is this stay bookable? ────────────────────────────────
   if (checkInStr && checkOutStr) {

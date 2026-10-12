@@ -13,6 +13,20 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
 
   const images: string[] = JSON.parse(property.images || "[]");
 
+  // The other listings in this listing's inventory group ("house"), for the Booking
+  // settings copy helper. Empty when the listing is not grouped.
+  const membership = await prisma.inventoryGroupMember.findUnique({
+    where: { propertyId: property.id },
+    select: { inventoryGroupId: true },
+  });
+  const houseSiblings = membership
+    ? await prisma.property.findMany({
+        where: { id: { not: property.id }, inventoryMembership: { inventoryGroupId: membership.inventoryGroupId } },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+
   return (
     <div className="p-6 lg:p-10 max-w-3xl mx-auto">
       <div className="flex items-start justify-between mb-8">
@@ -28,7 +42,7 @@ export default async function EditPropertyPage({ params }: { params: Promise<{ i
         </Link>
       </div>
       <div className="space-y-6">
-        <PropertyForm property={property} />
+        <PropertyForm property={property} houseSiblings={houseSiblings} />
         <ImageManager
           propertyId={property.id}
           initialImages={images}
