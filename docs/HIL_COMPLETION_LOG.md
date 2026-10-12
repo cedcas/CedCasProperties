@@ -8,7 +8,7 @@
 
 Area: Website
 
-Status: **Migration applied to dev and production. Code released via PR #74; live verification is recorded in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md), not here (DEC-006).** Session 2 (admin settings UI) not started.
+Status: **Live on production since 2026-10-12** (PR #74, merge `a372f1a`, merged 21:40 UTC; Vercel Production deployment `success`; CI on `main` green). Verified live: `/api/availability/[slug]` returns the Manila-date `earliestCheckIn`; `/api/stripe/payment-intent`, `/api/checkout-attempts` and `/api/bookings` each refuse a past check-in with 409 `too_soon`; property and `/book` pages 200. Session 2 (admin settings UI) not started.
 
 ### Outcome
 - The three guest routes refuse a check-in before today in Lipa (Asia/Manila) for every payment method; both date pickers use the Manila date instead of the UTC date.
