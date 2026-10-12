@@ -8,7 +8,11 @@
 
 Area: Website
 
-Status: **Live on production since 2026-10-12** (PR #74, merge `a372f1a`, merged 21:40 UTC; Vercel Production deployment `success`; CI on `main` green). Verified live: `/api/availability/[slug]` returns the Manila-date `earliestCheckIn`; `/api/stripe/payment-intent`, `/api/checkout-attempts` and `/api/bookings` each refuse a past check-in with 409 `too_soon`; property and `/book` pages 200. Session 2 (admin settings UI) not started.
+Status: **Live on production since 2026-10-12** (PR #74, merge `a372f1a`, merged 21:40 UTC; Vercel Production deployment `success`; CI on `main` green). Verified live: `/api/availability/[slug]` returns the Manila-date `earliestCheckIn`; `/api/stripe/payment-intent`, `/api/checkout-attempts` and `/api/bookings` each refuse a past check-in with 409 `too_soon`; property and `/book` pages 200.
+
+**Session 2 live on production since 2026-10-12** (PR #76, merge `bc3bd40`, merged 22:00 UTC; Vercel Production deployment `success`; CI on `main` green): Admin → Edit Property → Booking Settings (advance notice; same-day cutoff every half hour 6:00 AM–11:30 PM; copy-to-house checkbox; one `AdminLog` entry per changed listing) and guest date pickers taking `min` from `/api/availability/[slug]?earliest=1`. No schema change. Owner accepted the preview and checked production in a browser.
+
+**Settings in effect:** all 5 listings are same day with an 11:30 PM cutoff, set by the Owner in admin 2026-10-12 22:05 and 22:15 UTC (5 `AdminLog` entries; values read back from the production database). The feature is complete; Instant Booking (step 2) is not started.
 
 ### Outcome
 - The three guest routes refuse a check-in before today in Lipa (Asia/Manila) for every payment method; both date pickers use the Manila date instead of the UTC date.
