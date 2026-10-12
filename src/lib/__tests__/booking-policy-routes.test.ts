@@ -324,6 +324,13 @@ describe("GET /api/availability/[slug]", () => {
     expect((await (await get()).json()).earliestCheckIn).toBe("2026-10-13");
   });
 
+  it("answers ?earliest=1 for the date pickers without reading any calendar", async () => {
+    setNow("2026-10-12", "10:00");
+    expect(await (await get("?earliest=1")).json()).toEqual({ earliestCheckIn: "2026-10-13" });
+    expect(availability.getUnavailableDateRanges).not.toHaveBeenCalled();
+    expect(availability.getPropertyConflicts).not.toHaveBeenCalled();
+  });
+
   it("answers a too-soon stay as unavailable, with the reason and a message", async () => {
     setNow("2026-10-12", "11:00");
     const body = await (await get("?checkIn=2026-10-12&checkOut=2026-10-13")).json();

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import FeeBreakdown from "./FeeBreakdown";
 import { calcExtraGuestFee } from "@/lib/pricing-core";
 import { extraGuestFeeApplies } from "@/lib/occupancy";
-import { manilaTodayKey } from "@/lib/dates";
+import { useEarliestCheckIn } from "@/components/booking/useEarliestCheckIn";
 
 interface Props {
   slug: string;
@@ -39,7 +39,7 @@ export default function BookingCard({
   initialGuests = "",
 }: Props) {
   const router = useRouter();
-  const today = manilaTodayKey();
+  const today = useEarliestCheckIn(slug);
 
   // Seeded only from an explicit URL param — never from browser cache/autofill.
   const [checkIn, setCheckIn] = useState(initialCheckIn);

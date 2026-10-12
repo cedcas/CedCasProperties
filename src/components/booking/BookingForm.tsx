@@ -11,7 +11,8 @@ import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import PaymentQR from "./PaymentQR";
-import { formatStayDate, manilaTodayKey } from "@/lib/dates";
+import { formatStayDate } from "@/lib/dates";
+import { useEarliestCheckIn } from "./useEarliestCheckIn";
 import { track } from "@/lib/analytics";
 import { trackPurchaseOnce } from "@/lib/ga4-purchase";
 
@@ -298,7 +299,7 @@ export default function BookingForm({
     return { airbnbTotal: at, savings: at - computedNightlyTotal };
   }, [computedNightlyTotal]);
 
-  const todayStr = manilaTodayKey();
+  const todayStr = useEarliestCheckIn(slug);
 
   // What the card is for — never how much. The server prices the stay itself and
   // stamps the intent with these details, which /api/bookings then verifies.

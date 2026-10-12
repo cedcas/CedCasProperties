@@ -756,6 +756,7 @@ Area: Website
 - These are rules for direct bookings only. Airbnb's advance notice is configured in Airbnb; iCal feeds carry dates, never policies.
 - Any new guest route that prices or saves a stay must call `assertBookingPolicy`. Admin routes must not.
 - `assertBookingPolicy` returns a typed outcome (`ok` / `too_soon`). Instant Booking adds `requires_approval` there; callers switch on `code`.
+- Settings are edited in Admin → Edit Property → Booking Settings and validated by `parseBookingPolicyInput`: notice 0/1/2/3/7 days; cutoff every half hour from 6:00 AM to 11:30 PM or none (the Owner's first choice, 11:30 PM, set the range). The copy-to-house helper writes the same two values to the other listings in the inventory group; each changed listing gets an `AdminLog` entry.
 - The cutoff minute itself is already too late (a 10:00 cutoff closes tonight at 10:00). The grace window also covers a notice period rolling over at midnight.
 - Route tests that post a stay must pin the clock; a fixed past date is now refused.
 - Schema change ships migrate-first ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)): `20261012184848_add_property_advance_notice`, additive.

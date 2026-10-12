@@ -27,6 +27,52 @@ export const DEFAULT_BOOKING_POLICY: BookingPolicy = { advanceNoticeDays: 0, sam
 /** The notice periods the Owner can choose from. */
 export const ADVANCE_NOTICE_DAY_CHOICES = [0, 1, 2, 3, 7] as const;
 
+/** Same-day cutoffs the Owner can choose from: every half hour, 6:00 AM to 11:30 PM. */
+export const SAME_DAY_CUTOFF_CHOICES: readonly number[] = Array.from({ length: 36 }, (_, i) => 6 * 60 + i * 30);
+
+/** `690` → "11:30 AM". */
+export function formatCutoffMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
+}
+
+/** "Same day", "1 day", "7 days". */
+export function formatAdvanceNoticeDays(days: number): string {
+  return days === 0 ? "Same day" : `${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** One line for the audit log: "same day until 11:30 PM", "2 days' notice". */
+export function describeBookingPolicy(policy: BookingPolicy): string {
+  if (policy.advanceNoticeDays > 0) return `${formatAdvanceNoticeDays(policy.advanceNoticeDays)}' notice`;
+  return policy.sameDayCutoffMinutes === null
+    ? "same day, no cutoff"
+    : `same day until ${formatCutoffMinutes(policy.sameDayCutoffMinutes)}`;
+}
+
+/**
+ * Validate settings submitted from the admin form. Only the offered choices are accepted,
+ * and a cutoff is dropped when a notice period is set, since it would never apply.
+ */
+export function parseBookingPolicyInput(input: {
+  advanceNoticeDays?: unknown;
+  sameDayCutoffMinutes?: unknown;
+}): { ok: true; policy: BookingPolicy } | { ok: false; error: string } {
+  const days = Number(input.advanceNoticeDays);
+  if (!(ADVANCE_NOTICE_DAY_CHOICES as readonly number[]).includes(days)) {
+    return { ok: false, error: "Advance notice must be same day, 1, 2, 3 or 7 days." };
+  }
+  const rawCutoff = input.sameDayCutoffMinutes;
+  if (days > 0 || rawCutoff === null || rawCutoff === undefined || rawCutoff === "") {
+    return { ok: true, policy: { advanceNoticeDays: days, sameDayCutoffMinutes: null } };
+  }
+  const cutoff = Number(rawCutoff);
+  if (!SAME_DAY_CUTOFF_CHOICES.includes(cutoff)) {
+    return { ok: false, error: "Same-day cutoff must be one of the listed times, or no cutoff." };
+  }
+  return { ok: true, policy: { advanceNoticeDays: days, sameDayCutoffMinutes: cutoff } };
+}
+
 /**
  * How long after a deadline a guest who was ALREADY on the payment screen may still submit.
  * Applies to the same-day cutoff and the notice period — never to the today floor.

@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mergePricingNotesPaymentMethods } from "@/lib/pricing-notes";
 import { normalizeSeoField } from "@/lib/seo-metadata";
+import { describeBookingPolicy, normalizeBookingPolicy, parseBookingPolicyInput, type BookingPolicy } from "@/lib/booking-policy";
+import { logAction } from "@/lib/log";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -79,10 +81,78 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     update.pricingNotes = mergePricingNotesPaymentMethods(current?.pricingNotes, trimmed);
   }
 
+  // Booking settings — guest advance notice (src/lib/booking-policy.ts). Stored per
+  // listing; `applyBookingPolicyToHouse` copies the same two values to the other listings
+  // in this listing's inventory group, and nothing else about them.
+  let newPolicy: BookingPolicy | null = null;
+  let policyTargets: { id: number; name: string; advanceNoticeDays: number; sameDayCutoffMinutes: number | null }[] = [];
+  if (data.advanceNoticeDays !== undefined || data.sameDayCutoffMinutes !== undefined) {
+    const parsed = parseBookingPolicyInput(data);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    newPolicy = parsed.policy;
+    update.advanceNoticeDays = newPolicy.advanceNoticeDays;
+    update.sameDayCutoffMinutes = newPolicy.sameDayCutoffMinutes;
+
+    const select = { id: true, name: true, advanceNoticeDays: true, sameDayCutoffMinutes: true } as const;
+    const self = await prisma.property.findUnique({ where: { id: Number(id) }, select });
+    if (self) policyTargets.push(self);
+    if (data.applyBookingPolicyToHouse === true) {
+      const membership = await prisma.inventoryGroupMember.findUnique({
+        where: { propertyId: Number(id) },
+        select: { inventoryGroupId: true },
+      });
+      if (membership) {
+        const siblings = await prisma.property.findMany({
+          where: {
+            id: { not: Number(id) },
+            inventoryMembership: { inventoryGroupId: membership.inventoryGroupId },
+          },
+          select,
+        });
+        policyTargets = policyTargets.concat(siblings);
+      }
+    }
+  }
+
   const property = await prisma.property.update({
     where: { id: Number(id) },
     data: update,
   });
+
+  if (newPolicy) {
+    const siblingIds = policyTargets.map((p) => p.id).filter((pid) => pid !== Number(id));
+    if (siblingIds.length > 0) {
+      await prisma.property.updateMany({
+        where: { id: { in: siblingIds } },
+        data: { advanceNoticeDays: newPolicy.advanceNoticeDays, sameDayCutoffMinutes: newPolicy.sameDayCutoffMinutes },
+      });
+    }
+    // One audit entry per listing whose settings actually changed.
+    for (const target of policyTargets) {
+      const before = normalizeBookingPolicy(target);
+      if (
+        before.advanceNoticeDays === newPolicy.advanceNoticeDays &&
+        before.sameDayCutoffMinutes === newPolicy.sameDayCutoffMinutes
+      ) {
+        continue;
+      }
+      await logAction({
+        actor: session.user.name ?? "Admin",
+        actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+        actorId: parseInt(session.user.id),
+        action: `Changed booking settings for "${target.name}" from ${describeBookingPolicy(before)} to ${describeBookingPolicy(newPolicy)}`,
+        module: "properties",
+        target: `property-${target.id}`,
+        metadata: {
+          propertyId: target.id,
+          before,
+          after: newPolicy,
+          copiedFromPropertyId: target.id === Number(id) ? undefined : Number(id),
+        },
+      });
+    }
+  }
+
   return NextResponse.json(property);
 }
 

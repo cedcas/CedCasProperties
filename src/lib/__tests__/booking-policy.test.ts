@@ -10,8 +10,13 @@ import {
   earliestCheckIn,
   manilaMinutesOfDay,
   normalizeBookingPolicy,
+  describeBookingPolicy,
+  formatAdvanceNoticeDays,
+  formatCutoffMinutes,
+  parseBookingPolicyInput,
   BOOKING_POLICY_GRACE_MINUTES,
   DEFAULT_BOOKING_POLICY,
+  SAME_DAY_CUTOFF_CHOICES,
   type BookingPolicy,
 } from "@/lib/booking-policy";
 import { manilaTodayKey, utcDateKey } from "@/lib/dates";
@@ -179,5 +184,52 @@ describe("assertBookingPolicy", () => {
       expect(submit(manila("2026-10-12", "23:55"), manila("2026-10-13", "00:40"), notice(1), checkIn)).toBe(false);
       expect(submit(null, manila("2026-10-13", "00:03"), notice(1), checkIn)).toBe(false);
     });
+  });
+});
+
+describe("admin settings", () => {
+  it("offers a cutoff every half hour from 6:00 AM to 11:30 PM", () => {
+    expect(SAME_DAY_CUTOFF_CHOICES).toHaveLength(36);
+    expect(formatCutoffMinutes(SAME_DAY_CUTOFF_CHOICES[0])).toBe("6:00 AM");
+    expect(formatCutoffMinutes(SAME_DAY_CUTOFF_CHOICES[35])).toBe("11:30 PM");
+    expect(SAME_DAY_CUTOFF_CHOICES).toContain(23 * 60 + 30);
+  });
+
+  it("labels times and notice periods the way the form shows them", () => {
+    expect(formatCutoffMinutes(0)).toBe("12:00 AM");
+    expect(formatCutoffMinutes(12 * 60)).toBe("12:00 PM");
+    expect(formatCutoffMinutes(13 * 60 + 30)).toBe("1:30 PM");
+    expect(formatAdvanceNoticeDays(0)).toBe("Same day");
+    expect(formatAdvanceNoticeDays(1)).toBe("1 day");
+    expect(formatAdvanceNoticeDays(7)).toBe("7 days");
+    expect(describeBookingPolicy(DEFAULT_BOOKING_POLICY)).toBe("same day, no cutoff");
+    expect(describeBookingPolicy({ advanceNoticeDays: 0, sameDayCutoffMinutes: 1410 })).toBe("same day until 11:30 PM");
+    expect(describeBookingPolicy(notice(2))).toBe("2 days' notice");
+  });
+
+  it("accepts the form's string values", () => {
+    expect(parseBookingPolicyInput({ advanceNoticeDays: "0", sameDayCutoffMinutes: "1410" })).toEqual({
+      ok: true,
+      policy: { advanceNoticeDays: 0, sameDayCutoffMinutes: 1410 },
+    });
+    expect(parseBookingPolicyInput({ advanceNoticeDays: "0", sameDayCutoffMinutes: "" })).toEqual({
+      ok: true,
+      policy: DEFAULT_BOOKING_POLICY,
+    });
+  });
+
+  it("drops the cutoff when a notice period is set", () => {
+    expect(parseBookingPolicyInput({ advanceNoticeDays: 2, sameDayCutoffMinutes: 600 })).toEqual({
+      ok: true,
+      policy: notice(2),
+    });
+  });
+
+  it("rejects anything that is not one of the offered choices", () => {
+    expect(parseBookingPolicyInput({ advanceNoticeDays: 4 }).ok).toBe(false);
+    expect(parseBookingPolicyInput({ advanceNoticeDays: -1 }).ok).toBe(false);
+    expect(parseBookingPolicyInput({ sameDayCutoffMinutes: 600 }).ok).toBe(false); // notice missing
+    expect(parseBookingPolicyInput({ advanceNoticeDays: 0, sameDayCutoffMinutes: 601 }).ok).toBe(false);
+    expect(parseBookingPolicyInput({ advanceNoticeDays: 0, sameDayCutoffMinutes: "soon" }).ok).toBe(false);
   });
 });
