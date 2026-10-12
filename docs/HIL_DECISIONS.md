@@ -736,7 +736,7 @@ Amends [DEC-017](#dec-017--cis-build-job-compiles-the-app-only-database-sync-sta
 ## DEC-027 — Guest advance notice is a separate policy layer, set per listing, in Manila time; a short grace applies only at final submission
 
 Date: 2026-10-12
-Status: Active — **Owner-approved 2026-10-12; Session 1 built on `feature/same-day-booking-advance-notice-101226`, not merged, migration not applied to any hosted database.** The admin settings UI is Session 2.
+Status: Active — **Owner-approved 2026-10-12; Session 1 built on `feature/same-day-booking-advance-notice-101226` (PR #74), not merged. Migration applied to the dev database 2026-10-12 21:27 UTC from `467a5c2`; not applied to production.** The admin settings UI is Session 2.
 Area: Website
 
 ### Decision
