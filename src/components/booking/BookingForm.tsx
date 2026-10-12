@@ -11,7 +11,7 @@ import Link from "next/link";
 import { Elements, PaymentElement, useStripe, useElements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
 import PaymentQR from "./PaymentQR";
-import { formatStayDate } from "@/lib/dates";
+import { formatStayDate, manilaTodayKey } from "@/lib/dates";
 import { track } from "@/lib/analytics";
 import { trackPurchaseOnce } from "@/lib/ga4-purchase";
 
@@ -201,7 +201,12 @@ export default function BookingForm({
       const res = await fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`);
       const data = await res.json();
       if (!data.available) {
-        setAvailabilityError("Those dates are already booked. Please choose different dates.");
+        // "too_soon" is the listing's advance notice, and its message names the earliest check-in.
+        setAvailabilityError(
+          data.reason === "too_soon" && typeof data.message === "string"
+            ? data.message
+            : "Those dates are already booked. Please choose different dates."
+        );
       } else {
         setAvailabilityError("");
       }
@@ -293,7 +298,7 @@ export default function BookingForm({
     return { airbnbTotal: at, savings: at - computedNightlyTotal };
   }, [computedNightlyTotal]);
 
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = manilaTodayKey();
 
   // What the card is for — never how much. The server prices the stay itself and
   // stamps the intent with these details, which /api/bookings then verifies.

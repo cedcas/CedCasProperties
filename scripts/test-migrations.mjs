@@ -120,6 +120,23 @@ function projectWithExtraMigration(name, sql) {
   return { dir, commit: git("rev-parse", "HEAD") };
 }
 
+/** Migrations this commit adds after the baseline — pending on a database that was only baselined. */
+const laterMigrations = fs
+  .readdirSync(path.join(REPO, "prisma/migrations"), { withFileTypes: true })
+  .filter((e) => e.isDirectory() && e.name !== BASELINE_MIGRATION)
+  .map((e) => e.name)
+  .sort();
+
+/** Bring a baselined database up to this commit, the way an operator would. */
+function applyLaterMigrations(t) {
+  if (laterMigrations.length === 0) return { status: 0, output: "" };
+  return dbMigrate(["deploy", "--target", "local", "--expect-database", t.db, "--commit", repoCommit, "--apply", laterMigrations.join(",")], t.url);
+}
+
+async function rowCounts(url) {
+  return (await dataChecksums(url)).split("|").map((e) => e.split(":").slice(0, 2).join(":")).join("|");
+}
+
 const repoCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
 const repoDirty = execFileSync("git", ["status", "--porcelain", "--", "prisma", "scripts", "package.json", "package-lock.json"], { cwd: REPO, encoding: "utf8" }).trim();
 const silent = () => {};
@@ -158,11 +175,18 @@ try {
     const base = dbMigrate(["baseline", "--target", "local", "--expect-database", t.db, "--commit", repoCommit], t.url);
     check("baseline succeeds", base.status === 0, base.output);
     check("data is unchanged by the baseline", (await dataChecksums(t.url)) === before);
+    // The baseline only marks history. Anything this commit adds on top is still pending, and
+    // is applied on purpose; the no-op checks below are about a database already at this commit.
+    const counts = await rowCounts(t.url);
+    const up = applyLaterMigrations(t);
+    check(`the ${laterMigrations.length} later migration(s) apply to the baselined database and verify`, up.status === 0 && (laterMigrations.length === 0 || /Schema verified/.test(up.output)), up.output);
+    check("no rows were added or removed by them", (await rowCounts(t.url)) === counts);
+    const atHead = await dataChecksums(t.url);
     const dep = prisma(["migrate", "deploy"], t.url);
     check("migrate deploy afterwards is a no-op", dep.status === 0 && /No pending migrations/.test(dep.output), dep.output);
     const op = dbMigrate(["deploy", "--target", "local", "--expect-database", t.db, "--commit", repoCommit], t.url);
     check("operator deploy reports nothing to apply", op.status === 0 && /Nothing to apply/.test(op.output), op.output);
-    check("data is unchanged after deploy", (await dataChecksums(t.url)) === before);
+    check("data is unchanged after deploy", (await dataChecksums(t.url)) === atHead);
     check("release gate passes once baselined", (await runGate({ url: t.url, log: silent })).ok);
     const twice = dbMigrate(["baseline", "--target", "local", "--expect-database", t.db, "--commit", repoCommit], t.url);
     check("baselining a second time is refused", twice.status === 1, twice.output);
@@ -181,6 +205,7 @@ try {
     {
       const p = await legacyDb("pending");
       dbMigrate(["baseline", "--target", "local", "--expect-database", p.db, "--commit", repoCommit], p.url);
+      applyLaterMigrations(p);
       const name = "20991231000000_test_add_column";
       const proj = projectWithExtraMigration(name, "ALTER TABLE `Property` ADD COLUMN `zzTestColumn` INT NULL;\n");
       const dir = path.join(proj.dir, "prisma/migrations");
@@ -210,6 +235,7 @@ try {
     {
       const f = await legacyDb("failing");
       dbMigrate(["baseline", "--target", "local", "--expect-database", f.db, "--commit", repoCommit], f.url);
+      applyLaterMigrations(f);
       const name = "20991231000001_test_failing";
       const proj = projectWithExtraMigration(name, "CREATE TABLE `zz_partial` (`id` INT NOT NULL PRIMARY KEY);\nALTER TABLE `zz_no_such_table` ADD COLUMN `x` INT NULL;\n");
       const dir = path.join(proj.dir, "prisma/migrations");

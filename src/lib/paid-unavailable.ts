@@ -25,9 +25,29 @@ export const PAID_UNAVAILABLE_CODE = "paid_unavailable";
 /** AdminLog target for a payment — also the once-per-payment key for the alert. */
 export const paidUnavailableTarget = (intentId: string) => `stripe-${intentId}`;
 
-export function paidUnavailableGuestMessage(intentId: string): string {
+/**
+ * Why the booking could not be saved. `booking_closed` is the advance-notice rule
+ * (src/lib/booking-policy.ts): the guest paid after that check-in stopped being bookable
+ * online and outside the grace window.
+ */
+export type PaidUnavailableCause = "dates_taken" | "booking_closed";
+
+const CAUSE_TEXT: Record<PaidUnavailableCause, { guest: string; alert: string; log: string }> = {
+  dates_taken: {
+    guest: "these dates were taken just before your booking could be saved",
+    alert: "The dates were taken before the booking could be saved",
+    log: "the dates were taken before the booking was saved",
+  },
+  booking_closed: {
+    guest: "online booking for that check-in date closed before your booking could be saved",
+    alert: "Online booking for that check-in closed before the booking could be saved",
+    log: "online booking for that check-in had closed before the booking was saved",
+  },
+};
+
+export function paidUnavailableGuestMessage(intentId: string, cause: PaidUnavailableCause = "dates_taken"): string {
   return (
-    "Your card payment went through, but these dates were taken just before your booking could be saved, " +
+    `Your card payment went through, but ${CAUSE_TEXT[cause].guest}, ` +
     "so no booking was made. Please do not pay again. We have been notified — contact us at " +
     `customerservice@haveninlipa.com and quote payment reference ${intentId}.`
   );
@@ -66,7 +86,9 @@ export function isPaidIntentForStay(
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-export function buildPaidUnavailableAlert(a: PaidUnavailableStay & { intentId: string; amount: number }): {
+export function buildPaidUnavailableAlert(
+  a: PaidUnavailableStay & { intentId: string; amount: number; cause?: PaidUnavailableCause }
+): {
   subject: string;
   html: string;
 } {
@@ -79,7 +101,7 @@ export function buildPaidUnavailableAlert(a: PaidUnavailableStay & { intentId: s
       <div style="font-family:Georgia,serif;max-width:560px;margin:0 auto;color:#335238">
         <div style="background:#9b2c2c;padding:20px 28px;border-radius:8px 8px 0 0">
           <h1 style="color:#fff;margin:0;font-size:19px">Card charged — no booking was made</h1>
-          <p style="color:rgba(255,255,255,.85);margin:6px 0 0;font-size:13px">The dates were taken before the booking could be saved</p>
+          <p style="color:rgba(255,255,255,.85);margin:6px 0 0;font-size:13px">${CAUSE_TEXT[a.cause ?? "dates_taken"].alert}</p>
         </div>
         <div style="background:#fff;border:1px solid #e5e5e5;border-top:none;padding:24px 28px;border-radius:0 0 8px 8px;font-size:14px">
           <table style="width:100%;border-collapse:collapse">
@@ -108,7 +130,7 @@ export function buildPaidUnavailableAlert(a: PaidUnavailableStay & { intentId: s
  * and must not turn a clear 409 into a 500.
  */
 export async function reportPaidButUnavailable(
-  input: PaidUnavailableStay & { intentId: string; amount: number; ipAddress?: string }
+  input: PaidUnavailableStay & { intentId: string; amount: number; ipAddress?: string; cause?: PaidUnavailableCause }
 ): Promise<void> {
   const target = paidUnavailableTarget(input.intentId);
   try {
@@ -120,7 +142,7 @@ export async function reportPaidButUnavailable(
       data: {
         actor: input.guestName,
         actorRole: "guest",
-        action: `Card payment ${input.intentId} succeeded but the dates were taken before the booking was saved — no booking, not refunded`,
+        action: `Card payment ${input.intentId} succeeded but ${CAUSE_TEXT[input.cause ?? "dates_taken"].log} — no booking, not refunded`,
         module: "booking_flow",
         target,
         ipAddress: input.ipAddress ?? null,

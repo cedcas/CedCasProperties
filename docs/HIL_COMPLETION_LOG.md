@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-10-12 — Same-Day Booking & Advance Notice, Session 1: today floor and per-listing policy (PR #74, DEC-027)
+
+Area: Website
+
+Status: **Migration applied to dev and production. Code released via PR #74; live verification is recorded in [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md), not here (DEC-006).** Session 2 (admin settings UI) not started.
+
+### Outcome
+- The three guest routes refuse a check-in before today in Lipa (Asia/Manila) for every payment method; both date pickers use the Manila date instead of the UTC date.
+- `Property.advanceNoticeDays` (default 0) and `Property.sameDayCutoffMinutes` (null) added; all 5 listings hold the defaults, so the today floor is the only behaviour change.
+- `src/lib/booking-policy.ts` (pure, clock-injected); 30-minute grace at final submission; a card paid outside it takes the paid-but-not-booked path; `/api/availability/[slug]` returns `earliestCheckIn`.
+- `scripts/test-migrations.mjs` updated: it assumed the baseline was the only migration and failed CI on the first real one.
+
+### Migration run records
+| Target | Database | Commit | Applied (UTC) | Result |
+|---|---|---|---|---|
+| dev | `u694568445_cedcasprop_dev` | `467a5c2` | 2026-10-12 21:27 | applied, `Schema verified`, `NO DRIFT` |
+| production | `u694568445_cedcasprop` | `e25a563` | 2026-10-12 21:34:58–21:35:16 | applied, `Schema verified`, `NO DRIFT`; pending `[]`, failed `[]` |
+
+Migration: `20261012184848_add_property_advance_notice` (additive `ALTER TABLE Property ADD COLUMN` ×2). `467a5c2` → `e25a563` is docs only.
+
+Production backup before the run: `~/hil-db-backups/hil-production-20261012T213321Z.sql.gz` on the Owner's Mac (outside the repository and Dropbox, file `600`, sha256 `3286d34299ae3c91…`). Restore-tested into a throwaway local server: all 24 tables matched production on row count and `CHECKSUM TABLE`. Contains guest data; **retention is the Owner's decision**. Row counts unchanged after the migration (Booking 13, Property 5, AdminLog 1367, GuestMessage 78).
+
+### Gotchas
+- Local `.env` no longer has active `DEV_DATABASE_URL` / `PRODUCTION_DATABASE_URL` keys (both are commented); dev was read from `DATABASE_URL` and production from the commented line via `MIGRATE_DATABASE_URL`, without editing the file.
+- The Mac's MariaDB refuses `root@127.0.0.1:3306`, which the runbook's `--reference-url` uses. A throwaway `mariadbd` on another loopback port (`mariadb-install-db --auth-root-authentication-method=normal`) served as the reference and was deleted afterwards.
+
+---
+
 ## 2026-10-10 — Booking-intent SEO copy on `/properties`/`/staycation` + homepage link; dark-pink backgrounds → homepage pink
 
 Area: Website / SEO

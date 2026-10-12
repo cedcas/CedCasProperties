@@ -28,6 +28,9 @@ model Property {
   isFeatured    Boolean        @default(false)
   isActive      Boolean        @default(true)
   airbnbIcsUrl  String?        @db.Text // Airbnb .ics import URL (Airbnb → CedCas sync)
+  // Direct-booking advance notice (src/lib/booking-policy.ts). Guest bookings only — never admin actions.
+  advanceNoticeDays    Int  @default(0) // 0 = same day allowed; otherwise earliest check-in is today (Manila) + N days
+  sameDayCutoffMinutes Int? // minutes after Manila midnight; applies only when advanceNoticeDays = 0. null = no cutoff
   // SEO + long-form content (May 8 2026 SEO audit deliverables)
   seoTitle              String?  @db.Text // <title> override
   seoDescription        String?  @db.Text // meta description

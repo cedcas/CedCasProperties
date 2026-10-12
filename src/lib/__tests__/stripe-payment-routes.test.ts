@@ -90,6 +90,10 @@ function succeededIntent(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The guest routes refuse a check-in before today in Manila (src/lib/booking-policy.ts),
+  // so the clock is pinned ahead of STAY. Only Date is faked — timers stay real.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-01T04:00:00Z"));
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_dummy");
   vi.spyOn(console, "error").mockImplementation(() => {}); // rejections log by design
   db.property.findUnique.mockResolvedValue({
@@ -115,6 +119,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });

@@ -3,6 +3,8 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { computeBookingQuote } from "@/lib/booking-quote";
+import { assertBookingPolicy, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingPolicy } from "@/lib/booking-policy-db";
 
 /**
  * Record (or refresh) a guest's arrival on the payment screen — see
@@ -49,6 +51,17 @@ export async function POST(req: NextRequest) {
   });
   if (!quoteResult.ok) return NextResponse.json({ error: quoteResult.error }, { status: quoteResult.status });
   const q = quoteResult.quote;
+
+  // Advance notice, strictly: an attempt is what later earns the grace window at final
+  // submission, so one must never be recorded (or re-dated) for a check-in already closed.
+  const policyOutcome = assertBookingPolicy({
+    checkIn: q.checkInDate,
+    policy: await loadBookingPolicy(q.propertyId),
+    now: new Date(),
+  });
+  if (!policyOutcome.ok) {
+    return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+  }
 
   const data = {
     propertyId: q.propertyId,
