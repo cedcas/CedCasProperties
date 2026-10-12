@@ -2,15 +2,22 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { toUtcMidnight, utcDateKey } from "@/lib/dates";
 import { getPropertyConflicts, getUnavailableDateRanges, formatConflictRange } from "@/lib/availability";
+import { assertBookingPolicy, earliestCheckIn, normalizeBookingPolicy } from "@/lib/booking-policy";
 
 // GET /api/availability/[slug]?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
-//   → { available: boolean, conflicts: string[] }
+//   → { available: boolean, conflicts: string[], earliestCheckIn }
+//     plus { reason: "too_soon", message } when the check-in is earlier than the listing's
+//     advance notice allows (src/lib/booking-policy.ts) — `available` is false then too.
 // GET /api/availability/[slug]  (no dates)
-//   → { blockedRanges: [{ start, end }] }  — every unavailable range from today
+//   → { blockedRanges: [{ start, end }], earliestCheckIn }  — every unavailable range from today
 //
-// PUBLIC route. The response shape is unchanged from the original implementation so
-// BookingCard and BookingForm need no edits, and it deliberately exposes only opaque date
-// ranges — never guest names or block reasons. Admin detail lives in /api/admin/calendar.
+// PUBLIC route. Fields are only ever added to the original response shape, and it
+// deliberately exposes only opaque date ranges — never guest names or block reasons. Admin
+// detail lives in /api/admin/calendar.
+//
+// `earliestCheckIn` depends on the time of day, which is why it is served here and never
+// baked into a cached page (DEC-005). The advance-notice rule is a guest rule: a request
+// carrying `excludeBookingId` is a re-check of an existing booking and skips it.
 //
 // Conflict rules now come from src/lib/availability.ts, which unions HIL bookings, manual
 // blocks, shared-inventory sibling blocks and persisted external calendar events. This
@@ -27,12 +34,16 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
   const property = await prisma.property.findUnique({
     where: { slug },
-    select: { id: true },
+    select: { id: true, advanceNoticeDays: true, sameDayCutoffMinutes: true },
   });
 
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const excludeBookingId = excludeIdParam && Number.isInteger(Number(excludeIdParam)) ? Number(excludeIdParam) : null;
+
+  const policy = normalizeBookingPolicy(property);
+  const now = new Date();
+  const earliest = utcDateKey(earliestCheckIn(now, policy));
 
   // ── Specific dates: is this stay bookable? ────────────────────────────────
   if (checkInStr && checkOutStr) {
@@ -41,6 +52,19 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
     if (isNaN(checkIn.getTime()) || isNaN(checkOut.getTime())) {
       return NextResponse.json({ error: "Invalid dates" }, { status: 400 });
+    }
+
+    if (excludeBookingId === null) {
+      const outcome = assertBookingPolicy({ checkIn, policy, now });
+      if (!outcome.ok) {
+        return NextResponse.json({
+          available: false,
+          conflicts: [],
+          reason: outcome.code,
+          message: outcome.message,
+          earliestCheckIn: earliest,
+        });
+      }
     }
 
     const conflicts = await getPropertyConflicts({
@@ -53,6 +77,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     return NextResponse.json({
       available: conflicts.length === 0,
       conflicts: conflicts.map(formatConflictRange),
+      earliestCheckIn: earliest,
     });
   }
 
@@ -63,5 +88,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
     blockedRanges: ranges
       .filter((r) => !(excludeBookingId !== null && r.bookingId === excludeBookingId))
       .map((r) => ({ start: utcDateKey(r.start), end: utcDateKey(r.end) })),
+    earliestCheckIn: earliest,
   });
 }

@@ -5,6 +5,8 @@ import { calcStripeFee } from "@/lib/pricing";
 import { computeBookingQuote } from "@/lib/booking-quote";
 import { toStripeAmount, STRIPE_CURRENCY, bookingIntentMetadata, chargeIntentMetadata } from "@/lib/stripe-payment";
 import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
+import { assertBookingPolicy, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingPolicy } from "@/lib/booking-policy-db";
 
 /**
  * Create a PaymentIntent for an amount the SERVER computes. The client only says what
@@ -64,6 +66,17 @@ export async function POST(req: Request) {
       });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
       const { quote } = result;
+
+      // Advance notice — strict here, so a card is never charged for a check-in that has
+      // already closed. The grace window exists only at final submission (/api/bookings).
+      const policyOutcome = assertBookingPolicy({
+        checkIn: quote.checkInDate,
+        policy: await loadBookingPolicy(quote.propertyId),
+        now: new Date(),
+      });
+      if (!policyOutcome.ok) {
+        return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+      }
 
       // Fail before the guest pays rather than after. The authoritative check (with the
       // fresh "booking" external-feed sync) still runs in /api/bookings.

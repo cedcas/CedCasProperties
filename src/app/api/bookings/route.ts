@@ -24,6 +24,8 @@ import {
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
 import { sendBookingConfirmedMeasurementEvent } from "@/lib/ga4-measurement-protocol";
+import { assertBookingPolicy, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingPolicy, checkoutAttemptStartedAt } from "@/lib/booking-policy-db";
 
 export async function POST(req: NextRequest) {
   // Client-sent totalPrice / nightlyTotal / discountAmount are deliberately NOT read:
@@ -81,6 +83,35 @@ export async function POST(req: NextRequest) {
     stripeFee,
     total: computedTotal,
   } = quoteResult.quote;
+
+  // ── Advance notice ────────────────────────────────────────────────────────
+  // src/lib/booking-policy.ts: no check-in before today in Lipa, plus the listing's own
+  // notice period / same-day cutoff. A guest who was already on the payment screen when a
+  // deadline passed gets a short grace window, because by now they may have paid. GCash/BPI
+  // is settled here from the recorded checkout attempt; a card is settled further down,
+  // once its PaymentIntent has been verified and says when payment started.
+  const bookingPolicy = await loadBookingPolicy(Number(propertyId));
+  const policyNow = new Date();
+  let policyOutcome = assertBookingPolicy({ checkIn: checkInDate, policy: bookingPolicy, now: policyNow });
+  if (!policyOutcome.ok) {
+    if (paymentMethod !== "stripe") {
+      policyOutcome = assertBookingPolicy({
+        checkIn: checkInDate,
+        policy: bookingPolicy,
+        now: policyNow,
+        paymentStartedAt: await checkoutAttemptStartedAt(checkoutAttemptToken, {
+          propertyId: Number(propertyId),
+          checkIn: checkInDate,
+        }),
+      });
+    }
+    // A card request with no payment reference has nothing to verify — answer it now.
+    const awaitingCardVerification =
+      paymentMethod === "stripe" && typeof rawStripePaymentIntentId === "string" && !!rawStripePaymentIntentId;
+    if (!policyOutcome.ok && !awaitingCardVerification) {
+      return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+    }
+  }
 
   // The dates turned out to be unavailable. For GCash/BPI nothing has been paid through
   // the site, so the guest-safe conflict message is the whole answer (it never reveals
@@ -197,6 +228,43 @@ export async function POST(req: NextRequest) {
     });
     if (existing) {
       return NextResponse.json({ error: "This payment has already been used for a booking." }, { status: 409 });
+    }
+
+    // Advance notice, for a card (see above). This payment is verified as succeeded for
+    // exactly this stay, so a refusal here is a charged card with no booking: tell the
+    // guest plainly, give them the reference and alert the admin.
+    if (!policyOutcome.ok) {
+      policyOutcome = assertBookingPolicy({
+        checkIn: checkInDate,
+        policy: bookingPolicy,
+        now: policyNow,
+        paymentStartedAt: new Date(pi.created * 1000),
+      });
+      if (!policyOutcome.ok) {
+        console.error("[bookings] card paid but check-in no longer bookable:", pi.id);
+        await reportPaidButUnavailable({
+          propertyId: Number(propertyId),
+          checkIn: checkInDate,
+          checkOut: checkOutDate,
+          intentId: pi.id,
+          amount: (pi.amount_received ?? pi.amount) / 100,
+          propertyName: property.name,
+          guests: guestCount,
+          guestName,
+          guestEmail,
+          guestPhone: guestPhoneE164,
+          ipAddress: getIpFromRequest(req),
+          cause: "booking_closed",
+        });
+        return NextResponse.json(
+          {
+            error: paidUnavailableGuestMessage(pi.id, "booking_closed"),
+            code: PAID_UNAVAILABLE_CODE,
+            paymentReference: pi.id,
+          },
+          { status: 409 }
+        );
+      }
     }
 
     stripePaymentIntentId = pi.id;

@@ -733,6 +733,36 @@ Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
 ### Supersedes
 Amends [DEC-017](#dec-017--cis-build-job-compiles-the-app-only-database-sync-stays-vercel-only-and-every-route-tree-code-path-must-tolerate-a-build-time-db-outage) (its "database sync stays Vercel-only" half — the CI-isolation half stands). Updates the build-command guidance in [DEC-013](#dec-013--dev-and-production-use-separate-hostinger-databases-smtpstripeblob-stay-shared) and [DEC-022](#dec-022--unfinished-checkouts-are-recorded-before-the-booking-exists-and-alerted-after-10-minutes-via-vercel-cron-add_payment_info-is-a-funnel-step-not-a-key-event).
 
+## DEC-027 — Guest advance notice is a separate policy layer, set per listing, in Manila time; a short grace applies only at final submission
+
+Date: 2026-10-12
+Status: Active — **Owner-approved 2026-10-12; Session 1 built on `feature/same-day-booking-advance-notice-101226`, not merged, migration not applied to any hosted database.** The admin settings UI is Session 2.
+Area: Website
+
+### Decision
+- **Today floor.** The server refuses a guest check-in earlier than today in `Asia/Manila`, for every payment method. Both date pickers use the Manila date.
+- **Per-listing settings.** `Property.advanceNoticeDays` (0, 1, 2, 3 or 7; default 0) and `Property.sameDayCutoffMinutes` (minutes after Manila midnight, null = none; applies only when notice is 0). The Owner chose per listing over one setting per house (2026-10-12). Defaults change nothing except the today floor.
+- **Where the rule lives.** `src/lib/booking-policy.ts`, pure and clock-injected. It is called by the three guest routes (`/api/stripe/payment-intent`, `/api/checkout-attempts`, `/api/bookings`) and the public `/api/availability/[slug]`. It is **not** in `computeBookingQuote` or `src/lib/availability.ts`.
+- **Grace.** Payment-intent and checkout-attempt calls enforce strictly. The final `POST /api/bookings` lets a guest through who reached the payment screen before a deadline and submits within 30 minutes of it (Owner-approved length), measured from the verified PaymentIntent's creation (card) or the linked `CheckoutAttempt` (GCash/BPI). The today floor has no grace.
+- **Card paid outside the grace window** follows DEC-024 policy 5: no booking, guest gets the payment reference, admin gets one alert, no automatic refund.
+
+### Reason
+- The only guard against a past check-in was the date picker, and it used the UTC date, so from 12:00 AM to 7:59 AM in Lipa it offered yesterday; the server accepted any date whose nights were free.
+- `computeBookingQuote` also prices the admin reference quote, and the availability service backs admin amendments, reactivation of cancelled bookings and the iCal export. An admin action must never be subject to guest advance notice.
+- A guest can reach payment before a cutoff and finish after it. Refusing then strands a payment already made.
+- The earliest check-in depends on the time of day, so it is served by a route and never baked into a cached page ([DEC-005](#dec-005--cache-the-query-not-the-response-a-page-cannot-set-its-own-cache-control-on-vercel)).
+
+### Implications
+- These are rules for direct bookings only. Airbnb's advance notice is configured in Airbnb; iCal feeds carry dates, never policies.
+- Any new guest route that prices or saves a stay must call `assertBookingPolicy`. Admin routes must not.
+- `assertBookingPolicy` returns a typed outcome (`ok` / `too_soon`). Instant Booking adds `requires_approval` there; callers switch on `code`.
+- The cutoff minute itself is already too late (a 10:00 cutoff closes tonight at 10:00). The grace window also covers a notice period rolling over at midnight.
+- Route tests that post a stay must pin the clock; a fixed past date is now refused.
+- Schema change ships migrate-first ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)): `20261012184848_add_property_advance_notice`, additive.
+
+### Supersedes
+None
+
 ---
 
 ## Migrated SEO Decisions
