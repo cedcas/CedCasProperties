@@ -112,4 +112,33 @@ describe("PUT /api/admin/properties/[id] — booking settings", () => {
     expect(db.property.update.mock.calls[0][0].data).toEqual({ pricePerNight: 2500 });
     expect(logAction).not.toHaveBeenCalled();
   });
+
+  describe("Instant Booking mode", () => {
+    beforeEach(() => db.property.findUnique.mockResolvedValue({ ...row(4, "Mickey Sleeps 11"), instantBookingMode: "on" }));
+
+    it("switches this listing to approval-required and logs it, without touching the house", async () => {
+      const res = await put({ instantBookingMode: "off" });
+      expect(res.status).toBe(200);
+      expect(db.property.update.mock.calls[0][0].data).toEqual({ instantBookingMode: "off" });
+      expect(db.property.updateMany).not.toHaveBeenCalled();
+      expect(logAction).toHaveBeenCalledTimes(1);
+      expect(logAction.mock.calls[0][0]).toMatchObject({
+        target: "property-4",
+        action: 'Changed "Mickey Sleeps 11" from Instant Booking on to Instant Booking off (approval required)',
+        metadata: { before: "on", after: "off" },
+      });
+    });
+
+    it("an unchanged value is not a change: nothing written for it, nothing logged", async () => {
+      await put({ instantBookingMode: "on", name: "Mickey Sleeps 11" });
+      expect(db.property.update.mock.calls[0][0].data).toEqual({ name: "Mickey Sleeps 11" });
+      expect(logAction).not.toHaveBeenCalled();
+    });
+
+    it.each(["auto", "sometimes", ""])("rejects %j — auto is not offered yet", async (mode) => {
+      const res = await put({ instantBookingMode: mode });
+      expect(res.status).toBe(400);
+      expect(db.property.update).not.toHaveBeenCalled();
+    });
+  });
 });

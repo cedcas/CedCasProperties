@@ -3,14 +3,22 @@ import Stripe from "stripe";
 import { prisma } from "@/lib/prisma";
 import { calcStripeFee } from "@/lib/pricing";
 import { computeBookingQuote } from "@/lib/booking-quote";
-import { toStripeAmount, STRIPE_CURRENCY, bookingIntentMetadata, chargeIntentMetadata } from "@/lib/stripe-payment";
+import {
+  toStripeAmount,
+  STRIPE_CURRENCY,
+  bookingIntentMetadata,
+  bookingPaymentIntentMetadata,
+  chargeIntentMetadata,
+} from "@/lib/stripe-payment";
+import { cardTotalFor, loadBookingForPayment, paymentLinkState, PAYMENT_LINK_MESSAGES } from "@/lib/booking-payment";
 import { assertPropertyAvailable, AvailabilityConflictError } from "@/lib/availability";
-import { assertBookingPolicy, bookingPolicyRefusalBody } from "@/lib/booking-policy";
-import { loadBookingPolicy } from "@/lib/booking-policy-db";
+import { assertBookingPolicy, assertInstantBooking, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingRules } from "@/lib/booking-policy-db";
 
 /**
  * Create a PaymentIntent for an amount the SERVER computes. The client only says what
- * it wants to pay for (a stay, or an additional charge by token) — never how much, in
+ * it wants to pay for (a stay, an approved booking request by its payment-link token, or
+ * an additional charge by token) — never how much, in
  * what currency, or with what metadata. The metadata stamped here is what
  * /api/bookings and /api/charges/[token]/pay later require to match before they
  * treat the payment as real.
@@ -49,6 +57,38 @@ export async function POST(req: Request) {
       total = chargeAmount + calcStripeFee(chargeAmount);
       amount = toStripeAmount(total);
       metadata = chargeIntentMetadata({ chargeId: charge.id, token, amount });
+    } else if (body.kind === "booking_payment") {
+      // ── Approved booking request, paid through its payment link ──────────
+      const token = typeof body.token === "string" ? body.token : "";
+      const booking = token ? await loadBookingForPayment(token) : null;
+      if (!booking) return NextResponse.json({ error: "This payment link was not found." }, { status: 404 });
+
+      // Strict here: no card is charged on a link that has expired or already been used.
+      const state = paymentLinkState(booking, new Date());
+      if (state !== "payable") {
+        return NextResponse.json({ error: PAYMENT_LINK_MESSAGES[state], code: "not_payable" }, { status: 409 });
+      }
+
+      // The request holds no dates, so they may be gone. Fail before the guest pays; the
+      // authoritative check runs under the inventory lock in /api/bookings/pay/[token].
+      try {
+        await assertPropertyAvailable({
+          propertyId: booking.propertyId,
+          start: booking.checkIn,
+          end: booking.checkOut,
+          excludeBookingId: booking.id,
+          syncPolicy: "booking",
+        });
+      } catch (err) {
+        if (err instanceof AvailabilityConflictError) {
+          return NextResponse.json({ error: err.message, code: "unavailable" }, { status: err.status });
+        }
+        throw err;
+      }
+
+      total = cardTotalFor(Number(booking.totalPrice)).total;
+      amount = toStripeAmount(total);
+      metadata = bookingPaymentIntentMetadata({ bookingId: booking.id, token, amount });
     } else {
       // ── Booking (default) ────────────────────────────────────────────────
       const { propertyId, checkIn, checkOut, guests, discountCode } = body;
@@ -69,13 +109,20 @@ export async function POST(req: Request) {
 
       // Advance notice — strict here, so a card is never charged for a check-in that has
       // already closed. The grace window exists only at final submission (/api/bookings).
+      const rules = await loadBookingRules(quote.propertyId);
       const policyOutcome = assertBookingPolicy({
         checkIn: quote.checkInDate,
-        policy: await loadBookingPolicy(quote.propertyId),
+        policy: rules.policy,
         now: new Date(),
       });
       if (!policyOutcome.ok) {
         return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+      }
+
+      // Instant Booking off: no card is charged before the Owner approves the request.
+      const instant = assertInstantBooking({ mode: rules.instantBookingMode });
+      if (!instant.ok) {
+        return NextResponse.json(bookingPolicyRefusalBody(instant), { status: 409 });
       }
 
       // Fail before the guest pays rather than after. The authoritative check (with the

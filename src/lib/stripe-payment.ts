@@ -97,6 +97,19 @@ export function bookingIntentMetadata(b: {
   };
 }
 
+/**
+ * Same idea for an approved booking request paid through its payment link: the intent is
+ * bound to that one booking and its link, not to a stay the browser describes.
+ */
+export function bookingPaymentIntentMetadata(b: { bookingId: number; token: string; amount: number }): Record<string, string> {
+  return {
+    kind: "booking_payment",
+    bookingId: String(b.bookingId),
+    token: b.token,
+    amount: String(b.amount),
+  };
+}
+
 /** Same idea for a guest-paid AdditionalCharge. */
 export function chargeIntentMetadata(c: { chargeId: number; token: string; amount: number }): Record<string, string> {
   return {

@@ -1,6 +1,11 @@
 import { prisma } from "@/lib/prisma";
 import { utcDateKey } from "@/lib/dates";
-import { normalizeBookingPolicy, type BookingPolicy } from "@/lib/booking-policy";
+import {
+  normalizeBookingPolicy,
+  normalizeInstantBookingMode,
+  type BookingPolicy,
+  type InstantBookingMode,
+} from "@/lib/booking-policy";
 
 /**
  * A listing's stored advance-notice settings. Kept apart from booking-policy.ts so the
@@ -13,6 +18,17 @@ export async function loadBookingPolicy(propertyId: number): Promise<BookingPoli
     select: { advanceNoticeDays: true, sameDayCutoffMinutes: true },
   });
   return normalizeBookingPolicy(row);
+}
+
+/** Advance notice and the Instant Booking mode together — what the guest routes need. */
+export async function loadBookingRules(
+  propertyId: number
+): Promise<{ policy: BookingPolicy; instantBookingMode: InstantBookingMode }> {
+  const row = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: { advanceNoticeDays: true, sameDayCutoffMinutes: true, instantBookingMode: true },
+  });
+  return { policy: normalizeBookingPolicy(row), instantBookingMode: normalizeInstantBookingMode(row?.instantBookingMode) };
 }
 
 /**

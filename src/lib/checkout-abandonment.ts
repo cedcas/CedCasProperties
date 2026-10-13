@@ -160,6 +160,8 @@ export async function processAbandonedCheckouts(now: Date = new Date()): Promise
         propertyId: c.propertyId,
         guestEmail: c.guestEmail,
         checkIn: c.checkIn,
+        // A declined or expired request is not a completed checkout.
+        status: { notIn: ["declined", "expired"] },
         createdAt: { gte: new Date(c.createdAt.getTime() - BOOKING_MATCH_SLACK_MS) },
       },
       select: { id: true },

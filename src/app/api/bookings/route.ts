@@ -24,8 +24,17 @@ import {
 import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 import { materializeScheduledMessagesForBooking, flushDueScheduledMessages } from "@/lib/scheduler";
 import { sendBookingConfirmedMeasurementEvent } from "@/lib/ga4-measurement-protocol";
-import { assertBookingPolicy, bookingPolicyRefusalBody } from "@/lib/booking-policy";
-import { loadBookingPolicy, checkoutAttemptStartedAt } from "@/lib/booking-policy-db";
+import { Prisma } from "@prisma/client";
+import { assertBookingPolicy, assertInstantBooking, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingRules, checkoutAttemptStartedAt } from "@/lib/booking-policy-db";
+import { createBookingRequest, sendRequestReceivedEmails } from "@/lib/booking-requests";
+
+/**
+ * A guest already on the GCash/BPI payment screen when a listing is switched to
+ * approval-only may have paid, so their submission is still taken as an instant booking —
+ * but only for this long after they reached that screen.
+ */
+const INSTANT_SWITCH_GRACE_MS = 2 * 60 * 60 * 1000;
 
 export async function POST(req: NextRequest) {
   // Client-sent totalPrice / nightlyTotal / discountAmount are deliberately NOT read:
@@ -43,6 +52,7 @@ export async function POST(req: NextRequest) {
     discountCode: rawDiscountCode,
     notes,
     checkoutAttemptToken,
+    intent,
   } = await req.json();
 
   if (!propertyId || !guestName || !guestEmail || !guestPhone || !checkIn || !checkOut) {
@@ -90,24 +100,104 @@ export async function POST(req: NextRequest) {
   // deadline passed gets a short grace window, because by now they may have paid. GCash/BPI
   // is settled here from the recorded checkout attempt; a card is settled further down,
   // once its PaymentIntent has been verified and says when payment started.
-  const bookingPolicy = await loadBookingPolicy(Number(propertyId));
+  const { policy: bookingPolicy, instantBookingMode } = await loadBookingRules(Number(propertyId));
   const policyNow = new Date();
   let policyOutcome = assertBookingPolicy({ checkIn: checkInDate, policy: bookingPolicy, now: policyNow });
+  const requiresApproval = !assertInstantBooking({ mode: instantBookingMode }).ok;
+  // When a GCash/BPI guest reached the payment screen. Only read when a rule below needs it.
+  const attemptStartedAt =
+    paymentMethod !== "stripe" && (requiresApproval || !policyOutcome.ok)
+      ? await checkoutAttemptStartedAt(checkoutAttemptToken, { propertyId: Number(propertyId), checkIn: checkInDate })
+      : null;
+  const awaitingCardVerification =
+    paymentMethod === "stripe" && typeof rawStripePaymentIntentId === "string" && !!rawStripePaymentIntentId;
+
+  // ── Instant Booking ───────────────────────────────────────────────────────
+  // A listing with Instant Booking off takes a REQUEST: no payment, no hold; the Owner
+  // approves it and the guest then pays through a link (src/lib/booking-requests.ts).
+  // The payment routes refuse such a listing, so a guest can only arrive here already
+  // paying if the listing was switched while they were on the payment screen — a card
+  // reference (verified below as usual) or a recent checkout attempt. Those are still
+  // taken as instant bookings, because the money may already have moved.
+  const paymentAlreadyStarted =
+    awaitingCardVerification ||
+    (attemptStartedAt !== null && policyNow.getTime() - attemptStartedAt.getTime() <= INSTANT_SWITCH_GRACE_MS);
+  // The form sends `intent: "request"` when it showed the guest a request, not a payment
+  // screen. If the listing has since gone back to instant booking, saving that as a
+  // booking would hold dates nobody paid for — send the guest to payment instead.
+  if (intent === "request" && !requiresApproval) {
+    return NextResponse.json(
+      { error: "This listing can now be booked right away. Please continue to payment.", code: "instant_booking" },
+      { status: 409 }
+    );
+  }
+  if (requiresApproval && !paymentAlreadyStarted) {
+    // Advance notice applies to a request exactly as to a booking, with no grace.
+    if (!policyOutcome.ok) {
+      return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+    }
+    try {
+      await assertPropertyAvailable({
+        propertyId: Number(propertyId),
+        start: checkInDate,
+        end: checkOutDate,
+        syncPolicy: "booking",
+      });
+    } catch (err) {
+      if (err instanceof AvailabilityConflictError) {
+        return NextResponse.json({ error: err.message }, { status: err.status });
+      }
+      throw err;
+    }
+
+    const request = await createBookingRequest({
+      quote: quoteResult.quote,
+      guestName,
+      guestEmail,
+      guestPhone: guestPhoneE164,
+      notes: notes || null,
+      policy: bookingPolicy,
+      now: policyNow,
+    });
+    if (!request.duplicate) {
+      try {
+        await promoteContactMessagesForEmail({ bookingId: request.id, email: guestEmail, bookingCreatedAt: policyNow });
+      } catch (err) {
+        console.error("[bookings] promoteContactMessagesForEmail failed:", err);
+      }
+      await sendRequestReceivedEmails(request.id, notes || null);
+      await logAction({
+        actor: guestName,
+        actorRole: "guest",
+        action: `Sent a booking request for "${property.name}" (approval required)`,
+        module: "booking_flow",
+        target: `booking-${request.id}`,
+        ipAddress: getIpFromRequest(req),
+        metadata: { bookingId: request.id, propertyId, checkIn, checkOut, status: "requested" },
+      });
+    }
+    // `requested: true` tells the client this is NOT a booking: no payment was taken and
+    // it must not report a conversion.
+    return NextResponse.json({
+      success: true,
+      requested: true,
+      bookingId: request.id,
+      total: request.total,
+      propertySlug: request.propertySlug,
+      replyBy: request.requestExpiresAt.toISOString(),
+    });
+  }
+
   if (!policyOutcome.ok) {
     if (paymentMethod !== "stripe") {
       policyOutcome = assertBookingPolicy({
         checkIn: checkInDate,
         policy: bookingPolicy,
         now: policyNow,
-        paymentStartedAt: await checkoutAttemptStartedAt(checkoutAttemptToken, {
-          propertyId: Number(propertyId),
-          checkIn: checkInDate,
-        }),
+        paymentStartedAt: attemptStartedAt,
       });
     }
     // A card request with no payment reference has nothing to verify — answer it now.
-    const awaitingCardVerification =
-      paymentMethod === "stripe" && typeof rawStripePaymentIntentId === "string" && !!rawStripePaymentIntentId;
     if (!policyOutcome.ok && !awaitingCardVerification) {
       return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
     }
@@ -218,10 +308,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: verification.error }, { status: verification.status });
     }
 
-    // Reuse protection: one PaymentIntent pays for one booking. Residual race: two
-    // concurrent requests carrying the same intent can both pass this check before
-    // either inserts — only a unique constraint on Booking.stripePaymentIntentId can
-    // close that fully (schema follow-up, intentionally not part of this change).
+    // Reuse protection: one PaymentIntent pays for one booking. Two concurrent requests
+    // carrying the same intent can both pass this check; the unique index on
+    // Booking.stripePaymentIntentId then rejects the second insert (handled below).
     const existing = await prisma.booking.findFirst({
       where: { stripePaymentIntentId: pi.id },
       select: { id: true },
@@ -306,6 +395,9 @@ export async function POST(req: NextRequest) {
           paymentMethod: paymentMethod || null,
           stripePaymentIntentId,
           status:    isStripeConfirmed ? "confirmed" : "pending",
+          // GCash/BPI: the guest says they have paid. Starts the clock for the one-time
+          // "payment not yet verified" admin alert (src/lib/booking-requests.ts).
+          paymentSubmittedAt: isStripeConfirmed ? null : new Date(),
           notes:     notes || null,
         },
         include: { property: true },
@@ -315,6 +407,11 @@ export async function POST(req: NextRequest) {
     if (err instanceof AvailabilityConflictError) {
       // Lost the race for these nights after the card was verified.
       return unavailableResponse(err);
+    }
+    // Two requests carrying the same card payment at once: the unique index on
+    // stripePaymentIntentId lets exactly one through.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+      return NextResponse.json({ error: "This payment has already been used for a booking." }, { status: 409 });
     }
     throw err;
   }

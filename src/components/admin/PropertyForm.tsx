@@ -48,6 +48,7 @@ export default function PropertyForm({
     advanceNoticeDays:    String(property?.advanceNoticeDays ?? 0),
     sameDayCutoffMinutes: property?.sameDayCutoffMinutes == null ? "" : String(property.sameDayCutoffMinutes),
     applyBookingPolicyToHouse: false,
+    instantBookingMode: property?.instantBookingMode ?? "on",
   });
   const [exportUrl, setExportUrl] = useState("");
   const [amenities, setAmenities] = useState<string[]>(
@@ -96,6 +97,7 @@ export default function PropertyForm({
             // Booking settings are edit-only; a new property starts on the defaults.
             advanceNoticeDays: undefined,
             sameDayCutoffMinutes: undefined,
+            instantBookingMode: undefined,
             applyBookingPolicyToHouse: undefined,
           };
       const url  = isEdit ? `/api/admin/properties/${property.id}` : "/api/admin/properties";
@@ -251,11 +253,24 @@ export default function PropertyForm({
                 ? "Guests can book tonight at any time up to midnight."
                 : `Guests can book tonight until ${formatCutoffMinutes(Number(form.sameDayCutoffMinutes))}. After that, the earliest check-in is tomorrow.`}
           </p>
+          <div className="mt-5 pt-5 border-t border-black/[.06]">
+            <label htmlFor="instantBookingMode" className={labelCls}>Instant Booking</label>
+            <select id="instantBookingMode" name="instantBookingMode" value={form.instantBookingMode} onChange={handle} className={`${inputCls} sm:max-w-[320px]`}>
+              <option value="on">On: guests book and pay right away</option>
+              <option value="off">Off: you approve each request first</option>
+              {form.instantBookingMode === "auto" && <option value="auto">Auto</option>}
+            </select>
+            <p className="text-[11.5px] text-charcoal/45 mt-3">
+              {form.instantBookingMode === "off"
+                ? "A guest sends a request with no payment. You approve or decline it within 24 hours; an approved guest gets a payment link valid for 24 hours. Dates are not held until the guest pays. This setting is for this listing only."
+                : "Guests book and pay on the website as they do today. This setting is for this listing only."}
+            </p>
+          </div>
           {houseSiblings.length > 0 && (
             <label className="flex items-start gap-2.5 cursor-pointer mt-4">
               <input type="checkbox" name="applyBookingPolicyToHouse" checked={form.applyBookingPolicyToHouse} onChange={handle} className="w-4 h-4 mt-0.5 accent-[#335238]" />
               <span className="text-[13px] text-charcoal/70">
-                Also apply these booking settings to the other listings in this house: {houseSiblings.map((s) => s.name).join(", ")}
+                Also apply the advance notice and cutoff to the other listings in this house: {houseSiblings.map((s) => s.name).join(", ")}
               </span>
             </label>
           )}

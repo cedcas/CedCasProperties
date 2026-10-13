@@ -1,6 +1,6 @@
 # HIL Feature Brief — Instant Booking Modes & Request Lifecycle
 
-**Status:** Design direction approved by the Owner 2026-10-09. **Implementation not yet authorized** — no code, migration or deploy until the Owner says go.
+**Status:** Design direction approved by the Owner 2026-10-09. **Started 2026-10-12 (Owner go-ahead); Session 1 in progress** — design only, no code, migration or deploy yet. Session 1 results are in §13; the Owner answered §11 the same day. **Sessions 1 to 3 are built on `feature/instant-booking-modes-101226` (2026-10-12): not committed, not merged, migration `20261012223750_add_instant_booking_requests` not applied to dev or production.** Session 2: migration, mode setting, request creation, approve/decline, correct-then-approve, expiry job. Session 3: guest request flow in the booking form, payment-link page `/pay/booking/[token]` for GCash, BPI and card, hold on "I Paid", emails, GA4 `booking_request`. **Next: Session 4** (acceptance on `dev.haveninlipa.com`, release, layered docs, new decision entry). Two departures from the text below, both recorded in §13.4.
 **Sequence:** Step 2 of 3 (Owner-approved order, 2026-10-09). Step 1: [Same-Day Booking](HIL_FEAT_Same_Day_Booking_Advance_Notice.md). Step 3: [Phone OTP & Trusted Guests](HIL_FEAT_Guest_Phone_OTP_Trust_KYC.md).
 **Estimate:** 4 sessions for this step. All three briefs together: about 10 sessions (2 + 4 + 4).
 **History:** first drafted 2026-10-09; rewritten the same day after a review against the code on `dev` (`977c8fa`).
@@ -144,13 +144,13 @@ Distinct messages for: request received, approved with payment link (states that
 10. Card and GCash/BPI paths are each tested end to end on the dev database, never with a real guest.
 11. The Owner can correct guests, dates or listing on a request before approving; the payment link carries the re-quoted total and the approval email shows the corrected details.
 
-## 11. Open Owner decisions
+## 11. Owner decisions (answered 2026-10-12)
 
-1. How long a request waits for approval before expiring, and how long a payment link stays valid. Same-day stays likely need shorter windows.
-2. How long a submitted GCash/BPI payment holds dates, and what happens at expiry. Recommendation: alert the Owner at expiry and release only on the Owner's action or a longer hard limit, because the guest may genuinely have paid.
-3. Whether the Owner may confirm a booking without payment (for a friend, say). The first draft assumed no.
-4. Whether a guest may submit a request when Step 1's same-day cutoff has passed.
-5. Who issues a GCash/BPI refund when a payment arrives for dates already taken, and how the case is tracked.
+1. **Time limits.** A request expires 24 hours after it is sent. A payment link expires 24 hours after approval. Both end earlier if the listing's booking deadline for the check-in date (Step 1 advance notice and same-day cutoff) comes first.
+2. **Payment hold.** Alert only. A GCash/BPI booking still `pending` 24 hours after "I Paid" sends the Owner one alert. Dates stay held until the Owner confirms or cancels; nothing is released automatically. This applies to both paths, so instant GCash/BPI bookings behave as today plus the alert.
+3. **Confirm without payment.** No. An approved request becomes `confirmed` only through its payment link.
+4. **Late requests.** No. Step 1's advance-notice rules apply to a request exactly as to a booking.
+5. **GCash/BPI refund for dates already taken.** The Owner refunds by hand, as in DEC-024 policy 5: the site refuses the booking, tells the guest, writes an `AdminLog` entry and sends one admin alert. No refund flag in admin and no deadline promised to the guest.
 
 ## 12. Kickoff checklist
 
@@ -159,3 +159,72 @@ Distinct messages for: request received, approved with payment link (states that
 3. Re-verify the file references; the code may have moved since `977c8fa`.
 4. Confirm Owner authorization and the answers to §11.
 5. Ship behind the per-listing setting with every listing left on On, so the release changes nothing until the Owner switches a listing.
+
+## 13. Session 1 results (2026-10-12, against `main` `904a116`)
+
+Step 1 is live (DEC-027), so kickoff item 1 is met. Every file reference in this brief was re-checked and still holds, including the line numbers in §4 and §7.
+
+### 13.1 Status audit
+
+Statuses are compared as string literals in 14 files. Safe by construction, because they use the `BLOCKING_BOOKING_STATUSES` allowlist: `src/lib/availability.ts`, `src/lib/inventory-groups.ts`, `src/app/api/calendar/[slug]/route.ts`. The scheduler (`src/lib/scheduler.ts`) acts only on `confirmed`, and `customers.ts` `totalSpent` and `scripts/reconcile-ga4-bookings.ts` count only `confirmed`. None of these need a change.
+
+Must change:
+
+| Where | Today | Needed |
+|---|---|---|
+| `src/app/api/admin/bookings/[id]/route.ts` PUT | Writes any string sent as `status`, unvalidated. Locks and re-checks on any non-holding → holding move | Accept only a listed set of transitions. `requested`/`approved`/`declined`/`expired` are set only by the new routes. The existing lock already covers `approved` → `pending`/`confirmed` |
+| `src/components/admin/BookingStatusSelect.tsx` | Offers pending / confirmed / cancelled for every booking | Show Approve / Decline for a request; offer only the valid next statuses otherwise |
+| `src/lib/booking-amendment.ts:100` | Non-holding = "cancelled", not editable | New `request` phase: guests, dates and listing editable, total re-quoted (§4) |
+| `src/app/admin/calendar/CalendarClient.tsx:279, 299, 516` | Any non-cancelled booking is drawn as occupying nights, counted, and can mark an Airbnb event as "covered" | Use `bookingBlocksAvailability`; show requests separately as non-blocking |
+| `src/lib/emailReply.ts:74`, `src/app/api/sms/inbound/route.ts:129` | Thread a reply to the newest non-cancelled booking | Keep `requested`/`approved` (the guest is replying to a request email); exclude `declined`/`expired` like `cancelled`. STOP opt-out keeps covering all |
+| `src/lib/customers.ts` | `grossSpent` and `bookingCount` include every status | Exclude `requested`/`approved`/`declined`/`expired` |
+| `src/app/admin/dashboard/page.tsx`, status badges on 3 admin pages | Count pending / confirmed; any other status renders amber like pending | Add a "requests waiting" count; distinct badge colours |
+| `src/lib/checkout-abandonment.ts:158` | Any booking for the same guest, listing and check-in marks an attempt complete | Ignore `declined`/`expired` rows |
+| `src/app/api/bookings/route.ts`, `/api/stripe/payment-intent`, `/api/checkout-attempts` | No approval concept | On an Off listing all three must return or act on `requires_approval`, so a direct API call cannot pay instantly. A payment intent for an approved booking is created only through its payment token |
+| `src/components/booking/BookingForm.tsx:531` | Fires `booking_confirmed` and `purchase` on every submission | Fire `booking_request` for a request; the payment-link page fires the other two |
+
+Not in the brief until now:
+
+- **`pending` has no expiry today.** §3 says it holds "until the hold expires". Settled by §11 answer 2: there is no automatic release. Read "hold expiry" in §2, §3 and §6 as the time the Owner is alerted.
+- **Card fee.** A request has no payment method, and the 6% card fee depends on it. Store the request's total without the fee; the payment page adds the fee if the guest picks card, as `AdditionalCharge` does.
+- **Promo codes.** `usageCount` is incremented at booking creation. For a request, increment it when the booking first reaches `pending` or `confirmed`, so declined and expired requests do not use up a code.
+
+### 13.2 Proposed final data model
+
+One additive migration, operator-applied before merge (DEC-026).
+
+- `Property.instantBookingMode String @default("on")` — `off` | `on` | `auto`.
+- `Booking.paymentToken String? @unique`
+- `Booking.requestExpiresAt DateTime?`, `paymentLinkExpiresAt DateTime?`
+- `Booking.paymentSubmittedAt DateTime?` (set at "I Paid"), `holdAlertedAt DateTime?` (set when the 24-hour alert is sent, so it is sent once). These replace the hold-expiry field in §6
+- `Booking.decidedAt DateTime?`, `decidedById Int?` (AdminUser, set null on delete), `decisionNote String? @db.Text`
+- `Booking.stripePaymentIntentId` gains `@unique` (DEC-020 follow-up). Before migrating, the operator checks both databases for duplicate values; nulls are allowed to repeat.
+- `@@index([status])` on `Booking` for the expiry job.
+
+`Booking.status` stays a string, default `pending`. No existing row is rewritten.
+
+### 13.3 Final transition table
+
+| From | To | Triggered by | Lock + availability re-check |
+|---|---|---|---|
+| (new) | `confirmed` / `pending` | Guest, instant path (unchanged) | Yes |
+| (new) | `requested` | Guest, approval path | No (advance notice and capacity still checked) |
+| `requested` | `approved` | Admin approve route | Check, no hold |
+| `requested` | `declined` | Admin decline route | No |
+| `requested` | `expired` | Expiry job | No |
+| `approved` | `pending` | Guest, "I Paid" on the payment link (GCash/BPI) | Yes |
+| `approved` | `confirmed` | Guest, verified card payment on the link | Yes |
+| `approved` | `expired` / `cancelled` | Expiry job / admin | No |
+| `approved` | `confirmed` by an admin | Not allowed (§11 answer 3) | — |
+| `pending` | `confirmed` / `cancelled` | Admin (unchanged) | No (already holding) |
+| `cancelled` | `pending` / `confirmed` | Admin (unchanged, DEC-024) | Yes |
+
+`declined` and `expired` are final. A guest who still wants the stay submits a new request.
+
+### 13.4 Departures from this brief, found while building (2026-10-12)
+
+- **No `CheckoutAttempt` on the payment-link page** (§7 said it creates one). The abandonment job treats any booking for the same guest, listing and check-in as a completed checkout, and here that booking already exists (`approved`), so an attempt could never raise an alert. The Owner already knows who the guest is, and the expiry email covers an unpaid link.
+- **A verified card payment is honoured slightly past the link's expiry**, as long as the request is still `approved` and the dates are free. The card intent is refused strictly once the link has expired, so this only covers a guest who opened the card form in time and paid a moment late. Refusing would leave a charged card with no booking.
+- **Listing switched while a guest is paying.** On → Off: a verified card payment, or a GCash/BPI guest who reached the payment screen in the last 2 hours, is still taken as an instant booking. Off → On: a request sent from a stale form is refused (`instant_booking`) and the form moves the guest to payment.
+- **GCash/BPI lost race** (§11 answer 5): `AdminLog` target `booking-payment-unavailable-<id>`, one alert per request however often the guest taps. The request stays `approved` until its link expires.
+

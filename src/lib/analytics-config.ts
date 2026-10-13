@@ -111,14 +111,15 @@ export function readDebugParam(search: string): boolean | null {
 }
 
 /**
- * `/pay/<token>` URLs are bearer links to a guest's charge — the token must not
- * be sent to GA4 as part of page_location. The page stays tracked (it is
- * guest-facing), with the token replaced by a placeholder.
+ * `/pay/<token>` and `/pay/booking/<token>` URLs are bearer links to a guest's charge
+ * or approved booking — the token must not be sent to GA4 as part of page_location.
+ * The page stays tracked (it is guest-facing), with the token replaced by a
+ * placeholder. Everything after the placeholder is dropped too.
  */
 export function redactPageLocation(href: string): string | null {
   const url = new URL(href);
   if (!/^\/pay\/[^/]+/.test(url.pathname)) return null;
-  url.pathname = url.pathname.replace(/^\/pay\/[^/]+/, "/pay/[token]");
+  url.pathname = /^\/pay\/booking(\/|$)/.test(url.pathname) ? "/pay/booking/[token]" : "/pay/[token]";
   url.search = "";
   url.hash = "";
   return url.toString();

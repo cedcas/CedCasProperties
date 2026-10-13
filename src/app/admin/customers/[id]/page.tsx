@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { bookingStatusBadgeClass } from "@/lib/booking-status";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { findCustomerCluster, normEmail } from "@/lib/customers";
@@ -90,7 +91,7 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
                   </td>
                   <td className="px-5 py-4 text-[13px] font-semibold text-charcoal">₱{Number(b.totalPrice).toLocaleString()}</td>
                   <td className="px-5 py-4">
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.status === "confirmed" ? "bg-green-100 text-green-700" : b.status === "cancelled" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>{b.status}</span>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${bookingStatusBadgeClass(b.status)}`}>{b.status}</span>
                   </td>
                   <td className="px-5 py-4">
                     <Link href={`/admin/bookings/${b.id}`} className="text-[12px] font-semibold text-forest hover:underline">View</Link>

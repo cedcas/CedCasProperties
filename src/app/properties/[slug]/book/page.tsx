@@ -5,6 +5,7 @@ import Link from "next/link";
 import Navbar from "@/components/layout/Navbar";
 import Footer from "@/components/layout/Footer";
 import BookingForm from "@/components/booking/BookingForm";
+import { assertInstantBooking, normalizeInstantBookingMode } from "@/lib/booking-policy";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 
 export const dynamic = "force-dynamic";
@@ -85,6 +86,7 @@ export default async function BookPage({
             initialCheckIn={checkIn ?? ""}
             initialCheckOut={checkOut ?? ""}
             initialGuests={guestCount}
+            requiresApproval={!assertInstantBooking({ mode: normalizeInstantBookingMode(property.instantBookingMode) }).ok}
             propertyRules={sanitizeChargeProse(property.propertyRules, {
               maxGuests: property.maxGuests,
               includedGuests: property.includedGuests,
