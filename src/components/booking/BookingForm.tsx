@@ -52,6 +52,12 @@ interface Props {
   /** Carried through from the booking card so the guest count survives the hop. */
   initialGuests?: string;
   propertyRules?: string | null;
+  /**
+   * The listing has Instant Booking off: the guest sends a request with no payment and
+   * the Owner approves it first. The server decides either way — this only picks which
+   * screen to show, and is corrected from the server's answer if it is out of date.
+   */
+  requiresApproval?: boolean;
 }
 
 // QR code map — keyed by payment method
@@ -155,7 +161,7 @@ function StripePaymentForm({
 
 export default function BookingForm({
   propertyId, propertyName, propertyType, pricePerNight, maxGuests, includedGuests, extraGuestFeePerNight, slug,
-  initialCheckIn = "", initialCheckOut = "", initialGuests = "1", propertyRules,
+  initialCheckIn = "", initialCheckOut = "", initialGuests = "1", propertyRules, requiresApproval = false,
 }: Props) {
   const [form, setForm] = useState({
     guestName: "", guestEmail: "", guestPhone: "",
@@ -167,6 +173,10 @@ export default function BookingForm({
   const [confirmed, setConfirmed] = useState<{
     bookingId: number; total: number; propertySlug: string;
   } | null>(null);
+  // Request flow (Instant Booking off): no payment step. `requested` is the server's
+  // answer for a saved request — never a booking, so it must not report a conversion.
+  const [requestMode, setRequestMode] = useState(requiresApproval);
+  const [requested, setRequested] = useState<{ bookingId: number; total: number; replyBy: string | null } | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [availabilityError, setAvailabilityError] = useState("");
@@ -336,6 +346,11 @@ export default function BookingForm({
       .then(({ ok, data }) => {
         if (cancelled) return;
         if (!ok) {
+          if (data.code === "requires_approval") {
+            // The listing was switched to approval-only since this page loaded.
+            setRequestMode(true);
+            setStep("form");
+          }
           if (data.error === "Stripe is not configured on this server.") {
             throw new Error("Card payments are not available right now. Please use GCash or BPI.");
           }
@@ -451,6 +466,12 @@ export default function BookingForm({
     if (propertyRules && !rulesAgreed) { setError("Please agree to the property rules to continue."); return; }
     if (!termsAgreed) { setError("Please agree to the Terms of Service and Privacy Policy to continue."); return; }
 
+    // Approval-only listing: send the request now. There is no payment step.
+    if (requestMode) {
+      await submitBooking(undefined, true);
+      return;
+    }
+
     // If Stripe selected, create a payment intent
     if (paymentMethod === "stripe") {
       setSubmitting(true);
@@ -462,7 +483,10 @@ export default function BookingForm({
           body: JSON.stringify(paymentIntentRequest),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Payment setup failed");
+        if (!res.ok) {
+          if (data.code === "requires_approval") setRequestMode(true);
+          throw new Error(data.error ?? "Payment setup failed");
+        }
         const promise = getOrCreateStripePromise(data.publishableKey);
         setStripeInstance(promise);
         setStripeClientSecret(data.clientSecret);
@@ -480,7 +504,7 @@ export default function BookingForm({
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const submitBooking = async (overridePaymentIntentId?: string) => {
+  const submitBooking = async (overridePaymentIntentId?: string, asRequest = false) => {
     setSubmitting(true);
     setError("");
     try {
@@ -492,19 +516,30 @@ export default function BookingForm({
           ...form,
           // Send a clean E.164 number so the server parses it unambiguously (any country).
           guestPhone: parsePhoneNumberFromString(form.guestPhone, phoneCountry)?.number ?? form.guestPhone,
-          paymentMethod,
-          stripePaymentIntentId: overridePaymentIntentId || stripePaymentIntentId || null,
           discountCode: appliedDiscount?.code || null,
-          checkoutAttemptToken: checkoutTokenRef.current,
+          // A request carries no payment details at all; `intent` lets the server refuse
+          // it if the listing has gone back to instant booking in the meantime.
+          ...(asRequest
+            ? { intent: "request" }
+            : {
+                paymentMethod,
+                stripePaymentIntentId: overridePaymentIntentId || stripePaymentIntentId || null,
+                checkoutAttemptToken: checkoutTokenRef.current,
+              }),
         }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
+        if (body.code === "instant_booking") setRequestMode(false);
         throw new Error(body.error ?? "Booking failed");
       }
       // Never let a malformed body turn a successful booking into a visible error.
       const data = await res.json().catch(() => null);
-      if (data?.bookingId) {
+      if (data?.requested) {
+        // Saved as a request (also the server's answer if the listing was switched to
+        // approval-only while the guest was on the payment screen without paying).
+        setRequested({ bookingId: data.bookingId, total: Number(data.total), replyBy: typeof data.replyBy === "string" ? data.replyBy : null });
+      } else if (data?.bookingId) {
         setConfirmed({ bookingId: data.bookingId, total: data.total, propertySlug: data.propertySlug });
       }
       setStep("done");
@@ -526,7 +561,15 @@ export default function BookingForm({
   // semantics and survives StrictMode's dev double-invoke.
   const trackedRef = useRef(false);
   useEffect(() => {
-    if (step !== "done" || !confirmed || trackedRef.current) return;
+    if (step !== "done" || trackedRef.current) return;
+    // A request is not a booking: its own event, which is not a key event, and neither
+    // booking_confirmed nor purchase. Those fire on the payment-link page if it is paid.
+    if (requested) {
+      trackedRef.current = true;
+      track("booking_request", { property: slug, value: Math.round(requested.total), currency: "PHP" });
+      return;
+    }
+    if (!confirmed) return;
     trackedRef.current = true;
     track("booking_confirmed", {
       property: confirmed.propertySlug || slug,
@@ -544,13 +587,44 @@ export default function BookingForm({
       total: Number(confirmed.total),
       nights,
     });
-  }, [step, confirmed, slug, propertyName, nights]);
+  }, [step, confirmed, requested, slug, propertyName, nights]);
 
   const inputCls = "w-full px-4 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
   const selectCls = "px-3 py-3 rounded-[10px] border border-black/[.10] bg-white text-[14px] text-charcoal focus:outline-none focus:border-forest focus:ring-2 focus:ring-forest/10 transition-colors";
   const labelCls = "text-[11.5px] font-semibold text-charcoal/55 tracking-wide uppercase mb-1.5 block";
 
   const hasVariedRates = dailyRates.length > 1 && dailyRates.some((r) => r.rate !== dailyRates[0].rate);
+
+  // ── Done state: request sent (no payment, no booking yet) ──
+  if (step === "done" && requested) {
+    const replyBy = requested.replyBy
+      ? new Date(requested.replyBy).toLocaleString("en-PH", {
+          timeZone: "Asia/Manila", weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+        })
+      : null;
+    return (
+      <div className="text-center py-16 px-6" role="status">
+        <div className="w-20 h-20 rounded-full bg-forest/10 flex items-center justify-center mx-auto mb-5">
+          <i className="fa-solid fa-paper-plane text-forest text-[2.2rem]" aria-hidden="true" />
+        </div>
+        <h2 className="font-serif font-semibold text-charcoal text-[1.6rem] mb-3">Request Sent!</h2>
+        <p className="text-charcoal/65 text-[15px] leading-[1.8] max-w-sm mx-auto mb-2">
+          Thank you, <strong>{form.guestName}</strong>! We&apos;ve received your request to stay at <strong>{propertyName}</strong>.
+        </p>
+        <p className="text-charcoal/60 text-[14px] leading-[1.7] max-w-sm mx-auto mb-2">
+          We&apos;ll reply to <strong>{form.guestEmail}</strong>{replyBy ? <> by <strong>{replyBy}</strong> (Lipa time)</> : null}.
+          If your request is approved, the email will include a link to pay.
+        </p>
+        <p className="text-charcoal/60 text-[14px] leading-[1.7] max-w-sm mx-auto mb-8">
+          Please don&apos;t send any payment yet. Your dates are not held until a booking is paid, first come, first served.
+        </p>
+        <Link href="/" className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold text-white"
+          style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
+          <i className="fa-solid fa-house" aria-hidden="true" /> Back to Homepage
+        </Link>
+      </div>
+    );
+  }
 
   // ── Done state ──
   if (step === "done") {
@@ -961,10 +1035,22 @@ export default function BookingForm({
           </label>
         </div>
 
+        {requestMode && (
+          <div className="text-[13px] text-charcoal/75 bg-white border border-forest/25 rounded-[12px] px-4 py-3 leading-[1.6]">
+            <strong className="text-forest">This listing takes booking requests.</strong> Send your request with no payment. We&apos;ll
+            reply by email within 24 hours, and if it&apos;s approved you&apos;ll get a link to pay by GCash, BPI or Credit/Debit Card.
+            Dates are not held until payment.
+          </div>
+        )}
+
         <button type="submit" disabled={submitting}
           className="w-full py-4 rounded-full text-[15px] font-semibold text-white hover:-translate-y-0.5 transition-all duration-200 disabled:opacity-60 flex items-center justify-center gap-2"
           style={{ background: "linear-gradient(135deg,#FF5371,#E03D5A)" }}>
-          {submitting ? <><i className="fa-solid fa-spinner fa-spin" /> Preparing your booking…</> : <>Continue to Payment <i className="fa-solid fa-arrow-right ml-1.5 text-[13px]" /></>}
+          {submitting
+            ? <><i className="fa-solid fa-spinner fa-spin" /> {requestMode ? "Sending your request…" : "Preparing your booking…"}</>
+            : requestMode
+              ? <>Send Booking Request <i className="fa-solid fa-paper-plane ml-1.5 text-[13px]" /></>
+              : <>Continue to Payment <i className="fa-solid fa-arrow-right ml-1.5 text-[13px]" /></>}
         </button>
       </form>
     </div>

@@ -41,6 +41,10 @@ import { POST as createBookingRoute } from "@/app/api/bookings/route";
 import { GET as threadsRoute } from "@/app/api/admin/guest-messages/threads/route";
 import { formatStayRangeShort } from "@/lib/dates";
 import { buildVars } from "@/lib/templates";
+import { approveBookingRequest, BookingRequestError, declineBookingRequest, processBookingRequests } from "@/lib/booking-requests";
+import { POST as requestRoute } from "@/app/api/admin/bookings/[id]/request/route";
+import { POST as payRoute } from "@/app/api/bookings/pay/[token]/route";
+import { bookingPaymentIntentMetadata } from "@/lib/stripe-payment";
 
 // Belt and braces on top of the config guard: never run against a non-local database.
 const host = new URL(process.env.DATABASE_URL ?? "mysql://unset/").hostname;
@@ -60,6 +64,7 @@ async function wipe() {
   await prisma.externalCalendarEvent.deleteMany();
   await prisma.externalCalendarSyncState.deleteMany();
   await prisma.booking.deleteMany();
+  await prisma.discountCode.deleteMany();
   await prisma.quickReply.deleteMany();
   await prisma.inventoryGroupMember.deleteMany();
   await prisma.inventoryGroup.deleteMany();
@@ -1051,5 +1056,388 @@ describe("card paid, dates taken — POST /api/bookings on real rows (Stripe moc
     expect((await other.json()).code).toBeUndefined();
     expect(alerts()).toHaveLength(0);
     expect(await prisma.adminLog.count({ where: { target: { startsWith: "stripe-" } } })).toBe(0);
+  });
+});
+
+// ── Booking requests (Instant Booking off) ────────────────────────────────────
+
+describe("booking requests — a request never holds dates, on real rows", () => {
+  const jsonReq = (url: string, method: string, body: unknown) =>
+    new Request(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) as unknown as NextRequest;
+  const guestPost = (propertyId: number, over: Record<string, unknown> = {}) =>
+    createBookingRoute(
+      jsonReq("http://localhost/api/bookings", "POST", {
+        propertyId,
+        guestName: "Web Guest",
+        guestEmail: "web@example.com",
+        guestPhone: "09171234567",
+        checkIn: "2027-02-08",
+        checkOut: "2027-02-10",
+        guests: 2,
+        ...over,
+      })
+    );
+  const setStatus = (id: number, status: string) =>
+    statusRoute(jsonReq(`http://localhost/api/admin/bookings/${id}`, "PUT", { status }), { params: Promise.resolve({ id: String(id) }) });
+  const decide = (id: number, action: string) =>
+    requestRoute(jsonReq(`http://localhost/api/admin/bookings/${id}/request`, "POST", { action }), { params: Promise.resolve({ id: String(id) }) });
+  const statusOf = async (id: number) => (await prisma.booking.findUniqueOrThrow({ where: { id } })).status;
+  const requested = (propertyId: number, over: Record<string, unknown> = {}) =>
+    booking(propertyId, "2027-02-08", "2027-02-10", {
+      status: "requested",
+      paymentMethod: null,
+      requestExpiresAt: new Date(Date.now() + 24 * 3600_000),
+      ...over,
+    });
+
+  beforeEach(async () => {
+    await prisma.property.update({ where: { id: P.A }, data: { instantBookingMode: "off" } });
+  });
+
+  it("a guest's submission on an Off listing is saved as a request: unpaid, non-blocking, and absent from the channel feed", async () => {
+    const res = await guestPost(P.A, { paymentMethod: "gcash" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toMatchObject({ success: true, requested: true, total: 4000 });
+
+    const row = await prisma.booking.findUniqueOrThrow({ where: { id: body.bookingId } });
+    expect(row).toMatchObject({ status: "requested", paymentMethod: null, paymentToken: null, paymentSubmittedAt: null });
+    expect(row.requestExpiresAt).not.toBeNull();
+
+    expect(await getPropertyConflicts({ propertyId: P.A, start: d("2027-02-08"), end: d("2027-02-10") })).toEqual([]);
+    expect(await blocksOf(row.id)).toEqual({});
+    const feed = await (await calendarFeed(new Request("http://localhost/"), { params: Promise.resolve({ slug: "listing-a" }) })).text();
+    expect(feed).not.toContain(bookingUid(row.id));
+    expect(sendMail.mock.calls.map(([m]) => m.subject)).toEqual([
+      expect.stringContaining("Booking Request Received"),
+      expect.stringContaining("New Booking Request"),
+    ]);
+  });
+
+  it("another guest can still book the requested nights on a sibling listing, and approval is then refused", async () => {
+    const req1 = await requested(P.A);
+    expect((await guestPost(P.B, { guestEmail: "other@example.com", paymentMethod: "gcash" })).status).toBe(200);
+
+    const res = await decide(req1.id, "approve");
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "conflict" });
+    expect(await statusOf(req1.id)).toBe("requested");
+  });
+
+  it("approval gives a payment token and an expiry but still holds nothing", async () => {
+    const req1 = await requested(P.A);
+    const res = await decide(req1.id, "approve");
+    expect(await res.json()).toMatchObject({ status: "approved", emailSent: true });
+
+    const row = await prisma.booking.findUniqueOrThrow({ where: { id: req1.id } });
+    expect(row).toMatchObject({ status: "approved", decidedById: admin.id });
+    expect(row.paymentToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(row.paymentLinkExpiresAt).not.toBeNull();
+    expect(await blocksOf(req1.id)).toEqual({});
+    // The nights are still open to anyone: first to pay gets them.
+    expect((await guestPost(P.C, { guestEmail: "other@example.com", paymentMethod: "gcash" })).status).toBe(200);
+  });
+
+  it("a manager without the bookings permission cannot decide a request", async () => {
+    const manager = await prisma.adminUser.create({ data: { email: "m@example.com", password: "x", name: "Manager", role: "manager" } });
+    session.current = { user: { id: String(manager.id), name: manager.name, role: "manager" } };
+    const req1 = await requested(P.A);
+    expect((await decide(req1.id, "approve")).status).toBe(403);
+    expect((await decide(req1.id, "decline")).status).toBe(403);
+    expect(await statusOf(req1.id)).toBe("requested");
+  });
+
+  it("the status control cannot skip approval or payment", async () => {
+    const req1 = await requested(P.A);
+    for (const to of ["confirmed", "pending", "approved", "cancelled", "declined"]) {
+      expect((await setStatus(req1.id, to)).status).toBe(409);
+    }
+    expect(await statusOf(req1.id)).toBe("requested");
+
+    await approveBookingRequest({ bookingId: req1.id, actor: admin });
+    expect((await setStatus(req1.id, "confirmed")).status).toBe(409);
+    expect((await setStatus(req1.id, "pending")).status).toBe(409);
+    expect((await setStatus(req1.id, "cancelled")).status).toBe(200);
+    expect(await statusOf(req1.id)).toBe("cancelled");
+  });
+
+  it("declined and expired are final", async () => {
+    const req1 = await requested(P.A);
+    await declineBookingRequest({ bookingId: req1.id, actor: admin, note: "Not available" });
+    for (const to of ["pending", "confirmed", "cancelled"]) expect((await setStatus(req1.id, to)).status).toBe(409);
+    const err = await approveBookingRequest({ bookingId: req1.id, actor: admin }).catch((e) => e);
+    expect(err).toBeInstanceOf(BookingRequestError);
+    expect(await statusOf(req1.id)).toBe("declined");
+  });
+
+  it("two admins deciding at once: exactly one decision is recorded", async () => {
+    const req1 = await requested(P.A);
+    const results = await Promise.allSettled([
+      approveBookingRequest({ bookingId: req1.id, actor: admin }),
+      declineBookingRequest({ bookingId: req1.id, actor: admin }),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(["approved", "declined"]).toContain(await statusOf(req1.id));
+  });
+
+  it("the cron pass expires what ran out and leaves the rest", async () => {
+    const past = new Date(Date.now() - 60_000);
+    const stale = await requested(P.A, { requestExpiresAt: past });
+    const unpaid = await requested(P.B, { status: "approved", paymentToken: "tok-unpaid", paymentLinkExpiresAt: past, guestEmail: "b@example.com" });
+    const live = await requested(P.C, { guestEmail: "c@example.com" });
+    const held = await booking(P.F, "2027-03-01", "2027-03-03", { status: "pending", paymentSubmittedAt: new Date(Date.now() - 25 * 3600_000) });
+
+    expect(await processBookingRequests()).toEqual({ expiredRequests: 1, expiredPaymentLinks: 1, paymentAlerts: 1, failed: 0 });
+    expect(await statusOf(stale.id)).toBe("expired");
+    expect(await statusOf(unpaid.id)).toBe("expired");
+    expect(await statusOf(live.id)).toBe("requested");
+    // The unverified payment is only reported: still pending, still holding its dates.
+    expect(await statusOf(held.id)).toBe("pending");
+    expect(await getPropertyConflicts({ propertyId: P.F, start: d("2027-03-01"), end: d("2027-03-03") })).toHaveLength(1);
+
+    // A second pass finds nothing left to do — no repeat emails.
+    sendMail.mockClear();
+    expect(await processBookingRequests()).toEqual({ expiredRequests: 0, expiredPaymentLinks: 0, paymentAlerts: 0, failed: 0 });
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  describe("correct, then approve", () => {
+    it("re-quotes a corrected request, blocks nothing, and the approval email carries the new total", async () => {
+      const req1 = await requested(P.A);
+      // Guest declared 2; the Owner agreed 4 guests for 3 nights on the bigger listing.
+      const result = await amend(req1.id, { guests: 4, propertyId: P.C, checkOut: "2027-02-11" }, { pricing: "requote" });
+      expect(result.review.financial.mode).toBe("requote");
+
+      const row = await prisma.booking.findUniqueOrThrow({ where: { id: req1.id } });
+      // 3 weeknights × ₱2,000 + 2 extra guests × ₱500 × 3 nights.
+      expect(row).toMatchObject({ status: "requested", guests: 4, propertyId: P.C });
+      expect(Number(row.totalPrice)).toBe(9000);
+      expect(Number(row.nightlyTotal)).toBe(6000);
+      expect(Number(row.extraGuestFee)).toBe(3000);
+      expect(row.stripeFee).toBeNull();
+      expect(await blocksOf(req1.id)).toEqual({});
+
+      const log = await prisma.adminLog.findFirstOrThrow({ where: { target: `booking-${req1.id}` }, orderBy: { id: "desc" } });
+      expect(JSON.parse(log.metadata!)).toMatchObject({ pricing: "requote", totalPrice: 4000, newTotalPrice: 9000 });
+
+      sendMail.mockClear();
+      await approveBookingRequest({ bookingId: req1.id, actor: admin });
+      const mail = sendMail.mock.calls[0][0] as unknown as { html: string };
+      expect(mail.html).toContain("₱9,000");
+      expect(mail.html).toContain("Listing C");
+    });
+
+    it("a contact-only correction leaves the total alone", async () => {
+      const req1 = await requested(P.A);
+      await amend(req1.id, { guestName: "Ana S. Santos" });
+      expect(Number((await prisma.booking.findUniqueOrThrow({ where: { id: req1.id } })).totalPrice)).toBe(4000);
+    });
+
+    it("refuses a correction onto nights that are taken", async () => {
+      await booking(P.B, "2027-02-15", "2027-02-17");
+      const req1 = await requested(P.A);
+      await expectRejected(amend(req1.id, { checkIn: "2027-02-15", checkOut: "2027-02-17" }), "conflict");
+      expect(Number((await prisma.booking.findUniqueOrThrow({ where: { id: req1.id } })).totalPrice)).toBe(4000);
+    });
+
+    it("an approved, declined or expired request can no longer be amended", async () => {
+      for (const status of ["approved", "declined", "expired"]) {
+        const req1 = await requested(P.A, { status, guestEmail: `${status}@example.com` });
+        await expectRejected(amend(req1.id, { guests: 1 }), "not_editable");
+      }
+    });
+
+    it("a booking that already holds dates still keeps its agreed price, and cannot be re-quoted", async () => {
+      const b = await booking(P.A, "2027-02-08", "2027-02-10");
+      await expectRejected(amend(b.id, { checkOut: "2027-02-11" }, { pricing: "requote" }), "unsupported");
+      await amend(b.id, { checkOut: "2027-02-11" });
+      expect(Number((await prisma.booking.findUniqueOrThrow({ where: { id: b.id } })).totalPrice)).toBe(4000);
+    });
+  });
+
+  it("one card payment cannot be stored on two bookings (unique index)", async () => {
+    await booking(P.D, "2027-04-05", "2027-04-07", { stripePaymentIntentId: "pi_once" });
+    await expect(booking(P.F, "2027-04-05", "2027-04-07", { stripePaymentIntentId: "pi_once" })).rejects.toMatchObject({ code: "P2002" });
+  });
+});
+
+// ── Paying an approved request through its payment link ───────────────────────
+
+describe("payment link — an approved request starts holding dates only when it is paid", () => {
+  const jsonReq = (url: string, body: unknown) =>
+    new Request(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }) as unknown as NextRequest;
+  const pay = (tok: string, body: Record<string, unknown>) =>
+    payRoute(jsonReq(`http://localhost/api/bookings/pay/${tok}`, body), { params: Promise.resolve({ token: tok }) });
+  const row = (id: number) => prisma.booking.findUniqueOrThrow({ where: { id } });
+
+  let n = 0;
+  /** An approved, unpaid request with a live payment link. */
+  async function approvedRequest(propertyId: number, over: Record<string, unknown> = {}) {
+    n++;
+    const tok = `tok-${n}-${"x".repeat(24)}`;
+    const b = await booking(propertyId, "2027-02-08", "2027-02-10", {
+      status: "approved",
+      paymentMethod: null,
+      paymentToken: tok,
+      paymentLinkExpiresAt: new Date(Date.now() + 24 * 3600_000),
+      guestEmail: `guest${n}@example.com`,
+      ...over,
+    });
+    return { id: b.id, tok };
+  }
+  const paidIntent = (id: string, bookingId: number, tok: string, centavos: number) => ({
+    id,
+    status: "succeeded",
+    currency: "php",
+    amount: centavos,
+    amount_received: centavos,
+    created: Math.floor(Date.now() / 1000),
+    metadata: bookingPaymentIntentMetadata({ bookingId, token: tok, amount: centavos }),
+  });
+
+  it("GCash “I've Paid”: pending, dates held on the listing and every sibling, guest and admin told", async () => {
+    const { id, tok } = await approvedRequest(P.A);
+    expect(await blocksOf(id)).toEqual({});
+
+    const res = await pay(tok, { paymentMethod: "gcash" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "pending", bookingId: id, total: 4000, nights: 2 });
+
+    const b = await row(id);
+    expect(b).toMatchObject({ status: "pending", paymentMethod: "gcash" });
+    expect(b.paymentSubmittedAt).not.toBeNull();
+    expect(await blocksOf(id)).toEqual({ B: "2027-02-08→2027-02-10", C: "2027-02-08→2027-02-10" });
+    expect(await getPropertyConflicts({ propertyId: P.A, start: d("2027-02-08"), end: d("2027-02-10") })).toHaveLength(1);
+    expect(sendMail.mock.calls.map(([m]) => m.subject)).toEqual([
+      expect.stringContaining("Payment Received, Being Verified"),
+      expect.stringContaining("Verify Payment"),
+    ]);
+
+    // The Owner then confirms exactly as for any pending booking.
+    const confirm = await statusRoute(jsonReq(`http://localhost/api/admin/bookings/${id}`, { status: "confirmed" }), { params: Promise.resolve({ id: String(id) }) });
+    expect(confirm.status).toBe(200);
+    expect((await row(id)).status).toBe("confirmed");
+  });
+
+  it("a second tap does not hold twice or email twice", async () => {
+    const { id, tok } = await approvedRequest(P.A);
+    await pay(tok, { paymentMethod: "gcash" });
+    sendMail.mockClear();
+    const again = await pay(tok, { paymentMethod: "gcash" });
+    expect(again.status).toBe(409);
+    expect((await again.json()).error).toContain("already recorded your payment");
+    expect(sendMail).not.toHaveBeenCalled();
+    expect(Object.keys(await blocksOf(id))).toHaveLength(2);
+  });
+
+  it("two approved requests for the same house, both tapping “I've Paid” at once: exactly one holds the dates", async () => {
+    const one = await approvedRequest(P.A);
+    const two = await approvedRequest(P.B);
+    const responses = await Promise.all([pay(one.tok, { paymentMethod: "gcash" }), pay(two.tok, { paymentMethod: "bpi" })]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+
+    const statuses = [(await row(one.id)).status, (await row(two.id)).status].sort();
+    expect(statuses).toEqual(["approved", "pending"]);
+    const loser = responses.find((r) => r.status === 409)!;
+    expect(await loser.json()).toMatchObject({ code: "unavailable" });
+    // The loser may have sent money: one log entry and one alert, however often they retry.
+    const loserId = (await row(one.id)).status === "approved" ? one : two;
+    await pay(loserId.tok, { paymentMethod: "gcash" });
+    expect(await prisma.adminLog.count({ where: { target: `booking-payment-unavailable-${loserId.id}` } })).toBe(1);
+    expect(sendMail.mock.calls.filter(([m]) => m.subject.includes("Dates Already Taken"))).toHaveLength(1);
+  });
+
+  it("an approved request racing an instant booking for the same nights: exactly one wins", async () => {
+    const { id, tok } = await approvedRequest(P.A);
+    const instant = createBookingRoute(
+      jsonReq("http://localhost/api/bookings", {
+        propertyId: P.C, guestName: "Web Guest", guestEmail: "web@example.com", guestPhone: "09171234567",
+        checkIn: "2027-02-09", checkOut: "2027-02-11", guests: 2, paymentMethod: "gcash",
+      })
+    );
+    const responses = await Promise.all([pay(tok, { paymentMethod: "gcash" }), instant]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 409]);
+    const holding = await prisma.booking.count({ where: { status: { in: ["pending", "confirmed"] } } });
+    expect(holding).toBe(1);
+    void id;
+  });
+
+  it("card: verified, confirmed, fee added, reminders scheduled, promo use counted once", async () => {
+    await prisma.discountCode.create({ data: { code: "WELCOME", type: "fixed", value: 500 } });
+    const { id, tok } = await approvedRequest(P.A, { totalPrice: 3500, discountCode: "WELCOME", discountAmount: 500 });
+    // ₱3,500 + 6% = ₱3,710.
+    stripeRetrieve.mockResolvedValue(paidIntent("pi_link_1", id, tok, 371000));
+
+    const res = await pay(tok, { paymentMethod: "stripe", stripePaymentIntentId: "pi_link_1" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: "confirmed", total: 3710 });
+
+    const b = await row(id);
+    expect(b).toMatchObject({ status: "confirmed", paymentMethod: "stripe", stripePaymentIntentId: "pi_link_1" });
+    expect(Number(b.totalPrice)).toBe(3710);
+    expect(Number(b.stripeFee)).toBe(210);
+    expect(Object.keys(await blocksOf(id))).toHaveLength(2);
+    expect((await prisma.discountCode.findUniqueOrThrow({ where: { code: "WELCOME" } })).usageCount).toBe(1);
+
+    // The same payment submitted again changes nothing and counts nothing twice.
+    sendMail.mockClear();
+    const again = await pay(tok, { paymentMethod: "stripe", stripePaymentIntentId: "pi_link_1" });
+    expect(await again.json()).toMatchObject({ status: "confirmed", total: 3710 });
+    expect(sendMail).not.toHaveBeenCalled();
+    expect((await prisma.discountCode.findUniqueOrThrow({ where: { code: "WELCOME" } })).usageCount).toBe(1);
+  });
+
+  it("card charged after the dates were taken: no booking, reference returned, one alert", async () => {
+    const { id, tok } = await approvedRequest(P.A);
+    await booking(P.B, "2027-02-09", "2027-02-11"); // a sibling sells first
+    stripeRetrieve.mockResolvedValue(paidIntent("pi_link_2", id, tok, 424000));
+
+    const res = await pay(tok, { paymentMethod: "stripe", stripePaymentIntentId: "pi_link_2" });
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "paid_unavailable", paymentReference: "pi_link_2" });
+    expect(await row(id)).toMatchObject({ status: "approved", stripePaymentIntentId: null });
+    await pay(tok, { paymentMethod: "stripe", stripePaymentIntentId: "pi_link_2" });
+    expect(await prisma.adminLog.count({ where: { target: "stripe-pi_link_2" } })).toBe(1);
+  });
+
+  it("a payment made for one approved request cannot confirm another", async () => {
+    const one = await approvedRequest(P.A);
+    const two = await approvedRequest(P.F);
+    stripeRetrieve.mockResolvedValue(paidIntent("pi_link_3", one.id, one.tok, 424000));
+    const res = await pay(two.tok, { paymentMethod: "stripe", stripePaymentIntentId: "pi_link_3" });
+    expect(res.status).toBe(400);
+    expect((await row(two.id)).status).toBe("approved");
+  });
+
+  it("an expired link, an unapproved request and an unknown token hold nothing", async () => {
+    const expired = await approvedRequest(P.A, { paymentLinkExpiresAt: new Date(Date.now() - 60_000) });
+    expect((await pay(expired.tok, { paymentMethod: "gcash" })).status).toBe(409);
+    expect((await row(expired.id)).status).toBe("approved");
+
+    const waiting = await approvedRequest(P.F, { status: "requested" });
+    expect((await pay(waiting.tok, { paymentMethod: "gcash" })).status).toBe(409);
+    expect((await row(waiting.id)).status).toBe("requested");
+
+    expect((await pay("no-such-token", { paymentMethod: "gcash" })).status).toBe(404);
+    expect(await prisma.availabilityBlock.count()).toBe(0);
+  });
+
+  it("the whole path: request → corrected → approved → paid → confirmed", async () => {
+    await prisma.property.update({ where: { id: P.A }, data: { instantBookingMode: "off" } });
+    const created = await createBookingRoute(
+      jsonReq("http://localhost/api/bookings", {
+        propertyId: P.A, guestName: "Web Guest", guestEmail: "path@example.com", guestPhone: "09171234567",
+        checkIn: "2027-02-08", checkOut: "2027-02-10", guests: 2, intent: "request",
+      })
+    );
+    const { bookingId } = await created.json();
+    await amend(bookingId, { checkOut: "2027-02-11" }, { pricing: "requote" });
+    await approveBookingRequest({ bookingId, actor: admin });
+    const approvedRow = await row(bookingId);
+    expect(Number(approvedRow.totalPrice)).toBe(6000);
+
+    const res = await pay(approvedRow.paymentToken!, { paymentMethod: "bpi" });
+    expect(await res.json()).toMatchObject({ status: "pending", total: 6000, nights: 3 });
+    expect(await blocksOf(bookingId)).toEqual({ B: "2027-02-08→2027-02-11", C: "2027-02-08→2027-02-11" });
   });
 });

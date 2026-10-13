@@ -229,7 +229,7 @@ export default function GuestStayEditor({
         changes: changedFields(),
         reason: reason.trim(),
         expectedUpdatedAt: review.expectedUpdatedAt,
-        pricing: "preserve",
+        pricing: review.financial.mode,
       });
       if (!ok) return showFailure(body);
       setResult(body as AmendmentResult);
@@ -455,11 +455,24 @@ export default function GuestStayEditor({
 
           <div className="mt-5 text-[13.5px] text-charcoal/80 space-y-1.5">
             <h3 className="text-[11px] font-semibold text-charcoal/50 uppercase tracking-wide mb-2">Price</h3>
-            <p>
-              The agreed total of <strong>{peso(fin.stored.total)}</strong> is kept. Nothing is charged or refunded, and no
-              additional charge is created or emailed to the guest.
-            </p>
-            {ref?.ok && (
+            {fin.mode === "requote" ? (
+              <p>
+                {ref?.ok ? (
+                  <>
+                    This request has not been paid, so its total is re-quoted: <strong>{peso(fin.stored.total)}</strong> →{" "}
+                    <strong>{peso(ref.total - ref.stripeFee)}</strong>. The guest sees the new total when you approve.
+                  </>
+                ) : (
+                  <>The total of <strong>{peso(fin.stored.total)}</strong> stays the same.</>
+                )}
+              </p>
+            ) : (
+              <p>
+                The agreed total of <strong>{peso(fin.stored.total)}</strong> is kept. Nothing is charged or refunded, and no
+                additional charge is created or emailed to the guest.
+              </p>
+            )}
+            {fin.mode === "preserve" && ref?.ok && (
               <p>
                 For reference only: at today&apos;s rates the amended stay prices at {peso(ref.total)}
                 {ref.difference === 0

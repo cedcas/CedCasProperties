@@ -12,7 +12,7 @@ const { db, stripeApi, sendMail, availability } = vi.hoisted(() => ({
     property: { findUnique: vi.fn() },
     propertyRate: { findMany: vi.fn() },
     discountCode: { findUnique: vi.fn(), update: vi.fn() },
-    booking: { findFirst: vi.fn(), create: vi.fn() },
+    booking: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn() },
     checkoutAttempt: { findUnique: vi.fn(), updateMany: vi.fn(), create: vi.fn() },
     adminLog: { findFirst: vi.fn(), create: vi.fn() },
   },
@@ -55,6 +55,8 @@ import { POST as createBooking } from "@/app/api/bookings/route";
 import { POST as createPaymentIntent } from "@/app/api/stripe/payment-intent/route";
 import { POST as recordAttempt } from "@/app/api/checkout-attempts/route";
 import { GET as getAvailability } from "@/app/api/availability/[slug]/route";
+import { AvailabilityConflictError } from "@/lib/availability";
+import { reconcileBookingDerivedBlocks } from "@/lib/inventory-groups";
 
 /** An instant given as Manila wall-clock time. */
 const manila = (date: string, time: string) => new Date(`${date}T${time}:00+08:00`);
@@ -66,7 +68,9 @@ const CARD_CENTAVOS = 212000;
 const GUEST = { guestName: "Juan Dela Cruz", guestEmail: "juan@example.com", guestPhone: "09171234567" };
 const TEN_AM = 10 * 60;
 
-function property(policy: { advanceNoticeDays?: number; sameDayCutoffMinutes?: number | null } = {}) {
+function property(
+  policy: { advanceNoticeDays?: number; sameDayCutoffMinutes?: number | null; instantBookingMode?: string } = {}
+) {
   return {
     id: 7,
     name: "Haven Suite",
@@ -319,14 +323,14 @@ describe("GET /api/availability/[slug]", () => {
 
   it("reports the earliest check-in with the blocked ranges", async () => {
     setNow("2026-10-12", "09:00");
-    expect(await (await get()).json()).toEqual({ blockedRanges: [], earliestCheckIn: "2026-10-12" });
+    expect(await (await get()).json()).toEqual({ blockedRanges: [], earliestCheckIn: "2026-10-12", requiresApproval: false });
     setNow("2026-10-12", "10:00");
     expect((await (await get()).json()).earliestCheckIn).toBe("2026-10-13");
   });
 
   it("answers ?earliest=1 for the date pickers without reading any calendar", async () => {
     setNow("2026-10-12", "10:00");
-    expect(await (await get("?earliest=1")).json()).toEqual({ earliestCheckIn: "2026-10-13" });
+    expect(await (await get("?earliest=1")).json()).toEqual({ earliestCheckIn: "2026-10-13", requiresApproval: false });
     expect(availability.getUnavailableDateRanges).not.toHaveBeenCalled();
     expect(availability.getPropertyConflicts).not.toHaveBeenCalled();
   });
@@ -345,6 +349,7 @@ describe("GET /api/availability/[slug]", () => {
       available: true,
       conflicts: [],
       earliestCheckIn: "2026-10-12",
+      requiresApproval: false,
     });
   });
 
@@ -354,5 +359,247 @@ describe("GET /api/availability/[slug]", () => {
     expect(body.available).toBe(true);
     expect(body.reason).toBeUndefined();
     expect(availability.getPropertyConflicts).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Instant Booking off — the listing takes requests, not bookings", () => {
+  const savedRequest = () => ({
+    id: 42,
+    status: "requested",
+    propertyId: 7,
+    ...GUEST,
+    guestPhone: "+639171234567",
+    checkIn: new Date("2026-10-12T00:00:00Z"),
+    checkOut: new Date("2026-10-13T00:00:00Z"),
+    guests: 2,
+    totalPrice: 2000,
+    paymentMethod: null,
+    requestExpiresAt: manila("2026-10-13", "00:00"),
+    paymentLinkExpiresAt: null,
+    paymentSubmittedAt: null,
+    property: { name: "Haven Suite", advanceNoticeDays: 0, sameDayCutoffMinutes: null },
+  });
+
+  beforeEach(() => {
+    db.property.findUnique.mockResolvedValue(property({ instantBookingMode: "off" }));
+    db.booking.findUnique.mockResolvedValue(savedRequest());
+  });
+
+  it("payment-intent: no card is charged before approval", async () => {
+    const res = await createPaymentIntent(req(TONIGHT));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "requires_approval" });
+    expect(stripeApi.create).not.toHaveBeenCalled();
+  });
+
+  it("checkout-attempts: nothing is recorded", async () => {
+    const res = await recordAttempt(req({ ...TONIGHT, ...GUEST, paymentMethod: "gcash" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "requires_approval" });
+    expect(db.checkoutAttempt.create).not.toHaveBeenCalled();
+  });
+
+  it.each(["gcash", "bpi", "stripe", undefined])(
+    "bookings (%s): saves a request with no payment, no hold and no card fee",
+    async (paymentMethod) => {
+      const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod, discountCode: "" }));
+      expect(res.status).toBe(200);
+      // 9:00 AM + 24 h would be tomorrow 9:00 AM, but tonight stops being bookable at midnight.
+      expect(await res.json()).toEqual({
+        success: true,
+        requested: true,
+        bookingId: 42,
+        total: 2000,
+        propertySlug: "haven-suite",
+        replyBy: manila("2026-10-13", "00:00").toISOString(),
+      });
+      const { data } = db.booking.create.mock.calls[0][0];
+      expect(data).toMatchObject({
+        status: "requested",
+        paymentMethod: null,
+        stripeFee: null,
+        totalPrice: 2000,
+        requestExpiresAt: manila("2026-10-13", "00:00"),
+      });
+      expect(data.stripePaymentIntentId).toBeUndefined();
+      expect(data.paymentSubmittedAt).toBeUndefined();
+      // Nothing is blocked on sibling listings, and no promo use is counted yet.
+      expect(reconcileBookingDerivedBlocks).not.toHaveBeenCalled();
+      expect(db.discountCode.update).not.toHaveBeenCalled();
+      expect(stripeApi.retrieve).not.toHaveBeenCalled();
+      // Guest "request received" + admin "new request".
+      expect(sendMail).toHaveBeenCalledTimes(2);
+      expect(sendMail.mock.calls[0][0].subject).toContain("Booking Request Received");
+    }
+  );
+
+  it("a request made well ahead waits the full 24 hours", async () => {
+    await createBooking(req({ ...TONIGHT, checkIn: "2026-10-20", checkOut: "2026-10-21", ...GUEST }));
+    expect(db.booking.create.mock.calls[0][0].data.requestExpiresAt).toEqual(manila("2026-10-13", "09:00"));
+  });
+
+  it("advance notice applies to a request exactly as to a booking", async () => {
+    db.property.findUnique.mockResolvedValue(property({ instantBookingMode: "off", sameDayCutoffMinutes: TEN_AM }));
+    setNow("2026-10-12", "11:00");
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "too_soon", earliestCheckIn: "2026-10-13" });
+    expect(db.booking.create).not.toHaveBeenCalled();
+  });
+
+  it("refuses a request for dates that are already taken", async () => {
+    availability.assertPropertyAvailable.mockRejectedValueOnce(new AvailabilityConflictError("Those dates are unavailable.", []));
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST }));
+    expect(res.status).toBe(409);
+    expect(db.booking.create).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("the same request sent twice is saved and emailed once", async () => {
+    db.booking.findFirst.mockResolvedValue({
+      id: 41,
+      totalPrice: 2000,
+      requestExpiresAt: manila("2026-10-13", "00:00"),
+      property: { slug: "haven-suite" },
+    });
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST }));
+    expect(await res.json()).toMatchObject({ requested: true, bookingId: 41 });
+    expect(db.booking.create).not.toHaveBeenCalled();
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  describe("a guest already paying when the listing was switched to Off", () => {
+    const attemptAt = (date: string, time: string) =>
+      db.checkoutAttempt.findUnique.mockResolvedValue({
+        propertyId: 7,
+        checkIn: new Date("2026-10-12T00:00:00Z"),
+        createdAt: manila(date, time),
+      });
+
+    it("GCash: reached the payment screen 30 minutes ago — still an instant booking that holds the dates", async () => {
+      attemptAt("2026-10-12", "08:30");
+      const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "gcash", checkoutAttemptToken: "tok" }));
+      expect(await res.json()).not.toHaveProperty("requested");
+      expect(db.booking.create.mock.calls[0][0].data).toMatchObject({ status: "pending", paymentMethod: "gcash" });
+    });
+
+    it("GCash: an old payment-screen visit earns nothing — it becomes a request", async () => {
+      attemptAt("2026-10-12", "06:00");
+      const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "gcash", checkoutAttemptToken: "tok" }));
+      expect(await res.json()).toMatchObject({ requested: true });
+      expect(db.booking.create.mock.calls[0][0].data.status).toBe("requested");
+    });
+
+    it("card: a verified payment for this stay is still confirmed", async () => {
+      stripeApi.retrieve.mockResolvedValue(paidIntent(manila("2026-10-12", "08:50")));
+      const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "stripe", stripePaymentIntentId: "pi_123" }));
+      expect(res.status).toBe(200);
+      expect(db.booking.create.mock.calls[0][0].data).toMatchObject({ status: "confirmed", stripePaymentIntentId: "pi_123" });
+    });
+
+    it("card: an unverifiable payment reference gets no booking and no request", async () => {
+      stripeApi.retrieve.mockRejectedValue(new Error("No such payment_intent"));
+      const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "stripe", stripePaymentIntentId: "pi_fake" }));
+      expect(res.status).toBe(400);
+      expect(db.booking.create).not.toHaveBeenCalled();
+    });
+  });
+
+  it("the public availability route says the listing takes requests", async () => {
+    const res = await getAvailability(new Request("http://localhost/api/availability/haven-suite?earliest=1"), {
+      params: Promise.resolve({ slug: "haven-suite" }),
+    });
+    expect(await res.json()).toMatchObject({ requiresApproval: true });
+  });
+});
+
+describe("Instant Booking on — unchanged, plus the payment-submitted timestamp", () => {
+  it("GCash: pending as before, and the unverified-payment clock starts", async () => {
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "gcash" }));
+    expect(await res.json()).not.toHaveProperty("requested");
+    const { data } = db.booking.create.mock.calls[0][0];
+    expect(data).toMatchObject({ status: "pending", paymentSubmittedAt: manila("2026-10-12", "09:00") });
+  });
+
+  it("card: confirmed as before, with no unverified-payment clock", async () => {
+    stripeApi.retrieve.mockResolvedValue(paidIntent(manila("2026-10-12", "08:50")));
+    await createBooking(req({ ...TONIGHT, ...GUEST, paymentMethod: "stripe", stripePaymentIntentId: "pi_123" }));
+    expect(db.booking.create.mock.calls[0][0].data).toMatchObject({ status: "confirmed", paymentSubmittedAt: null });
+  });
+
+  it("a stored mode nobody recognises behaves as On", async () => {
+    db.property.findUnique.mockResolvedValue(property({ instantBookingMode: "sometimes" }));
+    const res = await createPaymentIntent(req(TONIGHT));
+    expect(res.status).toBe(200);
+  });
+});
+
+describe("the form's explicit request intent, and the card intent for an approved request", () => {
+  it("a request sent to a listing that books instantly is refused, so nothing unpaid holds dates", async () => {
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST, intent: "request" }));
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ code: "instant_booking" });
+    expect(db.booking.create).not.toHaveBeenCalled();
+  });
+
+  it("a request sent to an approval-only listing is saved as one", async () => {
+    db.property.findUnique.mockResolvedValue(property({ instantBookingMode: "off" }));
+    db.booking.findUnique.mockResolvedValue(null);
+    const res = await createBooking(req({ ...TONIGHT, ...GUEST, intent: "request" }));
+    expect(await res.json()).toMatchObject({ requested: true });
+  });
+
+  describe("payment-intent kind booking_payment", () => {
+    const approved = (over: Record<string, unknown> = {}) => ({
+      id: 42,
+      status: "approved",
+      propertyId: 7,
+      checkIn: new Date("2026-10-12T00:00:00Z"),
+      checkOut: new Date("2026-10-13T00:00:00Z"),
+      totalPrice: 2000,
+      paymentLinkExpiresAt: manila("2026-10-13", "00:00"),
+      ...over,
+    });
+    const intent = () => createPaymentIntent(req({ kind: "booking_payment", token: "tok" }));
+
+    it("charges the stored total plus the card fee, bound to that booking — on a listing that is Off", async () => {
+      db.property.findUnique.mockResolvedValue(property({ instantBookingMode: "off" }));
+      db.booking.findUnique.mockResolvedValue(approved());
+      const res = await intent();
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({ total: 2120 });
+      expect(stripeApi.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: CARD_CENTAVOS,
+          metadata: { kind: "booking_payment", bookingId: "42", token: "tok", amount: String(CARD_CENTAVOS) },
+        })
+      );
+      expect(availability.assertPropertyAvailable).toHaveBeenCalledWith(expect.objectContaining({ propertyId: 7, excludeBookingId: 42 }));
+    });
+
+    it("creates no intent when the dates are already gone", async () => {
+      db.booking.findUnique.mockResolvedValue(approved());
+      availability.assertPropertyAvailable.mockRejectedValueOnce(new AvailabilityConflictError("Those dates are unavailable.", []));
+      const res = await intent();
+      expect(res.status).toBe(409);
+      expect(await res.json()).toMatchObject({ code: "unavailable" });
+      expect(stripeApi.create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["an expired link", { paymentLinkExpiresAt: manila("2026-10-12", "08:00") }],
+      ["a request not yet approved", { status: "requested" }],
+      ["a booking already paid", { status: "confirmed" }],
+    ])("creates no intent for %s", async (_name, over) => {
+      db.booking.findUnique.mockResolvedValue(approved(over));
+      const res = await intent();
+      expect(res.status).toBe(409);
+      expect(stripeApi.create).not.toHaveBeenCalled();
+    });
+
+    it("404s an unknown token", async () => {
+      db.booking.findUnique.mockResolvedValue(null);
+      expect((await intent()).status).toBe(404);
+    });
   });
 });

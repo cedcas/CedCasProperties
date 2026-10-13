@@ -21,9 +21,15 @@
  *  - A stale edit (the booking changed since the form was loaded) is rejected.
  *
  * PRICING. The Owner's first-release policy (DEC-024, approved 2026-10-02) is to keep the
- * agreed price and defer re-pricing, so the only mode is "preserve": the stored totals stay
- * as they are and the review shows a server-calculated reference quote for comparison.
- * Nothing is charged, refunded or added as an AdditionalCharge.
+ * agreed price and defer re-pricing, so a booking that holds dates is always "preserve":
+ * the stored totals stay as they are and the review shows a server-calculated reference
+ * quote for comparison. Nothing is charged, refunded or added as an AdditionalCharge.
+ *
+ * The one exception is a booking REQUEST the Owner has not approved yet (status
+ * `requested`, Owner-approved 2026-10-09): no money has moved, so correcting its guests,
+ * dates or property re-quotes the stay and REPLACES the stored total ("requote"). The
+ * approval email then states what the guest is paying for. A request holds no dates, so
+ * such a correction blocks and releases nothing.
  */
 
 import { Prisma } from "@prisma/client";
@@ -37,6 +43,7 @@ import {
   utcDateKey,
 } from "@/lib/dates";
 import { bookingBlocksAvailability } from "@/lib/booking-status";
+import { assertBookingPolicy, bookingDeadlineFor, normalizeBookingPolicy } from "@/lib/booking-policy";
 import { normalizePhone } from "@/lib/phone";
 import {
   formatConflictRange,
@@ -86,7 +93,7 @@ export const FIELD_LABELS: Record<AmendableField, string> = {
 
 const CONTACT_FIELDS: AmendableField[] = ["guestName", "guestEmail", "guestPhone"];
 
-export type StayPhase = "cancelled" | "past" | "in_progress" | "upcoming";
+export type StayPhase = "cancelled" | "closed" | "request" | "approved" | "past" | "in_progress" | "upcoming";
 
 /**
  * Where a booking is in its life, on the property's calendar (`today` = Manila date).
@@ -97,6 +104,9 @@ export function classifyStayPhase(
   booking: { status: string; checkIn: Date; checkOut: Date },
   today: Date
 ): StayPhase {
+  if (booking.status === "requested") return "request";
+  if (booking.status === "approved") return "approved";
+  if (booking.status === "declined" || booking.status === "expired") return "closed";
   if (!bookingBlocksAvailability(booking.status)) return "cancelled";
   if (toUtcMidnight(booking.checkOut) < today) return "past";
   if (toUtcMidnight(booking.checkIn) <= today) return "in_progress";
@@ -112,16 +122,21 @@ export function classifyStayPhase(
  *  - past: contact details only (record corrections).
  *  - cancelled: nothing. An amendment never reactivates a booking; restoring one is a
  *    status change, made separately and deliberately.
+ *  - request (not yet approved): everything, and the total is re-quoted.
+ *  - approved (payment link sent) and closed (declined / expired): nothing.
  */
 export function editableFieldsFor(phase: StayPhase): AmendableField[] {
   switch (phase) {
     case "upcoming":
+    case "request":
       return [...AMENDABLE_FIELDS];
     case "in_progress":
       return [...CONTACT_FIELDS, "guests", "checkOut"];
     case "past":
       return [...CONTACT_FIELDS];
     case "cancelled":
+    case "approved":
+    case "closed":
       return [];
   }
 }
@@ -136,6 +151,12 @@ export function phaseNotice(phase: StayPhase): string | null {
       return "This stay has ended. Only contact details can be corrected.";
     case "cancelled":
       return "This booking is cancelled and cannot be amended. Amending never reactivates a booking.";
+    case "request":
+      return "This request is not approved yet, so you can correct it first. Changing the guests, dates or property re-quotes the total, and the approval email shows the corrected details.";
+    case "approved":
+      return "This request is approved and its payment link has been sent, so its details can no longer be changed. To change them, cancel it and ask the guest to send a new request.";
+    case "closed":
+      return "This request was declined or has expired and cannot be amended.";
   }
 }
 
@@ -396,7 +417,8 @@ export interface ReviewChange {
 }
 
 export interface FinancialReview {
-  mode: "preserve";
+  /** `requote`: the stored total is replaced by `reference` on save (unapproved requests only). */
+  mode: "preserve" | "requote";
   paymentMethod: string | null;
   hasStripePayment: boolean;
   stored: {
@@ -407,7 +429,7 @@ export interface FinancialReview {
     stripeFee: number | null;
     total: number;
   };
-  /** Today's server price for the amended stay — shown for comparison, never applied. */
+  /** Today's server price for the amended stay — for comparison; applied only in `requote` mode. */
   reference:
     | { ok: true; nightlyTotal: number; extraGuestFee: number; discountAmount: number; stripeFee: number; total: number; difference: number }
     | { ok: false; error: string }
@@ -483,6 +505,7 @@ const BOOKING_SELECT = {
   discountAmount: true,
   paymentMethod: true,
   stripePaymentIntentId: true,
+  requestExpiresAt: true,
   updatedAt: true,
   property: { select: { id: true, name: true } },
 } satisfies Prisma.BookingSelect;
@@ -517,7 +540,14 @@ async function buildReview(
   changes: Partial<BookingSnapshot>,
   db: Db,
   now: Date
-): Promise<{ resolved: ResolvedAmendment; review: AmendmentReview; conflicts: Conflict[]; plan: ScheduledMessageAmendmentPlan | null }> {
+): Promise<{
+  resolved: ResolvedAmendment;
+  review: AmendmentReview;
+  conflicts: Conflict[];
+  plan: ScheduledMessageAmendmentPlan | null;
+  /** Set only when a corrected request must expire sooner than it was going to. */
+  requestExpiresAt: Date | null;
+}> {
   const current = snapshotOf(booking);
   const targetId = changes.propertyId ?? current.propertyId;
   const target = await loadTarget(targetId, db);
@@ -528,6 +558,30 @@ async function buildReview(
   const checkIn = toUtcMidnight(after.checkIn);
   const checkOut = toUtcMidnight(after.checkOut);
   const warnings: string[] = [];
+  const holdsDates = bookingBlocksAvailability(booking.status);
+  const pricingMode: FinancialReview["mode"] = booking.status === "requested" ? "requote" : "preserve";
+
+  // A corrected request is still paid online through its payment link, so its check-in
+  // must be one a guest can still book. (Bookings that already hold dates are exempt:
+  // an admin amendment is never subject to guest advance notice.)
+  let requestExpiresAt: Date | null = null;
+  if (pricingMode === "requote" && (changed.includes("checkIn") || changed.includes("propertyId"))) {
+    const policy = normalizeBookingPolicy(
+      await db.property.findUnique({
+        where: { id: after.propertyId },
+        select: { advanceNoticeDays: true, sameDayCutoffMinutes: true },
+      })
+    );
+    const outcome = assertBookingPolicy({ checkIn, policy, now });
+    if (!outcome.ok) {
+      throw new AmendmentError(400, "Some details need attention.", "invalid", {
+        fieldErrors: { checkIn: outcome.message },
+      });
+    }
+    // The request never outlives the booking deadline for its (new) check-in.
+    const deadline = bookingDeadlineFor(checkIn, policy);
+    if (booking.requestExpiresAt && deadline < booking.requestExpiresAt) requestExpiresAt = deadline;
+  }
 
   // Availability — only when the booking would occupy different nights or a different unit.
   let conflicts: Conflict[] = [];
@@ -541,14 +595,17 @@ async function buildReview(
       excludeBookingId: booking.id,
       db,
     });
-    const [oldSiblings, newSiblings] = await Promise.all([
-      siblingNames(current.propertyId, db),
-      siblingNames(after.propertyId, db),
-    ]);
-    alsoBlocks = [...newSiblings.values()];
-    releases = [...oldSiblings.entries()]
-      .filter(([id]) => !newSiblings.has(id) && id !== after.propertyId)
-      .map(([, name]) => name);
+    // A request holds no dates, so it blocks and releases nothing on sibling listings.
+    if (holdsDates) {
+      const [oldSiblings, newSiblings] = await Promise.all([
+        siblingNames(current.propertyId, db),
+        siblingNames(after.propertyId, db),
+      ]);
+      alsoBlocks = [...newSiblings.values()];
+      releases = [...oldSiblings.entries()]
+        .filter(([id]) => !newSiblings.has(id) && id !== after.propertyId)
+        .map(([, name]) => name);
+    }
 
     const feed = await db.externalCalendarSyncState.findUnique({
       where: { propertyId: after.propertyId },
@@ -595,6 +652,10 @@ async function buildReview(
       discountCode: booking.discountCode,
       paymentMethod: booking.paymentMethod,
     });
+    // A request cannot be saved without a price to replace the old one.
+    if (!quote.ok && pricingMode === "requote") {
+      throw new AmendmentError(400, `The corrected stay could not be priced: ${quote.error}`, "invalid");
+    }
     reference = quote.ok
       ? {
           ok: true,
@@ -647,7 +708,7 @@ async function buildReview(
     inventory: { alsoBlocks, releases },
     conflicts: summarizeConflicts(conflicts),
     financial: {
-      mode: "preserve",
+      mode: pricingMode,
       paymentMethod: booking.paymentMethod,
       hasStripePayment: Boolean(booking.stripePaymentIntentId),
       stored: {
@@ -662,10 +723,10 @@ async function buildReview(
     },
     messages: plan ? messagesReview(plan) : null,
     warnings,
-    channelNote: stayChanged ? CHANNEL_NOTE : null,
+    channelNote: stayChanged && holdsDates ? CHANNEL_NOTE : null,
   };
 
-  return { resolved, review, conflicts, plan };
+  return { resolved, review, conflicts, plan, requestExpiresAt };
 }
 
 /** Refresh the channel feed for the listing the booking would land on (pre-commit window). */
@@ -721,12 +782,8 @@ export async function commitAmendment(input: {
 }): Promise<AmendmentResult> {
   const changes = parseAmendmentChanges(input.changes);
   const reason = parseReason(input.reason);
-  if (input.pricing !== undefined && input.pricing !== "preserve") {
-    throw new AmendmentError(
-      400,
-      "Re-pricing an amended booking is not enabled. The agreed price is kept as it is.",
-      "unsupported"
-    );
+  if (input.pricing !== undefined && input.pricing !== "preserve" && input.pricing !== "requote") {
+    throw new AmendmentError(400, "Unknown pricing option.", "unsupported");
   }
   if (typeof input.expectedUpdatedAt !== "string" || !input.expectedUpdatedAt) {
     throw new AmendmentError(400, "Review the changes before saving.", "invalid");
@@ -753,7 +810,18 @@ export async function commitAmendment(input: {
       );
     }
 
-    const { resolved, review, conflicts, plan } = await buildReview(booking, changes, tx, now);
+    const { resolved, review, conflicts, plan, requestExpiresAt } = await buildReview(booking, changes, tx, now);
+    // The price rule follows the booking's status, never the request: only an unapproved
+    // request is re-quoted. A client that reviewed under the other rule must review again.
+    if (input.pricing !== undefined && input.pricing !== review.financial.mode) {
+      throw new AmendmentError(
+        review.financial.mode === "preserve" ? 400 : 409,
+        review.financial.mode === "preserve"
+          ? "Re-pricing an amended booking is not enabled. The agreed price is kept as it is."
+          : "This is an unapproved request, so its total is re-quoted. Review the changes again before saving.",
+        review.financial.mode === "preserve" ? "unsupported" : "stale"
+      );
+    }
     if (conflicts.length > 0) {
       throw new AmendmentError(
         409,
@@ -770,6 +838,17 @@ export async function commitAmendment(input: {
       else if (field === "guests" || field === "propertyId") data[field] = after[field];
       else data[field] = after[field];
     }
+    const requote = review.financial.mode === "requote" && review.financial.reference?.ok ? review.financial.reference : null;
+    if (requote) {
+      // No money has moved on a request, so the corrected stay simply gets today's price.
+      // The card fee is never part of a request's total — the payment link adds it.
+      data.totalPrice = Math.round((requote.total - requote.stripeFee) * 100) / 100;
+      data.nightlyTotal = requote.nightlyTotal;
+      data.extraGuestFee = requote.extraGuestFee > 0 ? requote.extraGuestFee : null;
+      data.discountAmount = requote.discountAmount > 0 ? requote.discountAmount : null;
+      data.stripeFee = null;
+    }
+    if (requestExpiresAt) data.requestExpiresAt = requestExpiresAt;
     const updated = await tx.booking.update({
       where: { id: booking.id },
       data,
@@ -825,8 +904,9 @@ export async function commitAmendment(input: {
           changes: review.changes,
           before: resolved.before,
           after,
-          pricing: "preserve",
+          pricing: review.financial.mode,
           totalPrice: Number(booking.totalPrice),
+          ...(requote ? { newTotalPrice: Number(data.totalPrice) } : {}),
           referenceQuote: review.financial.reference,
           blocks,
           messages,

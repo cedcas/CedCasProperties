@@ -16,6 +16,7 @@ import {
   classifyStayPhase,
   dayAfter,
   editableFieldsFor,
+  phaseNotice,
   parseAmendmentChanges,
   parseReason,
   parseStayDateStrict,
@@ -96,6 +97,18 @@ describe("classifyStayPhase / editableFieldsFor", () => {
     expect(editableFieldsFor("in_progress")).toEqual(["guestName", "guestEmail", "guestPhone", "guests", "checkOut"]);
     expect(editableFieldsFor("past")).toEqual(["guestName", "guestEmail", "guestPhone"]);
     expect(editableFieldsFor("cancelled")).toEqual([]);
+  });
+
+  it("a request is its own phase: correctable until approved, then locked", () => {
+    expect(classifyStayPhase({ ...stay, status: "requested" }, d("2027-03-01"))).toBe("request");
+    expect(classifyStayPhase({ ...stay, status: "approved" }, d("2027-03-01"))).toBe("approved");
+    expect(classifyStayPhase({ ...stay, status: "declined" }, d("2027-03-01"))).toBe("closed");
+    expect(classifyStayPhase({ ...stay, status: "expired" }, d("2027-03-01"))).toBe("closed");
+    expect(editableFieldsFor("request")).toHaveLength(7);
+    expect(editableFieldsFor("approved")).toEqual([]);
+    expect(editableFieldsFor("closed")).toEqual([]);
+    expect(phaseNotice("request")).toContain("re-quotes the total");
+    expect(phaseNotice("approved")).toContain("payment link has been sent");
   });
 });
 

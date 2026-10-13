@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { toUtcMidnight, utcDateKey } from "@/lib/dates";
 import { getPropertyConflicts, getUnavailableDateRanges, formatConflictRange } from "@/lib/availability";
-import { assertBookingPolicy, earliestCheckIn, normalizeBookingPolicy } from "@/lib/booking-policy";
+import {
+  assertBookingPolicy,
+  assertInstantBooking,
+  earliestCheckIn,
+  normalizeBookingPolicy,
+  normalizeInstantBookingMode,
+} from "@/lib/booking-policy";
 
 // GET /api/availability/[slug]?checkIn=YYYY-MM-DD&checkOut=YYYY-MM-DD
 //   → { available: boolean, conflicts: string[], earliestCheckIn }
@@ -16,6 +22,9 @@ import { assertBookingPolicy, earliestCheckIn, normalizeBookingPolicy } from "@/
 // PUBLIC route. Fields are only ever added to the original response shape, and it
 // deliberately exposes only opaque date ranges — never guest names or block reasons. Admin
 // detail lives in /api/admin/calendar.
+//
+// Every response also carries `requiresApproval`: true when the listing has Instant Booking
+// off, so a booking there is a request the Owner approves before any payment.
 //
 // `earliestCheckIn` depends on the time of day, which is why it is served here and never
 // baked into a cached page (DEC-005). The advance-notice rule is a guest rule: a request
@@ -36,7 +45,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
 
   const property = await prisma.property.findUnique({
     where: { slug },
-    select: { id: true, advanceNoticeDays: true, sameDayCutoffMinutes: true },
+    select: { id: true, advanceNoticeDays: true, sameDayCutoffMinutes: true, instantBookingMode: true },
   });
 
   if (!property) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -46,9 +55,11 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
   const policy = normalizeBookingPolicy(property);
   const now = new Date();
   const earliest = utcDateKey(earliestCheckIn(now, policy));
+  // True when this listing takes requests the Owner approves, not instant bookings.
+  const requiresApproval = !assertInstantBooking({ mode: normalizeInstantBookingMode(property.instantBookingMode) }).ok;
 
   if (searchParams.get("earliest") === "1") {
-    return NextResponse.json({ earliestCheckIn: earliest });
+    return NextResponse.json({ earliestCheckIn: earliest, requiresApproval });
   }
 
   // ── Specific dates: is this stay bookable? ────────────────────────────────
@@ -69,6 +80,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
           reason: outcome.code,
           message: outcome.message,
           earliestCheckIn: earliest,
+          requiresApproval,
         });
       }
     }
@@ -84,6 +96,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       available: conflicts.length === 0,
       conflicts: conflicts.map(formatConflictRange),
       earliestCheckIn: earliest,
+      requiresApproval,
     });
   }
 
@@ -95,5 +108,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ slug: st
       .filter((r) => !(excludeBookingId !== null && r.bookingId === excludeBookingId))
       .map((r) => ({ start: utcDateKey(r.start), end: utcDateKey(r.end) })),
     earliestCheckIn: earliest,
+    requiresApproval,
   });
 }

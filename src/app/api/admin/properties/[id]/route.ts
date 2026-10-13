@@ -3,7 +3,16 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { mergePricingNotesPaymentMethods } from "@/lib/pricing-notes";
 import { normalizeSeoField } from "@/lib/seo-metadata";
-import { describeBookingPolicy, normalizeBookingPolicy, parseBookingPolicyInput, type BookingPolicy } from "@/lib/booking-policy";
+import {
+  describeBookingPolicy,
+  describeInstantBookingMode,
+  normalizeBookingPolicy,
+  normalizeInstantBookingMode,
+  parseBookingPolicyInput,
+  parseInstantBookingModeInput,
+  type BookingPolicy,
+  type InstantBookingMode,
+} from "@/lib/booking-policy";
 import { logAction } from "@/lib/log";
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -114,10 +123,39 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
   }
 
+  // Instant Booking mode — this listing only, never copied to the rest of the house.
+  // A value equal to what is stored is not a change (the form always sends the field).
+  let modeChange: { name: string; before: InstantBookingMode; after: InstantBookingMode } | null = null;
+  if (data.instantBookingMode !== undefined) {
+    const current = await prisma.property.findUnique({
+      where: { id: Number(id) },
+      select: { name: true, instantBookingMode: true },
+    });
+    const before = normalizeInstantBookingMode(current?.instantBookingMode);
+    if (current && data.instantBookingMode !== before) {
+      const parsed = parseInstantBookingModeInput(data.instantBookingMode);
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      update.instantBookingMode = parsed.mode;
+      modeChange = { name: current.name, before, after: parsed.mode };
+    }
+  }
+
   const property = await prisma.property.update({
     where: { id: Number(id) },
     data: update,
   });
+
+  if (modeChange) {
+    await logAction({
+      actor: session.user.name ?? "Admin",
+      actorRole: (session.user.role ?? "admin") as "admin" | "manager",
+      actorId: parseInt(session.user.id),
+      action: `Changed "${modeChange.name}" from ${describeInstantBookingMode(modeChange.before)} to ${describeInstantBookingMode(modeChange.after)}`,
+      module: "properties",
+      target: `property-${id}`,
+      metadata: { propertyId: Number(id), before: modeChange.before, after: modeChange.after },
+    });
+  }
 
   if (newPolicy) {
     const siblingIds = policyTargets.map((p) => p.id).filter((pid) => pid !== Number(id));

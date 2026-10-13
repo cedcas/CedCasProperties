@@ -29,7 +29,7 @@ None
 ## DEC-002 — Availability is centralized in one service; blocking statuses are `pending` + `confirmed`
 
 Date: 2026-08-06
-Status: Active
+Status: Active — amended by DEC-028 (2026-10-12): `pending` now means a submitted GCash/BPI payment awaiting verification; an unpaid request is `requested`/`approved` and does not block
 Area: Website
 
 ### Decision
@@ -763,6 +763,44 @@ Area: Website
 
 ### Supersedes
 None
+
+---
+
+## DEC-028 — Instant Booking is per listing; a booking request holds no dates until it is paid, and is paid through a link after approval
+
+Date: 2026-10-12
+Status: Active — **Owner-approved 2026-10-09 (design) and 2026-10-12 (open decisions). Built on `feature/instant-booking-modes-101226`; not yet released.** Update this line when it is live.
+Area: Website
+
+### Decision
+- **Mode per listing.** `Property.instantBookingMode`: `on` (default; the site's behaviour until now), `off` (every booking is a request the Owner approves first), `auto` (instant for trusted guests only; stored but not offered until guest verification exists).
+- **Seven statuses.** `requested`, `approved`, `pending`, `confirmed`, `declined`, `expired`, `cancelled`. `BLOCKING_BOOKING_STATUSES` stays `["pending", "confirmed"]`: a request (`requested`/`approved`) never blocks the calendar, sibling listings or the Airbnb export.
+- **Approval is permission to pay, not a hold.** Approving re-checks availability and emails a payment link. Dates are claimed, under the inventory lock ([DEC-024](#dec-024--every-write-that-claims-nights-takes-the-inventory-lock-a-booking-amendment-is-one-transaction-and-keeps-the-agreed-price)), only when the guest pays: GCash/BPI "I've Paid" → `pending`; verified card → `confirmed`.
+- **Time limits.** A request waits 24 hours for a decision; a payment link is valid 24 hours. Both end sooner at the listing's booking deadline for that check-in ([DEC-027](#dec-027--guest-advance-notice-is-a-separate-policy-layer-set-per-listing-in-manila-time-a-short-grace-applies-only-at-final-submission)). Advance notice applies to a request exactly as to a booking.
+- **Unverified payment.** A GCash/BPI booking still `pending` 24 hours after "I've Paid" raises one admin alert. Nothing is released automatically.
+- **No confirmation without payment.** The admin status control cannot approve, decline, or move an approved request to `pending`/`confirmed`. `declined` and `expired` are final.
+- **Correct, then approve.** An unapproved request may have its guests, dates or listing changed, and its total is re-quoted. A booking that already holds dates still keeps its agreed price (DEC-024 unchanged).
+- **Refund for a lost race.** Card: existing paid-but-unavailable handling. GCash/BPI: refused, guest told, `AdminLog`, one alert; the Owner refunds by hand.
+
+### Reason
+- The Owner wants to vet some stays before taking money, without blocking the calendar for guests who never pay. A request that held dates would let anyone block a house for free.
+- A submitted GCash/BPI payment must hold dates, or a guest who has paid could lose them to someone else while the payment waits to be verified (the booking #140 situation, [DEC-022](#dec-022--unfinished-checkouts-are-recorded-before-the-booking-exists-and-alerted-after-10-minutes-via-vercel-cron-add_payment_info-is-a-funnel-step-not-a-key-event)).
+- A payment link, not a card hold at request time: a hold works only for cards, ties up money for a request that may be declined, and would change payment verification for every card booking. Additional charges already use pay-by-link.
+- `Booking.status` is a string and the blocking list is an allowlist, so the new statuses needed no change to existing rows and are non-blocking by default.
+
+### Implications
+- **Amends [DEC-002](#dec-002--availability-is-centralized-in-one-service-blocking-statuses-are-pending--confirmed):** `pending` now means "GCash/BPI payment submitted, awaiting verification", never "unpaid request". The blocking list itself is unchanged.
+- Code that reads `Booking.status` must not treat "not cancelled" as "a real booking". Use `bookingBlocksAvailability`, `isOpenRequest` or `isClosedBooking` from `src/lib/booking-status.ts`.
+- The guest payment routes (`/api/stripe/payment-intent`, `/api/checkout-attempts`) refuse a listing that requires approval, so approval cannot be bypassed by calling them directly. A card intent for an approved request is created only from its payment token (`kind: "booking_payment"`).
+- A request's stored total excludes the card fee; the payment link adds it. A promo code's use is counted when the request is paid.
+- GA4: a request fires `booking_request` (not a key event). `booking_confirmed` and `purchase` fire on the payment-link page. `/pay/booking/<token>` is redacted from `page_location`.
+- New admin routes enforce `checkPermission("bookings")`. The older admin routes still check only for a session (Next #17).
+- `Booking.stripePaymentIntentId` is now unique, closing the residual race in [DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount).
+- A listing switched while a guest is mid-checkout: On → Off still takes a verified card payment, or a GCash/BPI guest who reached the payment screen within 2 hours, as an instant booking. Off → On refuses a request from a stale form and sends the guest to payment.
+- Migration `20261012223750_add_instant_booking_requests`, additive, migrate-first ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)).
+
+### Supersedes
+None. Amends DEC-002 (meaning of `pending`).
 
 ---
 

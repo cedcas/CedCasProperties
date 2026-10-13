@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-10 (booking-intent SEO copy on `/properties`/`/staycation` plus a homepage `/properties` link, PR pending; the stale brand-token table corrected and a background-usage rule added — dark-pink `bg-cream` backgrounds on 7 pages + the homepage `FAQ` section switched to the lighter `bg-offwhite`, matching `/staycation`/`/weddings-accommodation`'s existing precedent — see Tech Stack → Frontend & Framework). Prior, same day: (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
+> **Last updated:** 2026-10-12 (added [Instant Booking Modes & Booking Requests](#instant-booking-modes--booking-requests), built and not yet released, DEC-028). Prior: 2026-10-10 (booking-intent SEO copy on `/properties`/`/staycation` plus a homepage `/properties` link, PR pending; the stale brand-token table corrected and a background-usage rule added — dark-pink `bg-cream` backgrounds on 7 pages + the homepage `FAQ` section switched to the lighter `bg-offwhite`, matching `/staycation`/`/weddings-accommodation`'s existing precedent — see Tech Stack → Frontend & Framework). Prior, same day: (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
 > `/newsletter` page, homepage/footer signup strips (`NewsletterSignup.tsx`),
 > `POST /api/newsletter`, Hostinger Reach client (`src/lib/hostinger-reach.ts`), GA4
 > `generate_lead` on signup; Owner-approved, not yet merged to `main`). Prior, same day:
@@ -248,6 +248,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - **Import:** Admin saves an Airbnb `.ics` URL per property (`airbnbIcsUrl`). **Since 2026-08-06 events are persisted** as `ExternalCalendarEvent` rows by [src/lib/external-calendar-sync.ts](../src/lib/external-calendar-sync.ts) rather than re-parsed live on every availability check. Parsing moved to [src/lib/ical.ts](../src/lib/ical.ts).
 
 ### Cron Jobs
+- **Booking requests** *(built 2026-10-12, not yet released)* — `/api/cron/booking-requests`; **every 5 min via Vercel Cron**; expires undecided requests and unpaid payment links and sends the one-time unverified-payment alert. See [Instant Booking Modes & Booking Requests](#instant-booking-modes--booking-requests).
 - **Checkout-abandonment alerts** *(added 2026-09-28)* — `/api/cron/checkout-abandonment`; **every 5 min via Vercel Cron** (`vercel.json` `crons` block — the first job to use it, after the move to a paid Vercel plan; the Hobby-plan note under *Trigger source* below applies to the older jobs). Vercel Cron runs on the **production deployment only** and sends `Authorization: Bearer $CRON_SECRET` itself. Backstop: [checkout-abandonment.yml](../.github/workflows/checkout-abandonment.yml) at `*/15` + manual dispatch. See Checkout-Abandonment Alerts.
 - **Send scheduled messages** — `/api/cron/send-scheduled-messages`; runs **hourly** (`0 * * * *`); calls `flushDueScheduledMessages()` to fire every `ScheduledMessage` whose `sendAt <= now` and `status = pending`; authenticated via `CRON_SECRET`. Replaced the prior daily `check-in-reminders` cron — the check-in reminder is now a seeded `QuickReply` in the new generalized system.
 - **Poll email replies** — `/api/cron/poll-email-replies`; runs **every 15 min** (`*/15 * * * *`); connects to Hostinger IMAP, fetches messages with UID strictly greater than `EmailPollState.lastSeenUid`, routes each via `processInboundEmail()` to a Booking thread (matched) or `ContactMessage` (unmatched). Authenticated via `CRON_SECRET`. On first run (`lastSeenUid === 0`), seeds the watermark to the mailbox's current max UID — skips all historical email so we don't surface months of legacy mail.
@@ -1113,6 +1114,49 @@ The `AdminLog` row (`module: "bookings"`, `target: booking-{id}`, action prefix 
 - **Database-backed, local only (`npm run test:db`):** real Prisma, row locks and transactions against a disposable local MySQL/MariaDB — concurrency races (with an unlocked control that double-books), rollback and retry, same-group / cross-group / ungrouped moves, echo re-propagation, iCal feeds, permissions on real rows, the amendment-versus-reminder race in each order, protected reactivation, and the paid-but-unavailable card path (Stripe mocked). [vitest.db.config.ts](../vitest.db.config.ts) refuses any non-loopback host, because Prisma otherwise falls back to `.env`, which points at production.
 - **Owner acceptance (2026-10-01):** passed in a browser on `dev.haveninlipa.com` against the dev database.
 - **Not covered by any automated test:** a real channel's import of the changed feed; the locking code under real production load.
+
+---
+
+## Instant Booking Modes & Booking Requests
+
+> Built 2026-10-12 on `feature/instant-booking-modes-101226`; **not yet released**. Decision record: [DEC-028](HIL_DECISIONS.md). Feature brief: [docs/claude/HIL_FEAT_Instant_Booking_Modes_Trusted_Guests.md](claude/HIL_FEAT_Instant_Booking_Modes_Trusted_Guests.md).
+
+**Setting.** `Property.instantBookingMode` (`on` default / `off` / `auto`), edited in Admin → Edit Property → Booking Settings (On/Off only; `auto` is stored but not offered). Rule: `assertInstantBooking` in [src/lib/booking-policy.ts](../src/lib/booking-policy.ts). Loaded with the advance-notice policy by `loadBookingRules` ([src/lib/booking-policy-db.ts](../src/lib/booking-policy-db.ts)).
+
+**Statuses** ([src/lib/booking-status.ts](../src/lib/booking-status.ts)).
+
+| Status | Meaning | Holds dates |
+|---|---|---|
+| `requested` | Guest asked; waiting for the Owner | No |
+| `approved` | Owner said yes; payment link sent | No |
+| `pending` | GCash/BPI payment submitted; awaiting verification | Yes |
+| `confirmed` | Paid and verified | Yes |
+| `declined` / `expired` | Final | No |
+| `cancelled` | Cancelled by an admin | No |
+
+`adminStatusChoices` lists what `PUT /api/admin/bookings/[id]` accepts: pending ↔ confirmed ↔ cancelled as before, and approved → cancelled. Anything else is 409 `invalid_transition`.
+
+**Request path.**
+1. `POST /api/bookings` on an Off listing saves `requested` via `createBookingRequest` ([src/lib/booking-requests.ts](../src/lib/booking-requests.ts)): server quote without card fee, `requestExpiresAt`, no lock, no hold. Advance notice and availability are checked first. A repeat of the same open request returns the existing row. The form sends `intent: "request"`; on a listing that is now On this is refused with `instant_booking`.
+2. `POST /api/admin/bookings/[id]/request` `{ action: "approve" | "decline", note? }` — `checkPermission("bookings")`. Approve refreshes the channel feed, re-checks availability (`getInventoryScopeConflicts`), sets `paymentToken` and `paymentLinkExpiresAt`, emails the link. Every status change is a conditional `updateMany` on the current status.
+3. Guest opens `/pay/booking/[token]` ([page](../src/app/pay/booking/[token]/page.tsx), [client](../src/components/booking/BookingPaymentClient.tsx)). The page re-checks availability before offering payment.
+4. `POST /api/bookings/pay/[token]` → `submitBookingPayment` ([src/lib/booking-payment.ts](../src/lib/booking-payment.ts)). Under `withInventoryLock`: re-check, then approved → `pending` (GCash/BPI) or `confirmed` (card, after `verifyPaymentIntent` against `bookingPaymentIntentMetadata`), and sibling blocks in the same transaction. Card total = stored total + 6%; `totalPrice` and `stripeFee` are updated then.
+5. Cron `/api/cron/booking-requests` (Vercel Cron, every 5 min) → `processBookingRequests`: expires stale `requested` and `approved` rows, and sends the one-time unverified-payment alert (`paymentSubmittedAt` older than 24 h, `holdAlertedAt` null).
+
+**Expiry.** `cappedExpiry` = 24 hours, or `bookingDeadlineFor(checkIn, policy)` if sooner.
+
+**Correct, then approve.** `classifyStayPhase` has phases `request` (all fields editable, total re-quoted: `FinancialReview.mode = "requote"`), `approved` and `closed` (not editable). See Booking Amendments above for everything else.
+
+**Emails** ([src/lib/booking-request-emails.ts](../src/lib/booking-request-emails.ts)): request received (guest, admin), approved with link, declined, expired, payment received and being verified, confirmed (card), unverified-payment alert, dates-taken alert. Builders are pure and escape guest text.
+
+**Gotchas.**
+- A listing switched On → Off while a guest is paying: `/api/bookings` still takes a card reference (verified as usual) or a checkout attempt under 2 hours old as an instant booking.
+- A verified card payment is honoured slightly past the link's expiry while the booking is still `approved`. The card intent itself is refused strictly after expiry.
+- The payment-link page creates no `CheckoutAttempt`: the abandonment job would match the existing booking and never alert.
+- A GCash/BPI guest who loses the race leaves the request `approved` until its link expires; `AdminLog` target `booking-payment-unavailable-<id>` keeps the alert to one.
+- `redactPageLocation` ([src/lib/analytics-config.ts](../src/lib/analytics-config.ts)) must cover any new `/pay/...` route that carries a token.
+
+**Tests.** `booking-requests.test.ts`, `booking-payment.test.ts`, additions to `booking-policy-routes.test.ts`, `booking-amendment.test.ts`, `booking-settings-admin-route.test.ts`, `booking-status-select-render.test.ts`; real-database cases (races, sibling blocks, whole path) in `db/booking-amendment.dbtest.ts`. Not covered by an automated test: the booking form's request screens and the card form in a browser.
 
 ---
 

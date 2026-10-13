@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { BOOKING_STATUSES, adminStatusChoices, bookingStatusBadgeClass } from "@/lib/booking-status";
 
 export default function BookingStatusSelect({ id, status }: { id: number; status: string }) {
   const router = useRouter();
@@ -34,15 +35,26 @@ export default function BookingStatusSelect({ id, status }: { id: number; status
 
   const color = value === "confirmed" ? "text-green-700 bg-green-50 border-green-200"
     : value === "cancelled" ? "text-red-600 bg-red-50 border-red-200"
+    : value === "approved" ? "text-indigo-700 bg-indigo-50 border-indigo-200"
     : "text-amber-700 bg-amber-50 border-amber-200";
+
+  // Only the changes the server accepts from this control are offered. A request is
+  // approved or declined on the booking page, and a declined or expired one is final.
+  const choices = adminStatusChoices(value);
+  if (choices.length === 0) {
+    return (
+      <span className={`text-[12px] font-semibold px-2.5 py-1 rounded-full ${bookingStatusBadgeClass(value)}`}>{value}</span>
+    );
+  }
+  const options = BOOKING_STATUSES.filter((s) => s === value || choices.includes(s));
 
   return (
     <span className="inline-flex flex-col items-end gap-1">
       <select value={value} onChange={handleChange} aria-label="Booking status"
         className={`text-[12px] font-semibold px-2.5 py-1 rounded-full border cursor-pointer focus:outline-none ${color}`}>
-        <option value="pending">pending</option>
-        <option value="confirmed">confirmed</option>
-        <option value="cancelled">cancelled</option>
+        {options.map((s) => (
+          <option key={s} value={s}>{s}</option>
+        ))}
       </select>
       {error && (
         <span role="alert" className="text-[12px] text-red-700 max-w-[320px] text-right">
