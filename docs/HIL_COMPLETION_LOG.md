@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-10-12 — Instant Booking Modes & Booking Requests (PR #78, DEC-028)
+
+Area: Website
+
+Status: **Live on production since 2026-10-13 00:49 UTC** (PR #78, merge `206dbde`; Vercel Production deployment for `206dbde` Ready; release gate ran against `u694568445_cedcasprop`; CI on the PR green: Lint, Type Check, Unit Tests, Build, Migrations). Verified live, signed out: `/api/availability/[slug]` returns `requiresApproval` (false on all 5 listings); `/pay/booking/<unknown>` is 404; `POST /api/bookings/pay/<unknown>` is `not_found`; `POST /api/admin/bookings/1/request` is 401; `/api/cron/booking-requests` is 401 without the cron secret. **All 5 listings are On, so guest behaviour is unchanged.**
+
+**Not yet done:** the Owner's acceptance test (request → correct → approve → pay by GCash and by card → decline → phone check). The merge went in before it. No listing should be switched to Off on production until it passes on a preview or dev build. No request, approval or payment-link payment has been made on production.
+
+### Outcome
+- `Property.instantBookingMode` (`on` default / `off` / `auto`, `auto` stored but not offered); set in Admin → Edit Property → Booking Settings.
+- Statuses `requested`, `approved`, `declined`, `expired` added; `BLOCKING_BOOKING_STATUSES` unchanged, so a request holds no dates.
+- Request creation in `POST /api/bookings`; the card and checkout routes refuse an approval-required listing.
+- Admin Approve / Decline (`checkPermission("bookings")`), status control limited to valid transitions, correct-then-approve with re-quote.
+- `/pay/booking/[token]` and `POST /api/bookings/pay/[token]`: dates claimed under the inventory lock on payment (GCash/BPI → `pending`, verified card → `confirmed`).
+- Vercel Cron `/api/cron/booking-requests` every 5 minutes: 24-hour expiry of requests and payment links, one-time alert for a GCash/BPI payment unverified after 24 hours.
+- Status audit fixes: admin calendar, message threading, customers, dashboard, checkout-abandonment backstop. `/pay/booking/<token>` redacted from GA4 `page_location`.
+- GA4 `booking_request` for a request; `booking_confirmed` and `purchase` fire on the payment-link page.
+- Unique index on `Booking.stripePaymentIntentId` (closes the DEC-020 residual race).
+- Tests: 2,289 unit tests pass (about 210 new). Local real-database suite: all new request and payment-link cases pass, including concurrent payers.
+
+### Migration run records
+| Target | Database | Commit | Applied (UTC) | Result |
+|---|---|---|---|---|
+| dev | `u694568445_cedcasprop_dev` | `89a4d94` | 2026-10-13 00:24:15–00:24:34 | applied, `Schema verified`, `NO DRIFT` |
+| production | `u694568445_cedcasprop` | `206dbde` | 2026-10-13 00:39:11–00:39:31 | applied, `Schema verified`, `NO DRIFT` |
+
+Migration: `20261012223750_add_instant_booking_requests` (additive: 1 `Property` column, 8 `Booking` columns, 2 unique indexes, 1 index, 1 foreign key). `89a4d94` → `206dbde` is the merge commit only. Before the production run: 0 duplicate `stripePaymentIntentId` values.
+
+Production backup before the run: `~/hil-db-backups/hil-production-20261013T003810Z.sql.gz` on the Owner's Mac (outside the repository and Dropbox, file `600`, sha256 `cd529e46d2ed1087…`). Restore-tested into a throwaway local server: all 24 tables matched production on row count. Contains guest data; **retention is the Owner's decision**.
+
+### Gotchas
+- **Merged before the production migration.** The first Production build of `206dbde` (00:32 UTC) was stopped by the release gate: `BLOCKED: migration(s) not applied`. The previous deployment kept serving and nothing was written. The migration was then applied and the Owner redeployed. This is the order the runbook warns about; the gate did its job.
+- The PR's first preview build failed the same way until the migration was on dev, then passed on redeploy.
+- Production URL: `.env` has only the dev `DATABASE_URL`. The production run read `DATABASE_URL` from `.env.bak-encode` (2026-08-06), and the command confirmed the database name with the server before writing. That file holds a working production credential.
+- `npm run test:db` has 5 failing cases in "amendment vs. reminder send", identical on `main` before this change (they fail with "This stay is in progress"). Not investigated.
+- `next dev` (Turbopack) panics with `Permission denied (os error 13)` in the agent sandbox; the local smoke test used `next build` + `next start` against a scratch database with SMTP pointed at a dead port.
+- The Mac's MariaDB accepts socket connections only; a throwaway `mariadbd` on port 33917 served as `--reference-url` and for `npm run test:migrations`.
+
+---
+
 ## 2026-10-12 — Same-Day Booking & Advance Notice, Session 1: today floor and per-listing policy (PR #74, DEC-027)
 
 Area: Website

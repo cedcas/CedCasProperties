@@ -769,7 +769,7 @@ None
 ## DEC-028 — Instant Booking is per listing; a booking request holds no dates until it is paid, and is paid through a link after approval
 
 Date: 2026-10-12
-Status: Active — **Owner-approved 2026-10-09 (design) and 2026-10-12 (open decisions). Built on `feature/instant-booking-modes-101226`; not yet released.** Update this line when it is live.
+Status: Active — Owner-approved 2026-10-09 (design) and 2026-10-12 (open decisions). **Live on production since 2026-10-13 00:49 UTC** (PR #78, merge `206dbde`; migration on dev and production). All 5 listings are On. Owner acceptance test not yet run; no listing has been switched to Off.
 Area: Website
 
 ### Decision

@@ -3,7 +3,7 @@
  * front of it. Prisma, Stripe, mail, the inventory lock and the availability service are
  * mocked — no DB, no network. The real-row and concurrency cases live in the db suite.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 const { db, tx, stripeRetrieve, sendMail, logAction, assertScope, reconcileSource, scheduler, ga4 } = vi.hoisted(() => {
@@ -101,6 +101,10 @@ const rejection = async (p: Promise<unknown>) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The route cases cannot pass their own clock, and every fixture expiry is relative to
+  // NOW — without this the suite starts failing the day after it was written.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_dummy");
   vi.spyOn(console, "error").mockImplementation(() => {});
   db.booking.findUnique.mockResolvedValue(approved());
@@ -111,6 +115,10 @@ beforeEach(() => {
   assertScope.mockResolvedValue(undefined);
   stripeRetrieve.mockResolvedValue(paidIntent());
   sendMail.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("paymentLinkState", () => {

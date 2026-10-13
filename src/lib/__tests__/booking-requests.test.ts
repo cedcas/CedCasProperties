@@ -4,7 +4,7 @@
  * rest on. Prisma, mail, the audit log and the availability service are mocked — no DB,
  * no network — and every case passes its own clock.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 const { db, sendMail, logAction, availability, permission } = vi.hoisted(() => ({
@@ -90,6 +90,10 @@ const rejection = async (p: Promise<unknown>) => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The route cases cannot pass their own clock, and every fixture expiry is relative to
+  // NOW — without this the suite starts failing the day after it was written.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
   vi.spyOn(console, "error").mockImplementation(() => {});
   permission.current = { ok: true, actor: OWNER };
   db.booking.findUnique.mockResolvedValue(request());
@@ -97,6 +101,10 @@ beforeEach(() => {
   db.booking.updateMany.mockResolvedValue({ count: 1 });
   availability.getInventoryScopeConflicts.mockResolvedValue([]);
   sendMail.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("which statuses hold dates", () => {
