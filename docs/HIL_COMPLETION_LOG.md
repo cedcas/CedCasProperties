@@ -4,6 +4,29 @@
 
 ---
 
+## 2026-10-14 — CI "Migrations" row-count check fixed for expand-only migrations (feature/haven-ai-h1-101426)
+
+Area: Website
+
+Status: Done.
+
+### Outcome
+`scripts/test-migrations.mjs` section 2 ("no rows were added or removed by them") compared
+a single flattened `"table:count|..."` string across all tables, so a later migration that
+only *creates* a new, empty table (allowed as expand-only under
+[DEC-026](HIL_DECISIONS.md)) still failed the check — the new table's `name:0` entry changed
+the string even though no existing row moved. This is what broke CI for
+`20261014120000_add_haven_chat_ai`, which creates two empty tables
+(`HavenChatUsage`, `HavenChatTranscript`).
+
+Fixed by comparing per table instead of as one string: every table present before the later
+migrations must still exist afterward with an identical row count, and any table that is new
+must start at 0 rows. Dropped tables and data changes (inserts/deletes) in existing tables
+still fail, same as before. See [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md) (Review
+checklist, section 2) for the documented behavior.
+
+---
+
 ## 2026-10-14 — Haven AI chat mode, H0+H1 (feature/haven-ai-h1-101426, DEC-029)
 
 Area: Website

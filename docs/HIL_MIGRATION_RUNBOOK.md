@@ -1,6 +1,6 @@
 # Haven in Lipa — Database Migration Runbook
 
-> **Last updated:** 2026-10-06 (final closeout). **Status: the build/migration separation is complete and live** — production runs `3798482` or later. Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
+> **Last updated:** 2026-10-14 (test-migrations row-count check fixed to allow new empty tables). **Status: the build/migration separation is complete and live** — production runs `3798482` or later. Decision record: [DEC-026](HIL_DECISIONS.md). How the pieces work: [Website spec → Build & Deployment](HIL%20Website%20Technical%20Specification.md#build--deployment).
 
 **The rule.** A deployment never changes a database's schema. Schema changes are SQL files in `prisma/migrations/`, reviewed in a pull request, and applied by a person running one command against one named database. The Vercel build only *checks* (read-only) that the migrations in the commit are already applied, and refuses to build if they are not.
 
@@ -56,7 +56,7 @@ For local development put that loopback URL in `.env.local`. `prisma db push` is
 - The SQL does only what the PR says. No `DROP`, `RENAME`, type narrowing or `NOT NULL` without default on a populated table unless it is the planned *contract* step.
 - The currently deployed code still works after this SQL runs (section 3).
 - An index on a long text column declares its prefix length in `schema.prisma` (InnoDB caps index keys at 3072 bytes; an undeclared prefix shows up as permanent drift — this is what `GuestMessage.messageId` did).
-- The CI job **Migrations** is green.
+- The CI job **Migrations** is green. Its row-count check (section 2 of `scripts/test-migrations.mjs`) compares every table that existed before the later migrations — each must keep the same row count and none may disappear — and requires any table a later migration *creates* to start out with 0 rows. A migration that only adds new empty tables (the expand-only case DEC-026 allows) passes; one that inserts/deletes rows in an existing table, or drops one, fails.
 
 ## 3. Release order — migrate first, then merge
 
