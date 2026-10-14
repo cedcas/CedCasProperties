@@ -44,6 +44,14 @@ CedCas Properties is a full-stack property rental website for a short-term renta
 | `SMTP_PORT` | Hostinger SMTP port (`465`) |
 | `SMTP_USER` | Hostinger email address ([redacted: stored in Vercel env]) |
 | `SMTP_PASS` | Hostinger email password |
+| `HAVEN_AI_ENABLED` | Must be exactly `"true"` to turn on Haven's AI chat mode; default off ([DEC-029](docs/HIL_DECISIONS.md)) |
+| `HAVEN_AI_KILL` | `=true` forces static mode even when enabled — incident kill switch |
+| `HAVEN_AI_PROVIDER` | `anthropic` (default) or `openai` |
+| `HAVEN_AI_MODEL` | Overrides the provider's default model id |
+| `HAVEN_AI_MONTHLY_CAP_USD` | Monthly spend cap in USD, Asia/Manila month; default `20` |
+| `HAVEN_IP_SALT` | Salt for hashing a guest's IP before it's stored |
+| `ANTHROPIC_API_KEY` | Anthropic API key, server-only |
+| `OPENAI_API_KEY` | OpenAI API key, server-only (only used when `HAVEN_AI_PROVIDER=openai`) |
 
 ---
 

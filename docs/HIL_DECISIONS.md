@@ -803,6 +803,36 @@ None. Amends DEC-002 (meaning of `pending`).
 
 ---
 
+## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
+
+Date: 2026-10-14
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF)
+Area: Website
+
+### Decision
+- **Off by default, two independent switches.** `HAVEN_AI_ENABLED` must read exactly `"true"` to turn Haven's AI mode on anywhere; anything else (unset, `"false"`, a typo) is OFF and the chat widget behaves exactly as it did before this decision — the static `chat-tree.ts` flow, unchanged. `HAVEN_AI_KILL=true` forces static even when enabled, for an incident with no deploy. Both are read in `src/lib/haven/config.ts`.
+- **Tool-only facts.** The model (`src/lib/haven/system-prompt.ts`) is instructed to state a price, date, or availability only from a tool result returned that same turn, and two independent server-side checks enforce it regardless of what the model actually says: `src/lib/haven/post-process.ts` replaces any ₱/PHP amount not present in that turn's tool outputs with "You'll see the exact total at checkout," and strips any link that isn't a relative site path, `haveninlipa.com`, or `m.me/haveninlipa`. Every tool in `src/lib/haven/tools.ts` calls an existing service (`computeBookingQuote`, `getPropertyConflicts`, `getPublicListings`, …) — nothing in the AI path computes a price or availability decision itself, so it can never drift from the booking path ([DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount)).
+- **Provider adapter, not a hard Anthropic dependency.** `src/lib/haven/provider.ts` is a small `fetch`-based adapter (no SDK dependency) behind `HAVEN_AI_PROVIDER` (`anthropic` default, `openai` alternative) and `HAVEN_AI_MODEL` (defaults to a current Claude Haiku model — cheap enough that the per-guest-message cost stays well under the rate limits below).
+- **Spend cap and durable rate limits, enforced in the database, not in memory.** `HavenChatUsage` holds one row per guest message (summed across any internal tool-call rounds), so a plain row count under a window IS the message count the limiter checks: 20/10 min and 100/day per hashed IP, 600/hour globally (`src/lib/haven/rate-limit.ts`). A running monthly total (Asia/Manila calendar month) against `HAVEN_AI_MONTHLY_CAP_USD` (default $20) falls back to static with `reason: "cap"` once exceeded, and sends **at most one** admin alert per month (a zero-cost marker row prevents a resend without a second table).
+- **Transcripts are masked before they are ever written, and expire.** `HavenChatTranscript` stores the guest/Haven turns for product improvement, but `src/lib/haven/masking.ts` strips emails, PH phone numbers, and card-like digit runs from the text *before* the `INSERT` — the raw guest message never reaches the database. `/api/cron/haven-retention` (daily, Vercel Cron) deletes transcripts older than 90 days and usage rows older than 13 months.
+- **Language is explicit, not inferred from the request's `Accept-Language`.** The guest (or `auto`, mirroring their own words including Taglish) picks `en` / `tl` / `btg` from a toggle in the widget; `btg` is Tagalog with Batangueño expressions, not a separate translation pipeline.
+- **The route never 500s to the guest.** `POST /api/haven/chat` degrades to `{mode: "static"}` (optionally with a `reason`) on a disabled flag, a validation failure, a rate limit, the monthly cap, a provider error, or a timeout — the widget's existing static tree is always a safe fallback, never an error state the guest sees.
+
+### Reason
+Adding a free-text LLM surface to a live booking site risks three distinct failure modes if left unconstrained: a hallucinated price or date reaching a guest, an unbounded API bill, and guest PII sitting in a database indefinitely. Each got its own independent, server-side control rather than relying on prompting alone — a system prompt is guidance, not an enforcement boundary, and the post-processing/rate-limit/masking layers in this decision hold even if the model ignores its instructions. Haiku (not a larger model) was chosen because this is a chat-widget FAQ/availability surface, not a reasoning-heavy task, and the cost difference compounds directly against the monthly cap. `fetch` over either vendor SDK was chosen so one file covers both wire formats without taking on two SDKs' update cadence for a flag that defaults off.
+
+### Implications
+- Any future Haven AI tool must call an existing service function, never compute a number itself — extending `src/lib/haven/tools.ts` means adding a thin, zod-validated wrapper, not new pricing/availability logic.
+- A new payment, booking-creation, Stripe, or admin write path must never be exposed as a tool — H1 is read-only by design; see Next steps below for the planned H2 scope.
+- Changing the default model or provider is an env var change (`HAVEN_AI_MODEL`, `HAVEN_AI_PROVIDER`), not a code change, but the per-model price map in `src/lib/haven/config.ts` must be kept current or the monthly cap accounting silently uses the wrong rate.
+- `HavenChatUsage`/`HavenChatTranscript` are additive tables (migration `20261014120000_add_haven_chat_ai`) — ships migrate-first per [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate). The Vercel build's release gate fails until an operator applies it (see the runbook).
+- Turning the feature on in production is an Owner action: set `HAVEN_AI_ENABLED=true` plus the provider's API key in Vercel env vars. `HAVEN_AI_KILL=true` is the fastest incident response — no deploy, just an env var flip (Vercel env changes still need a redeploy to take effect for this Node-runtime route, so this is "fast," not "instant").
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

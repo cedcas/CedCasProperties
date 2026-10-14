@@ -134,7 +134,26 @@ function applyLaterMigrations(t) {
 }
 
 async function rowCounts(url) {
-  return (await dataChecksums(url)).split("|").map((e) => e.split(":").slice(0, 2).join(":")).join("|");
+  const entries = (await dataChecksums(url)).split("|").map((e) => e.split(":"));
+  return new Map(entries.map(([t, n]) => [t, n]));
+}
+
+// Later migrations are allowed to CREATE new (empty) tables — DEC-026 expand-only
+// migrations do exactly that (e.g. 20261014120000_add_haven_chat_ai). Comparing the
+// whole "table:count|..." string breaks on that: a new table's entry changes the
+// string even though no existing row moved. So compare per table instead: every
+// table present before must still be present after with an unchanged count, and any
+// table that didn't exist before must start out empty.
+function rowCountProblems(before, after) {
+  const problems = [];
+  for (const [table, count] of before) {
+    if (!after.has(table)) problems.push(`${table}: table dropped (had ${count} row(s))`);
+    else if (after.get(table) !== count) problems.push(`${table}: ${count} -> ${after.get(table)} row(s)`);
+  }
+  for (const [table, count] of after) {
+    if (!before.has(table) && count !== "0") problems.push(`${table}: new table has ${count} row(s), expected 0`);
+  }
+  return problems;
 }
 
 const repoCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPO, encoding: "utf8" }).trim();
@@ -180,7 +199,8 @@ try {
     const counts = await rowCounts(t.url);
     const up = applyLaterMigrations(t);
     check(`the ${laterMigrations.length} later migration(s) apply to the baselined database and verify`, up.status === 0 && (laterMigrations.length === 0 || /Schema verified/.test(up.output)), up.output);
-    check("no rows were added or removed by them", (await rowCounts(t.url)) === counts);
+    const rowProblems = rowCountProblems(counts, await rowCounts(t.url));
+    check("no existing rows were added or removed, and any new table starts empty", rowProblems.length === 0, rowProblems.join("\n"));
     const atHead = await dataChecksums(t.url);
     const dep = prisma(["migrate", "deploy"], t.url);
     check("migrate deploy afterwards is a no-op", dep.status === 0 && /No pending migrations/.test(dep.output), dep.output);
