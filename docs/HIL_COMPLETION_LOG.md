@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-10-14 — Haven AI chat-widget UX pass: collapsible topics, reply-start scroll, distinct AI bubble (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`.
+
+### Outcome
+Owner UX feedback on the live chat widget: the 7 static topic chips (`src/lib/chat/chat-tree.ts`'s `root.options`) sat below every message, including Haven's AI replies, so the owner scrolled to "bottom" and saw the chip grid instead of the reply. Fixed in `ChatWidget.tsx`/`ChatMessage.tsx`, gated on a new `aiModeActive = aiEnabled && lastMode === "ai"` (`lastMode` tracks whether the *most recent* Haven message actually came from the AI vs. the static tree — flag off, or any turn that fell back to the tree, renders exactly as before this pass):
+- Topic chips collapse behind a small "Topics" toggle once `aiModeActive`; tapping it still works as before.
+- A persistent "Talk to a Human" text link (`m.me/haveninlipa`) stays visible near the input in AI mode, since the toggle can hide the chip version.
+- Auto-scroll now scrolls to the *top* of Haven's newest reply in AI mode (not the panel bottom, which used to land on the chip grid), deferred one `requestAnimationFrame` so a reply's booking-link buttons have their final layout first. Static mode's scroll-to-bottom is unchanged.
+- AI replies get a distinct `bg-cream` bubble with a "Haven" label (vs. the unchanged `bg-white` static-tree bubble) — `text-charcoal/80`, not `text-forest`, since forest-on-cream falls short of WCAG AA at this bubble's size. The message list carries `aria-live="polite"`.
+- New `ChatWidget.test.ts` (jsdom, mounts the real component) covers: static mode still renders all 7 chips with no "Topics" toggle; an AI-mode turn collapses chips and exposes the persistent Messenger link; a fallback turn renders exactly like static mode.
+
+---
+
 ## 2026-10-14 — Haven AI polish pass: booking-link buttons, sentence-level price guard, stronger Batangueño, handoff (fix/haven-ai-polish-101426, DEC-029)
 
 Area: Website

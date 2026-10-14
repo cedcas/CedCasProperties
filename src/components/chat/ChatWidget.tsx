@@ -21,6 +21,8 @@ interface Message {
   text: string;
   /** AI-mode only — rendered as buttons under the message. */
   links?: ChatLink[];
+  /** Set only on a haven message that actually came from the AI (`data.mode === "ai"`). */
+  mode?: "ai";
 }
 
 interface ChatWidgetProps {
@@ -62,10 +64,17 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
   const [sessionId, setSessionId] = useState("");
   const [freeText, setFreeText] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  /** Whether the most recent Haven message actually came from the AI, vs. the static tree. */
+  const [lastMode, setLastMode] = useState<"tree" | "ai">("tree");
+  const [topicsOpen, setTopicsOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
   const currentNode = tree[currentNodeId];
   const isAdmin = pathname.startsWith("/admin");
+  // AI mode per the owner's UX request: the flag is on AND the latest reply was AI-generated.
+  // Flag off, or a turn that fell back to the static tree, renders exactly as before.
+  const aiModeActive = aiEnabled && lastMode === "ai";
 
   // ── Load from sessionStorage ──
   useEffect(() => {
@@ -80,6 +89,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
           setCurrentNodeId(parsed.currentNodeId || "root");
           setLang(parsed.lang || "auto");
           setSessionId(parsed.sessionId || newSessionId());
+          setLastMode(parsed.lastMode === "ai" ? "ai" : "tree");
           setInitialized(true);
           return;
         }
@@ -101,17 +111,36 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
     try {
       sessionStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ messages, currentNodeId, lang, sessionId })
+        JSON.stringify({ messages, currentNodeId, lang, sessionId, lastMode })
       );
     } catch { /* quota exceeded — ignore */ }
-  }, [messages, currentNodeId, lang, sessionId, initialized, isAdmin]);
+  }, [messages, currentNodeId, lang, sessionId, lastMode, initialized, isAdmin]);
 
-  // ── Auto-scroll to bottom ──
+  // ── Auto-scroll ──
+  // Static mode (today's behavior): always scroll to the very bottom. In AI mode, the big
+  // topic-chip block used to sit below every reply, so scrolling to "bottom" often buried
+  // the reply itself — scroll so the *start* of Haven's newest reply is visible instead.
+  // Deferred a frame so link buttons (rendered in the same message) have their final layout.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [messages, open, aiLoading]);
+    const container = scrollRef.current;
+    if (!container) return;
+
+    const raf = requestAnimationFrame(() => {
+      if (!aiModeActive || aiLoading) {
+        container.scrollTop = container.scrollHeight;
+        return;
+      }
+      const lastHaven = [...messages].reverse().find((m) => m.role === "haven");
+      const el = lastHaven ? messageRefs.current.get(lastHaven.id) : undefined;
+      if (el) {
+        const delta = el.getBoundingClientRect().top - container.getBoundingClientRect().top;
+        container.scrollTop += delta - 8;
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages, open, aiLoading, aiModeActive]);
 
   // ── Close on Escape ──
   useEffect(() => {
@@ -135,6 +164,8 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
         { id: `h-${Date.now() + 1}`, role: "haven", text: nextNode.message },
       ]);
       setCurrentNodeId(nodeId);
+      setLastMode("tree");
+      setTopicsOpen(false);
     },
     [tree]
   );
@@ -145,6 +176,8 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
     setMessages([{ id: "init", role: "haven", text: rootNode.message }]);
     setCurrentNodeId("root");
     setSessionId(newSessionId());
+    setLastMode("tree");
+    setTopicsOpen(false);
   }, [tree]);
 
   const handleLangChange = useCallback((next: HavenLang) => {
@@ -170,6 +203,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
         track("haven_ai_fallback", { reason });
         setMessages((prev) => [...prev, { id: `h-${Date.now()}`, role: "haven", text: tree.root.message }]);
         setCurrentNodeId("root");
+        setLastMode("tree");
       };
 
       try {
@@ -190,7 +224,11 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
 
         if (data.mode === "ai" && typeof data.reply === "string") {
           const links: ChatLink[] | undefined = Array.isArray(data.links) ? data.links : undefined;
-          setMessages((prev) => [...prev, { id: `h-${Date.now()}`, role: "haven", text: data.reply, links }]);
+          setMessages((prev) => [
+            ...prev,
+            { id: `h-${Date.now()}`, role: "haven", text: data.reply, links, mode: "ai" },
+          ]);
+          setLastMode("ai");
           const bookingLinkCount = (links ?? []).filter((l) => slugFromBookingLink(l.href)).length;
           if (bookingLinkCount > 0) {
             track("haven_ai_availability_checked", { available: bookingLinkCount });
@@ -286,11 +324,18 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
           {/* Messages */}
           <div
             ref={scrollRef}
+            aria-live="polite"
             className="flex-1 overflow-y-auto px-4 py-4 space-y-0"
           >
             {messages.map((msg) => (
-              <div key={msg.id}>
-                <ChatMessage role={msg.role} text={msg.text} />
+              <div
+                key={msg.id}
+                ref={(el) => {
+                  if (el) messageRefs.current.set(msg.id, el);
+                  else messageRefs.current.delete(msg.id);
+                }}
+              >
+                <ChatMessage role={msg.role} text={msg.text} mode={msg.mode} />
                 {msg.links && msg.links.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3 pl-9">
                     {msg.links.map((link) =>
@@ -336,12 +381,31 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
               </div>
             )}
 
-            {/* Options for current node — topic buttons and "Talk to a Human" always remain */}
+            {/* Options for current node — topic buttons. In AI mode these collapse behind a
+                "Topics" toggle (owner feedback: the full chip grid buried the newest reply).
+                Static mode, and a turn that fell back to the tree, render the chips exactly
+                as before. */}
             {currentNode?.options && currentNode.options.length > 0 && (
-              <ChatOptions
-                options={currentNode.options}
-                onSelect={handleSelect}
-              />
+              aiModeActive ? (
+                <div className="pl-9 mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setTopicsOpen((o) => !o)}
+                    aria-expanded={topicsOpen}
+                    className="text-[11.5px] font-medium text-forest/80 hover:text-forest inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <i className={`fa-solid fa-chevron-${topicsOpen ? "down" : "right"} text-[8px]`} />
+                    Topics
+                  </button>
+                  {topicsOpen && (
+                    <div className="mt-2">
+                      <ChatOptions options={currentNode.options} onSelect={handleSelect} />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <ChatOptions options={currentNode.options} onSelect={handleSelect} />
+              )
             )}
 
             {/* CTA link for current node */}
@@ -381,6 +445,19 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
                   Privacy
                 </Link>
               </p>
+              {/* The Topics toggle can hide the "Talk to a Human" chip, so keep it reachable
+                  as a small persistent link once the chips are collapsed. */}
+              {aiModeActive && (
+                <a
+                  href="https://m.me/haveninlipa"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mx-4 mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-forest/80 hover:text-forest"
+                >
+                  <i className="fa-solid fa-comment-dots text-[10px]" />
+                  Talk to a Human
+                </a>
+              )}
               <form onSubmit={handleFreeTextSubmit} className="flex items-center gap-2 px-4 py-2.5">
                 <input
                   type="text"

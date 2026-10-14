@@ -1,6 +1,6 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-14 (Haven AI polish pass on `fix/haven-ai-polish-101426`, not yet merged: [Haven AI Chat](#haven-ai-chat) gained booking-link buttons collected from tool results, a sentence/bullet-level price guard with a fee-vs-total fallback, a stronger Batangueño few-shot prompt, explicit date statements, a Messenger handoff safety net, and a "provisional"-once limiter). Prior, same day: (added [Haven AI Chat](#haven-ai-chat) — flag-off by default, `HAVEN_AI_ENABLED`, DEC-029; built on `feature/haven-ai-h1-101426`, not yet merged). Prior: 2026-10-12 (added [Instant Booking Modes & Booking Requests](#instant-booking-modes--booking-requests), live 2026-10-13, DEC-028). Prior: 2026-10-10 (booking-intent SEO copy on `/properties`/`/staycation` plus a homepage `/properties` link, PR pending; the stale brand-token table corrected and a background-usage rule added — dark-pink `bg-cream` backgrounds on 7 pages + the homepage `FAQ` section switched to the lighter `bg-offwhite`, matching `/staycation`/`/weddings-accommodation`'s existing precedent — see Tech Stack → Frontend & Framework). Prior, same day: (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
+> **Last updated:** 2026-10-14 (Haven AI chat-widget UX pass on `fix/haven-ai-polish-101426`, not yet merged: [Haven AI Chat](#haven-ai-chat) → Widget — topic chips collapse behind a "Topics" toggle once an AI reply lands, a persistent "Talk to a Human" link, reply-start auto-scroll instead of scroll-to-bottom, and a distinct `bg-cream` AI-reply bubble with `aria-live="polite"`; static mode and a fallback turn are unchanged). Prior, same day: (Haven AI polish pass: [Haven AI Chat](#haven-ai-chat) gained booking-link buttons collected from tool results, a sentence/bullet-level price guard with a fee-vs-total fallback, a stronger Batangueño few-shot prompt, explicit date statements, a Messenger handoff safety net, and a "provisional"-once limiter). Prior, same day: (added [Haven AI Chat](#haven-ai-chat) — flag-off by default, `HAVEN_AI_ENABLED`, DEC-029; built on `feature/haven-ai-h1-101426`, not yet merged). Prior: 2026-10-12 (added [Instant Booking Modes & Booking Requests](#instant-booking-modes--booking-requests), live 2026-10-13, DEC-028). Prior: 2026-10-10 (booking-intent SEO copy on `/properties`/`/staycation` plus a homepage `/properties` link, PR pending; the stale brand-token table corrected and a background-usage rule added — dark-pink `bg-cream` backgrounds on 7 pages + the homepage `FAQ` section switched to the lighter `bg-offwhite`, matching `/staycation`/`/weddings-accommodation`'s existing precedent — see Tech Stack → Frontend & Framework). Prior, same day: (added [Newsletter Signup](#newsletter-signup-hostinger-reach) —
 > `/newsletter` page, homepage/footer signup strips (`NewsletterSignup.tsx`),
 > `POST /api/newsletter`, Hostinger Reach client (`src/lib/hostinger-reach.ts`), GA4
 > `generate_lead` on signup; Owner-approved, not yet merged to `main`). Prior, same day:
@@ -1857,11 +1857,35 @@ via `havenAiActive()`, with `getChatTree()`'s existing try/catch fallback unchan
 `aiEnabled`: a language toggle (Auto/English/Tagalog/Batangueño) appears below the header,
 persisted in `sessionStorage` alongside the chat and a client-generated `sessionId`
 (`crypto.randomUUID()`); a free-text input with a typing indicator sits below the message
-list; a short privacy note links `/privacy`. The existing topic buttons and "Talk to a
-Human" link render unconditionally, regardless of `aiEnabled` — the two modes coexist
-rather than one replacing the other. A reply's `links` render as the same coral pill
-buttons the static tree's CTA link already uses. On `{mode: "static"}` the widget falls
-back silently to the tree's root message — no error text is shown to the guest.
+list; a short privacy note links `/privacy`. A reply's `links` render as the same coral
+pill buttons the static tree's CTA link already uses. On `{mode: "static"}` the widget
+falls back silently to the tree's root message — no error text is shown to the guest.
+
+*UX polish, added 2026-10-14 (owner feedback):* the widget tracks `lastMode`
+(`"tree" | "ai"`, persisted in `sessionStorage`) — whether the **most recent** Haven
+message actually came from the AI (`data.mode === "ai"`) or the static tree (the initial
+greeting, a topic-chip tap, `handleReset`, or a fallback). `aiModeActive = aiEnabled &&
+lastMode === "ai"` gates everything below; with the flag off, or right after a turn falls
+back to the tree, the widget renders **exactly** as it did before this pass:
+- **Topic chips collapse behind a "Topics" toggle** once `aiModeActive` (owner feedback:
+  the full 7-chip grid sat below every reply and buried it). Collapsed by default each
+  time AI mode activates; tapping "Topics" expands the same `ChatOptions` chips as before,
+  and tapping a chip still navigates the tree and selects it back to static mode.
+- **A small "Talk to a Human" text link** (`m.me/haveninlipa`) stays visible just above the
+  input whenever `aiModeActive`, so the Messenger handoff stays reachable even with the
+  chips collapsed.
+- **Auto-scroll** now branches on `aiModeActive`: static mode (and a fallback turn) still
+  scrolls to the bottom of the panel exactly as before; in AI mode it scrolls so the
+  **top** of Haven's newest message is in view instead (the old scroll-to-bottom put the
+  chip grid in view, not the reply) — deferred one `requestAnimationFrame` so a reply's
+  booking-link buttons have their final layout before the scroll math runs.
+- **AI replies get a distinct bubble** (`ChatMessage.tsx`, new optional `mode?: "ai"` prop,
+  set only on a message created from `data.mode === "ai"`) — a small "Haven" label above a
+  `bg-cream` bubble with `border-forest/20`, left-aligned, vs. the unchanged `bg-white`
+  static-tree bubble and the right-aligned `bg-forest` user bubble. Text stays
+  `text-charcoal/80` rather than `text-forest` — forest-on-cream falls short of WCAG AA at
+  this bubble's font size, charcoal-on-cream clears ~5.5:1. The message list carries
+  `aria-live="polite"` in both modes so a screen reader announces new replies.
 
 **GA4** (`track()` only, no message text or PII): `haven_ai_message` (`lang`),
 `haven_ai_lang_select` (`lang`), `haven_ai_fallback` (`reason`),
