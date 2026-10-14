@@ -5,6 +5,7 @@ import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
+import { resolveDates } from "./dates";
 import {
   extractAllowedLinks,
   collectToolAmounts,
@@ -13,6 +14,7 @@ import {
   dedupeLinks,
   ensureHandoffLink,
   limitToOneProvisional,
+  ensureBatanguenoMarker,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
@@ -52,7 +54,7 @@ export interface HavenChatResponse {
 }
 
 const NO_ANSWER_FALLBACK =
-  "Let me get you to a real person for this one — message us at m.me/haveninlipa, or use the contact page.";
+  "Let me get you to a real person for this one — message us at https://m.me/haveninlipa, or use the contact page.";
 
 function lastUserMessage(messages: ChatRequestBody["messages"]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -71,13 +73,34 @@ interface ToolLoopResult {
 }
 
 /**
+ * Runs the same server-side date resolver the `resolve_dates` tool uses (dates.ts) on the
+ * guest's latest message BEFORE the model is called. The model is instructed to always call
+ * `resolve_dates` itself, but live testing showed it sometimes skips that and asks the guest
+ * "2024 o 2025?" instead — this pre-resolves whatever date phrase is already detectable and
+ * hands the model the answer directly, so it never needs to ask for the year at all (a
+ * detected phrase always resolves to the next upcoming occurrence, never the past).
+ */
+function dateContextNote(latestUserMessage: string, now: Date): string {
+  const resolved = resolveDates(latestUserMessage, now);
+  if (!resolved) return "";
+  return (
+    "\n\nContext (already resolved by the system, not a guest claim): the guest's most " +
+    `recent message contains a date phrase that resolves to checkIn=${resolved.checkIn}, ` +
+    `checkOut=${resolved.checkOut} (${resolved.interpreted}). If this is the date range the ` +
+    "guest means, use these exact dates for any tool call or reply about this request " +
+    "instead of asking again. These are already the next upcoming occurrence of that phrase " +
+    "— never ask the guest what year they mean."
+  );
+}
+
+/**
  * Drives the model <-> tool exchange for one guest message. All provider calls within this
  * loop count as ONE HavenChatUsage row (see rate-limit.ts: a row is a guest message, not a
  * model call) — usage is summed across rounds by the caller.
  */
-async function runToolLoop(body: ChatRequestBody): Promise<ToolLoopResult> {
+async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopResult> {
   const provider = getChatProvider();
-  const system = buildHavenSystemPrompt(body.lang as HavenLang);
+  const system = buildHavenSystemPrompt(body.lang as HavenLang) + dateContextNote(lastUserMessage(body.messages), now);
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -112,7 +135,8 @@ async function runToolLoop(body: ChatRequestBody): Promise<ToolLoopResult> {
 
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(text, allowedAmounts));
-  const { reply, links: modelLinks } = extractAllowedLinks(priceChecked);
+  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(priceChecked);
+  const reply = body.lang === "btg" ? ensureBatanguenoMarker(strippedReply) : strippedReply;
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
   const links = ensureHandoffLink(priceChecked, dedupeLinks([...modelLinks, ...bookingLinks]));
 
@@ -207,7 +231,7 @@ export async function handleHavenChat(rawBody: unknown, ip: string, now: Date = 
   }
 
   try {
-    const result = await runToolLoop(body);
+    const result = await runToolLoop(body, now);
     await logUsage({
       sessionId: body.sessionId,
       ipHash,

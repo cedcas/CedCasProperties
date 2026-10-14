@@ -4,12 +4,15 @@ import {
   enforcePriceClaims,
   extractAllowedLinks,
   isAllowedHref,
+  normalizeHref,
   dedupeLinks,
   collectBookingLinks,
   ensureHandoffLink,
   limitToOneProvisional,
+  ensureBatanguenoMarker,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
+  MESSENGER_HREF,
   type ToolExchange,
 } from "../post-process";
 
@@ -37,6 +40,20 @@ describe("isAllowedHref", () => {
   });
 });
 
+describe("normalizeHref", () => {
+  it("rewrites a scheme-less m.me link to the https form", () => {
+    expect(normalizeHref("m.me/haveninlipa")).toBe(MESSENGER_HREF);
+  });
+
+  it("leaves the https m.me link unchanged", () => {
+    expect(normalizeHref(MESSENGER_HREF)).toBe(MESSENGER_HREF);
+  });
+
+  it("leaves an unrelated href unchanged", () => {
+    expect(normalizeHref("/properties/cozy-1-bedroom/book")).toBe("/properties/cozy-1-bedroom/book");
+  });
+});
+
 describe("extractAllowedLinks", () => {
   it("keeps an allowed markdown link as a button and leaves the label in the text", () => {
     const { reply, links } = extractAllowedLinks("Book here: [Book Now](/properties/cozy-1-bedroom/book).");
@@ -48,6 +65,11 @@ describe("extractAllowedLinks", () => {
     const { reply, links } = extractAllowedLinks("Check [this out](https://airbnb.com/rooms/123) instead.");
     expect(reply).toBe("Check this out instead.");
     expect(links).toEqual([]);
+  });
+
+  it("normalizes a scheme-less m.me markdown link to the https form", () => {
+    const { links } = extractAllowedLinks("[Message us](m.me/haveninlipa) any time.");
+    expect(links).toEqual([{ label: "Message us", href: MESSENGER_HREF }]);
   });
 });
 
@@ -157,7 +179,7 @@ describe("collectBookingLinks", () => {
     ]);
   });
 
-  it("builds one button per property across find_stay options, deduped by href, capped at 5", () => {
+  it("labels one button per property in a find_stay combo with its option number and guest count", () => {
     const exchanges: ToolExchange[] = [
       {
         name: "find_stay",
@@ -166,8 +188,8 @@ describe("collectBookingLinks", () => {
           options: [
             {
               properties: [
-                { name: "Cozy 1BR", bookingLink: "/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=5" },
-                { name: "Spacious 2BR", bookingLink: "/properties/spacious-2-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=7" },
+                { slug: "cozy-1-bedroom", name: "Cozy 1BR", guests: 5, bookingLink: "/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=5" },
+                { slug: "spacious-2-bedroom", name: "Spacious 2BR", guests: 7, bookingLink: "/properties/spacious-2-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=7" },
               ],
             },
           ],
@@ -175,25 +197,105 @@ describe("collectBookingLinks", () => {
       },
     ];
     const links = collectBookingLinks(exchanges);
-    expect(links).toHaveLength(2);
-    expect(links[0].label).toBe("Book Cozy 1BR · 11/14–11/16");
-    expect(links[1].label).toBe("Book Spacious 2BR · 11/14–11/16");
+    expect(links).toEqual([
+      { label: "Option 1: Cozy 1BR (5 guests)", href: "/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=5" },
+      { label: "Option 1: Spacious 2BR (7 guests)", href: "/properties/spacious-2-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=7" },
+    ]);
+  });
+
+  it("numbers each find_stay option in the same order the options array lists them", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 15 },
+        result: {
+          options: [
+            { properties: [{ slug: "mickey-full", name: "Mickey Full Family House", guests: 15, bookingLink: "/properties/mickey-full/book?g=15" }] },
+            {
+              properties: [
+                { slug: "cozy-1-bedroom", name: "Cozy 1BR", guests: 8, bookingLink: "/properties/cozy-1-bedroom/book?g=8" },
+                { slug: "spacious-2-bedroom", name: "Spacious 2BR", guests: 7, bookingLink: "/properties/spacious-2-bedroom/book?g=7" },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const links = collectBookingLinks(exchanges);
+    expect(links.map((l) => l.label)).toEqual([
+      "Option 1: Mickey Full Family House (15 guests)",
+      "Option 2: Cozy 1BR (8 guests)",
+      "Option 2: Spacious 2BR (7 guests)",
+    ]);
+  });
+
+  it("strips a leading bracket tag and cuts at the first ' | ' or '•' in a link label", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "get_quote",
+        input: { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 3 },
+        result: {
+          name: "[DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax",
+          bookingLink: "/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=3",
+        },
+      },
+    ];
+    const links = collectBookingLinks(exchanges);
+    expect(links[0].label).toBe("Book Cozy 1BR Haven · 11/14–11/16");
+  });
+
+  it("keeps the distinguishing second segment for properties sharing a base name", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 15 },
+        result: {
+          options: [
+            {
+              properties: [
+                { slug: "mickey-full", name: "Mickey in Lipa | Full Family House", guests: 11, bookingLink: "/properties/mickey-full/book?g=11" },
+                { slug: "mickey-room-only", name: "Mickey in Lipa | Room Only", guests: 4, bookingLink: "/properties/mickey-room-only/book?g=4" },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const links = collectBookingLinks(exchanges);
+    expect(links.map((l) => l.label)).toEqual([
+      "Option 1: Mickey in Lipa — Full Family House (11 guests)",
+      "Option 1: Mickey in Lipa — Room Only (4 guests)",
+    ]);
   });
 
   it("drops a booking link that somehow isn't an allowed href", () => {
     const exchanges: ToolExchange[] = [
       {
         name: "get_quote",
-        input: { checkIn: "2026-11-14", checkOut: "2026-11-16" },
+        input: { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-16" },
         result: { name: "Cozy 1BR", bookingLink: "https://evil.example/book" },
       },
     ];
     expect(collectBookingLinks(exchanges)).toEqual([]);
   });
 
-  it("caps the total number of booking links at 5", () => {
+  it("never outputs the same property+guests link twice even if two options repeat it", () => {
+    const sameLink = { slug: "cozy-1-bedroom", name: "Cozy 1BR", guests: 5, bookingLink: "/properties/cozy-1-bedroom/book?g=5" };
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 5 },
+        result: { options: [{ properties: [sameLink] }, { properties: [sameLink] }] },
+      },
+    ];
+    expect(collectBookingLinks(exchanges)).toHaveLength(1);
+  });
+
+  it("caps the total number of booking links at 6", () => {
     const properties = Array.from({ length: 8 }, (_, i) => ({
+      slug: `p${i}`,
       name: `Property ${i}`,
+      guests: 1,
       bookingLink: `/properties/p${i}/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=1`,
     }));
     const exchanges: ToolExchange[] = [
@@ -203,7 +305,7 @@ describe("collectBookingLinks", () => {
         result: { options: [{ properties }] },
       },
     ];
-    expect(collectBookingLinks(exchanges)).toHaveLength(5);
+    expect(collectBookingLinks(exchanges)).toHaveLength(6);
   });
 
   it("ignores tools that don't return booking links", () => {
@@ -216,15 +318,15 @@ describe("collectBookingLinks", () => {
 });
 
 describe("ensureHandoffLink", () => {
-  it("adds a Messenger button when the reply mentions m.me/haveninlipa as plain text", () => {
+  it("adds a Messenger button with the https href when the reply mentions m.me/haveninlipa as plain text", () => {
     const text = "Let me get you to a real person for this one — message us at m.me/haveninlipa, or use the contact page.";
     const links = ensureHandoffLink(text, []);
-    expect(links).toEqual([{ label: "Message us on Messenger", href: "m.me/haveninlipa" }]);
+    expect(links).toEqual([{ label: "Message us on Messenger", href: MESSENGER_HREF }]);
   });
 
-  it("doesn't duplicate the button if one is already present", () => {
-    const text = "Message us at m.me/haveninlipa.";
-    const existing = [{ label: "Message us on Messenger", href: "m.me/haveninlipa" }];
+  it("recognizes the https form too and doesn't duplicate the button if one is already present", () => {
+    const text = `Message us at ${MESSENGER_HREF}.`;
+    const existing = [{ label: "Message us on Messenger", href: MESSENGER_HREF }];
     expect(ensureHandoffLink(text, existing)).toEqual(existing);
   });
 
@@ -248,5 +350,47 @@ describe("limitToOneProvisional", () => {
   it("leaves a reply with no 'provisional' unchanged", () => {
     const input = "Your stay is all set!";
     expect(limitToOneProvisional(input)).toBe(input);
+  });
+
+  it("removes a repeated **provisional** along with its bold markers, not just the word", () => {
+    const input = "This total is provisional. **Option 2** — **provisional** total ₱10,525.";
+    expect(limitToOneProvisional(input)).toBe("This total is provisional. **Option 2** — total ₱10,525.");
+  });
+
+  it("cleans up the exact reported regression (empty bold markers left behind)", () => {
+    // Reproduces the field report: a second *provisional* wrapped in its own bold run.
+    const input = "**Option 1** is provisional. **Option 2** — **provisional** total ₱10,525";
+    const result = limitToOneProvisional(input);
+    expect(result).toBe("**Option 1** is provisional. **Option 2** — total ₱10,525");
+    expect(result).not.toContain("** total");
+    expect(result).not.toMatch(/\*\*\s*\*\*/);
+  });
+
+  it("removes a repeated *provisional* wrapped in single-asterisk emphasis", () => {
+    const input = "The total is provisional. *provisional* pricing applies until checkout.";
+    expect(limitToOneProvisional(input)).toBe("The total is provisional. pricing applies until checkout.");
+  });
+
+  it("removes a repeated _provisional_ wrapped in underscore emphasis", () => {
+    const input = "The total is provisional. _provisional_ until checkout.";
+    expect(limitToOneProvisional(input)).toBe("The total is provisional. until checkout.");
+  });
+});
+
+describe("ensureBatanguenoMarker", () => {
+  it("leaves a reply with a natural marker unchanged", () => {
+    const input = "Ay ga, meron pa kaming bakante sa petsang 'yan!";
+    expect(ensureBatanguenoMarker(input)).toBe(input);
+  });
+
+  it("recognizes each documented marker", () => {
+    for (const marker of ["ala eh", "aba'y", "ga", "nga", "ari", "are"]) {
+      expect(ensureBatanguenoMarker(`Teka lang, ${marker} titingnan ko.`)).toBe(`Teka lang, ${marker} titingnan ko.`);
+    }
+  });
+
+  it("prepends a natural opener when the reply has no marker at all", () => {
+    const input = "Meron pa kaming bakante sa petsang iyan para sa inyo.";
+    expect(ensureBatanguenoMarker(input)).toBe(`Ala eh, ${input}`);
   });
 });

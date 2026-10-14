@@ -1,5 +1,6 @@
 import "server-only";
 import { formatStayRangeShort } from "@/lib/dates";
+import { buildShortNames } from "@/lib/listings";
 
 /**
  * Guardrails applied to the model's text AFTER it's generated, on every turn — the model's
@@ -22,10 +23,13 @@ export interface LinkButton {
 
 const MARKDOWN_LINK = /\[([^\]]+)\]\(([^)]+)\)/g;
 
+export const MESSENGER_HREF = "https://m.me/haveninlipa";
+const MESSENGER_HREF_RE = /^m\.me\/haveninlipa\/?$/i;
+
 export function isAllowedHref(href: string): boolean {
   const trimmed = href.trim();
   if (trimmed.startsWith("/")) return true;
-  if (trimmed === "m.me/haveninlipa" || trimmed === "https://m.me/haveninlipa") return true;
+  if (trimmed === "m.me/haveninlipa" || trimmed === MESSENGER_HREF) return true;
   try {
     const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
     return url.hostname === "haveninlipa.com" || url.hostname === "www.haveninlipa.com";
@@ -34,11 +38,17 @@ export function isAllowedHref(href: string): boolean {
   }
 }
 
+/** A scheme-less "m.me/haveninlipa" renders as a broken relative link in the widget — always emit the https form. */
+export function normalizeHref(href: string): string {
+  const trimmed = href.trim();
+  return MESSENGER_HREF_RE.test(trimmed) ? MESSENGER_HREF : trimmed;
+}
+
 /** Strips disallowed links down to their label text; allowed ones are returned as buttons. */
 export function extractAllowedLinks(text: string): { reply: string; links: LinkButton[] } {
   const links: LinkButton[] = [];
   const reply = text.replace(MARKDOWN_LINK, (_match, label: string, href: string) => {
-    if (isAllowedHref(href)) links.push({ label, href: href.trim() });
+    if (isAllowedHref(href)) links.push({ label, href: normalizeHref(href) });
     return label;
   });
   return { reply, links };
@@ -78,7 +88,7 @@ function pesoAmountRegex(): RegExp {
 }
 
 export const FALLBACK_TOTAL_TEXT = "You'll see the exact total at checkout.";
-export const FALLBACK_FEE_TEXT = "For that fee, please ask us via Messenger (m.me/haveninlipa).";
+export const FALLBACK_FEE_TEXT = `For that fee, please ask us via Messenger (${MESSENGER_HREF}).`;
 
 /** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. */
 const FEE_CONTEXT = /\/\s*(?:hour|hr|night|day|guest)\b|\bper\s+(?:hour|hr|night|day|guest)\b|\bfee\b|\bcharges?\b|\bcharged\b/i;
@@ -172,32 +182,83 @@ function bookLabel(name: string, dates: string): string {
   return dates ? `Book ${name} · ${dates}` : `Book ${name}`;
 }
 
+function optionLabel(optionIndex: number, name: string, guests: number | undefined): string {
+  const prefix = `Option ${optionIndex + 1}: ${name}`;
+  return typeof guests === "number" ? `${prefix} (${guests} guest${guests === 1 ? "" : "s"})` : prefix;
+}
+
+/** Strips a leading "[DEVDB]"-style bracket tag (dev-DB test data convention). */
+function stripBracketPrefix(name: string): string {
+  return name.replace(/^\s*(\[[^\]]*\]\s*)+/, "").trim();
+}
+
+/** Strips a leading bracket tag, then cuts at the first " | " or "•". */
+function stripToBaseName(name: string): string {
+  return stripBracketPrefix(name).split(/\s*\|\s*|\s*•\s*/)[0].trim();
+}
+
+/**
+ * Short, guest-facing display names for every property referenced in this turn's tool
+ * results — reuses buildShortNames' "same base name → keep the distinguishing second
+ * segment" disambiguation (e.g. the three "Mickey in Lipa" configurations), but first
+ * strips a dev-DB bracket tag and cuts at a bare "•" for names with no "|" segment at all.
+ */
+function shortPropertyLabels(pairs: { slug: string; name: string }[]): Map<string, string> {
+  const uniqueBySlug = new Map(pairs.map((p) => [p.slug, p.name]));
+  const prepped = [...uniqueBySlug].map(([slug, name]) => ({ slug, name: stripBracketPrefix(name) }));
+  const short = buildShortNames(prepped);
+  return new Map([...short].map(([slug, label]) => [slug, stripToBaseName(label)]));
+}
+
 /**
  * Link buttons for every booking link a tool actually produced this turn (get_quote,
  * find_stay, …) — independent of whether the model wrote one into its prose. Still run
- * through the same href allowlist as model-written links.
+ * through the same href allowlist as model-written links. `find_stay` options are labeled
+ * "Option N: <name> (<guests> guests)", in the same order the options array (and therefore
+ * the reply prose built from it) lists them. Capped at 6, deduped by href — which already
+ * encodes property + dates + guests, so the same property/guest pairing is never repeated.
  */
-export function collectBookingLinks(exchanges: ToolExchange[], max = 5): LinkButton[] {
-  const links: LinkButton[] = [];
-
-  for (const { name, input, result } of exchanges) {
+export function collectBookingLinks(exchanges: ToolExchange[], max = 6): LinkButton[] {
+  const pairs: { slug: string; name: string }[] = [];
+  for (const { name: toolName, input, result } of exchanges) {
     const i = asRecord(input);
     const r = asRecord(result);
-    const dates = bookingDatesLabel(i);
-
-    if (name === "get_quote" && typeof r.bookingLink === "string" && typeof r.name === "string") {
-      links.push({ label: bookLabel(r.name, dates), href: r.bookingLink });
-    } else if (name === "find_stay" && Array.isArray(r.options)) {
+    if (toolName === "get_quote" && typeof i.slug === "string" && typeof r.name === "string") {
+      pairs.push({ slug: i.slug, name: r.name });
+    } else if (toolName === "find_stay" && Array.isArray(r.options)) {
       for (const option of r.options) {
         const properties = asRecord(option).properties;
         if (!Array.isArray(properties)) continue;
         for (const property of properties) {
           const p = asRecord(property);
-          if (typeof p.bookingLink === "string" && typeof p.name === "string") {
-            links.push({ label: bookLabel(p.name, dates), href: p.bookingLink });
-          }
+          if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
         }
       }
+    }
+  }
+  const shortNames = shortPropertyLabels(pairs);
+
+  const links: LinkButton[] = [];
+  for (const { name: toolName, input, result } of exchanges) {
+    const i = asRecord(input);
+    const r = asRecord(result);
+    const dates = bookingDatesLabel(i);
+
+    if (toolName === "get_quote" && typeof r.bookingLink === "string" && typeof i.slug === "string") {
+      const label = shortNames.get(i.slug) ?? (typeof r.name === "string" ? stripToBaseName(r.name) : "this property");
+      links.push({ label: bookLabel(label, dates), href: r.bookingLink });
+    } else if (toolName === "find_stay" && Array.isArray(r.options)) {
+      r.options.forEach((option, optionIndex) => {
+        const properties = asRecord(option).properties;
+        if (!Array.isArray(properties)) return;
+        for (const property of properties) {
+          const p = asRecord(property);
+          if (typeof p.bookingLink !== "string" || typeof p.slug !== "string") continue;
+          const label = shortNames.get(p.slug) ?? (typeof p.name === "string" ? stripToBaseName(p.name) : "this property");
+          const guests = typeof p.guests === "number" ? p.guests : undefined;
+          links.push({ label: optionLabel(optionIndex, label, guests), href: p.bookingLink });
+        }
+      });
     }
   }
 
@@ -217,20 +278,42 @@ const MESSENGER_MENTION = /m\.me\/haveninlipa/i;
 export function ensureHandoffLink(originalText: string, links: LinkButton[]): LinkButton[] {
   if (!MESSENGER_MENTION.test(originalText)) return links;
   if (links.some((l) => MESSENGER_MENTION.test(l.href))) return links;
-  return [...links, { label: "Message us on Messenger", href: "m.me/haveninlipa" }];
+  return [...links, { label: "Message us on Messenger", href: MESSENGER_HREF }];
 }
 
 // ── "Provisional" dedupe ─────────────────────────────────────────────────────
+
+/**
+ * Matches "provisional" wrapped in its own markdown emphasis run — **provisional**,
+ * *provisional*, _provisional_ — before the bare word, so removing a repeat occurrence
+ * takes its emphasis markers with it instead of leaving them behind empty (e.g. the
+ * "**Option 2** — ** total ₱10,525" regression, where only the word was stripped).
+ */
+const PROVISIONAL_RE = /\*\*provisional\*\*|\*provisional\*|__provisional__|_provisional_|\bprovisional\b/gi;
 
 /** Keeps only the first occurrence of the word "provisional" per reply (see system-prompt.ts). */
 export function limitToOneProvisional(text: string): string {
   let seen = false;
   return text
-    .replace(/\bprovisional\b/gi, (match) => {
+    .replace(PROVISIONAL_RE, (match) => {
       if (seen) return "";
       seen = true;
       return match;
     })
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+([.,!?;:])/g, "$1");
+}
+
+// ── Batangueño marker check ──────────────────────────────────────────────────
+
+const BATANGUENO_MARKER = /ala eh|aba'y|\bga\b|\bnga\b|\bari\b|\bare\b/i;
+
+/**
+ * A `btg`-mode reply should always carry at least one natural Batangueño marker (see
+ * system-prompt.ts). If the model's reply has none, prepend a short, natural opener rather
+ * than silently shipping a reply indistinguishable from plain Tagalog.
+ */
+export function ensureBatanguenoMarker(text: string): string {
+  if (BATANGUENO_MARKER.test(text)) return text;
+  return `Ala eh, ${text}`;
 }

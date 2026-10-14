@@ -257,7 +257,7 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     const { handleHavenChat } = await freshChatService();
     const result = await handleHavenChat(validBody({ messages: [{ role: "user", content: "What's the weather on Mars?" }] }), "1.2.3.4");
 
-    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "m.me/haveninlipa" }]);
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
   });
 
   it("keeps only the first 'provisional' when the model repeats it", async () => {
@@ -272,6 +272,71 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     const result = await handleHavenChat(validBody(), "1.2.3.4");
 
     expect(result.reply?.match(/provisional/gi)).toHaveLength(1);
+  });
+
+  it("injects a resolved-dates context note into the system prompt when the latest message contains a date phrase", async () => {
+    providerChat.mockResolvedValue({
+      text: "Let me check that for you.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-10-14T12:00:00Z");
+    await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "May bakante ba kayo sa ikalawang Sabado ng Nobyembre para sa 12 tao?" }] }),
+      "1.2.3.4",
+      now
+    );
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toContain("checkIn=2026-11-14");
+    expect(system).toContain("checkOut=2026-11-15");
+    expect(system).toMatch(/never ask the guest what year/i);
+  });
+
+  it("adds no date context note when the latest message has no detectable date phrase", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure, happy to help!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have WiFi?" }] }), "1.2.3.4");
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).not.toContain("checkIn=");
+  });
+
+  it("prepends a natural Batangueño opener when a btg reply carries no marker", async () => {
+    providerChat.mockResolvedValue({
+      text: "Meron pa kaming bakante sa petsang iyan para sa inyo.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang: "btg" }), "1.2.3.4");
+
+    expect(result.reply).toBe("Ala eh, Meron pa kaming bakante sa petsang iyan para sa inyo.");
+  });
+
+  it("leaves a btg reply that already carries a marker untouched", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ay ga, meron pa kaming bakante!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang: "btg" }), "1.2.3.4");
+
+    expect(result.reply).toBe("Ay ga, meron pa kaming bakante!");
   });
 
   it("masks PII before writing the transcript", async () => {

@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-14 — Haven AI live-test bug-fix pass: Messenger link scheme, provisional-dedupe artifact, Tagalog/Batangueño dates, booking-link labels, Batangueño markers (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+A further round of live dev testing of H0+H1 surfaced five bugs, all fixed in `src/lib/haven/dates.ts`, `post-process.ts`, `system-prompt.ts`, and `chat-service.ts` (no widget change needed — the widget already rendered whatever href it was given verbatim):
+- **Messenger link scheme** — the handoff link was sometimes emitted as the scheme-less `m.me/haveninlipa`, which `ChatWidget.tsx` renders as a broken *relative* link (no `/` prefix, not `haveninlipa.com`, so it resolves against the current page path). `post-process.ts` now has a single canonical `MESSENGER_HREF = "https://m.me/haveninlipa"` constant; `normalizeHref()` rewrites any scheme-less form to it wherever a link passes through `extractAllowedLinks()`; `ensureHandoffLink()`, `FALLBACK_FEE_TEXT`, `system-prompt.ts`'s hard rules, and `chat-service.ts`'s `NO_ANSWER_FALLBACK` all now say the `https://` form.
+- **"Provisional" dedupe artifact** — `limitToOneProvisional()` used to strip only the bare word, leaving a repeat's own markdown emphasis behind empty (e.g. "**Option 2** — ** total ₱10,525"). It now matches `**provisional**`/`*provisional*`/`__provisional__`/`_provisional_` as one atomic unit before falling back to the bare word, so a repeat's emphasis markers are removed with it.
+- **Date resolution skipping to "what year"** — the model sometimes skipped its own `resolve_dates` tool call and asked the guest "2024 o 2025?". `dates.ts`'s weekday/month/ordinal vocabularies gained Tagalog and Batangueño forms (`Linggo`–`Sabado`, `Enero`–`Disyembre`, `ikalawang`/`una`/…, "ng" alongside "of"/"in", "susunod na" alongside "next"), and `chat-service.ts` now runs this same resolver on the guest's latest message *before* calling the model at all, injecting a system context note with the resolved dates (ISO + human form) and an explicit "never ask what year" instruction when a phrase is detected.
+- **Booking-link labels** — `collectBookingLinks()` used to label a button with the raw `Property.name` (which can carry a dev-DB bracket tag or an SEO `"Name | descriptor"` suffix). It now strips a leading `[...]` bracket tag and cuts at the first `" | "` or `"•"` (`stripToBaseName()`), reusing `buildShortNames()` (`src/lib/listings.ts`) to keep a distinguishing second segment for properties sharing a base name (e.g. the three "Mickey in Lipa" configurations). `find_stay` options are now labeled and grouped "Option N: \<name\> (\<guests\> guests)" in the same order the options array (and therefore the reply prose) lists them, and the cap rose from 5 to 6.
+- **Batangueño markers** — `system-prompt.ts`'s `btg` guidance had loose/partly-inaccurate marker glosses; rewritten with correct usage notes for each of "ala eh", "aba'y", "ga", "nga", "ari"/"are", plus a longer (6–8 line) placeholder-only few-shot block. A new server-side check, `ensureBatanguenoMarker()`, prepends a short natural opener ("Ala eh, ") to any `btg` reply that landed with none of these markers, so the mode never silently degrades to plain Tagalog.
+
+New/updated tests: `dates.test.ts` (Tagalog weekday/month/ordinal resolution, the exact "ikalawang Sabado ng Nobyembre" live-test phrase, "susunod na Sabado"), `post-process.test.ts` (`normalizeHref`, the exact reported provisional-dedupe regression, the new booking-link label format, `ensureBatanguenoMarker`), `chat-service.test.ts` (date-context injection into the system prompt, the btg-marker prepend), and a new `system-prompt.test.ts`.
+
+---
+
 ## 2026-10-14 — Haven AI chat-widget UX pass: collapsible topics, reply-start scroll, distinct AI bubble (fix/haven-ai-polish-101426, DEC-029)
 
 Area: Website

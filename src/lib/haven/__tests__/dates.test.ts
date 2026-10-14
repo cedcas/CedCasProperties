@@ -129,6 +129,33 @@ describe("resolveDates", () => {
     });
   });
 
+  describe("Tagalog / Batangueño phrasing", () => {
+    it("resolves 'ikalawang Sabado ng Nobyembre' embedded in a full Taglish question", () => {
+      const result = resolveDates("May bakante ba kayo sa ikalawang Sabado ng Nobyembre para sa 12 tao?", NOW);
+      expect(result).not.toBeNull();
+      expect(result!.checkIn).toBe("2026-11-14");
+      expect(result!.checkOut).toBe("2026-11-15");
+    });
+
+    it("resolves 'sa susunod na Sabado' the same as 'next Saturday'", () => {
+      const result = resolveDates("Pwede ba sa susunod na Sabado?", NOW);
+      expect(result).not.toBeNull();
+      expect(new Date(result!.checkIn).getUTCDay()).toBe(6);
+      expect(result!.checkIn > "2026-10-14").toBe(true);
+    });
+
+    it("resolves a bare Tagalog weekday ('Sabado')", () => {
+      const result = resolveDates("Sabado", NOW);
+      expect(result!.checkIn).toBe("2026-10-17");
+    });
+
+    it("resolves a Tagalog month name ('Disyembre 24')", () => {
+      const result = resolveDates("Disyembre 24", NOW);
+      expect(result!.checkIn).toBe("2026-12-24");
+      expect(result!.checkOut).toBe("2026-12-25");
+    });
+  });
+
   describe("ISO dates", () => {
     it("passes through an explicit ISO range", () => {
       const result = resolveDates("2026-12-24 to 2026-12-26", NOW);
