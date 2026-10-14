@@ -58,16 +58,19 @@ export async function generateMetadata(): Promise<Metadata> {
     // the page's <head>.
   }
 
-  const title = count > 0
-    ? `Our Homes in Lipa City, Batangas — ${count} Private Rental${count === 1 ? "" : "s"}`
-    : "Our Homes in Lipa City, Batangas";
+  // Fixed — no dynamic count. The count-free title is 58 rendered chars with
+  // the " | Haven in Lipa" suffix, well inside the 60-char budget regardless
+  // of how many listings are live; the count moves to the description below.
+  // Targets "apartment for rent lipa city" (booking-intent SEO proposal,
+  // content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md).
+  const title = "Apartments for Rent in Lipa City, Batangas";
 
-  // Draft copy verbatim (152 chars). It names the inventory count and the top
-  // occupancy, so it is only served while those still hold; any other count
-  // falls back to the number-free variant instead of publishing a wrong claim.
+  // Count-gated exactly like the old copy: the inventory figure is only
+  // published while it's verified true, with a number-free fallback otherwise
+  // (DEC-007). 160 / 153 rendered chars — within the 160 budget.
   const description = count === 5
-    ? "Browse all five Haven in Lipa homes — from a 1BR for two to a full house sleeping 15. Live rates, real availability, booked direct with no platform fee."
-    : "Private, entire-unit homes in Lipa City, Batangas. Live rates, real availability, booked direct with no platform fee and no service charge on top.";
+    ? "Private apartments and transient houses for rent in Lipa City, Batangas — our direct-booking Airbnb alternative. Live rates, real availability, no platform fee."
+    : "Apartments and transient houses for rent in Lipa City, Batangas — booked direct, no platform fee. A real alternative to searching Airbnb for a Lipa stay.";
 
   return {
     title,
@@ -201,7 +204,7 @@ export default async function PropertiesIndexPage() {
       <ScrollReveal />
       <Navbar />
 
-      <main className="bg-cream min-h-screen pt-28 pb-20">
+      <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-6xl mx-auto px-6">
 
           {/* Visible breadcrumb, mirroring the BreadcrumbList above. */}
@@ -229,14 +232,15 @@ export default async function PropertiesIndexPage() {
               className="font-serif font-semibold text-charcoal leading-tight mb-4"
               style={{ fontSize: "clamp(2rem,4vw,2.8rem)" }}
             >
-              Our Homes in Lipa City, Batangas
+              Apartments &amp; Transient Houses for Rent in Lipa City
             </h1>
             {count > 0 && (
               <p className={`${prose} max-w-2xl`}>
-                {numberWord(count).charAt(0).toUpperCase() + numberWord(count).slice(1)} private
-                {count === 1 ? " home" : " homes"}, all in Lipa City, all bookable directly. No
-                platform between us, no service fee on top, and the rates below are the live ones
-                — not a number typed into a page months ago.
+                Every home below is a private, entire-unit apartment or transient house for rent
+                in Lipa City, Batangas — {numberWord(count)} of them, each booked direct with live
+                availability and no platform fee. If you&rsquo;ve been comparing Airbnb listings
+                for a Lipa stay, this is the direct-booking alternative: the same homes, real-time
+                dates, and no service charge on top.
               </p>
             )}
           </div>

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { bookingStatusBadgeClass } from "@/lib/booking-status";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import DeleteButton from "@/components/admin/DeleteButton";
@@ -6,6 +7,9 @@ import BookingStatusSelect from "@/components/admin/BookingStatusSelect";
 import AdditionalChargesManager from "@/components/admin/AdditionalChargesManager";
 import NotesEditor from "@/components/admin/NotesEditor";
 import GuestStayEditor from "@/components/admin/GuestStayEditor";
+import BookingRequestActions from "@/components/admin/BookingRequestActions";
+import { DECISION_NOTE_MAX } from "@/lib/booking-requests";
+import { bookingPaymentUrl, formatManilaDateTime } from "@/lib/booking-request-emails";
 import { todayInManila } from "@/lib/dates";
 import { checkPermission } from "@/lib/admin-permissions";
 import {
@@ -103,6 +107,53 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
         </div>
       </div>
 
+      {/* Booking request (Instant Booking off) — decision panel and where the request stands */}
+      {(booking.status === "requested" || booking.status === "approved" || booking.status === "declined" || booking.status === "expired") && (
+        <section aria-labelledby="request-panel" className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-indigo-200 mb-6">
+          <h2 id="request-panel" className="font-serif font-semibold text-charcoal text-[1rem] mb-2">Booking Request</h2>
+          {booking.status === "requested" && (
+            <>
+              <p className="text-[13.5px] text-charcoal/75 mb-4">
+                This guest is waiting for your decision
+                {booking.requestExpiresAt && <> until <strong>{formatManilaDateTime(booking.requestExpiresAt)}</strong> (Lipa time), when the request expires</>}.
+                No dates are held and nothing has been paid. Approving checks that the dates are still free, then emails the guest a
+                payment link. If the details are not what you agreed with the guest, correct them below first.
+              </p>
+              {permission.ok ? (
+                <BookingRequestActions id={booking.id} noteMax={DECISION_NOTE_MAX} />
+              ) : (
+                <p className="text-[13px] text-charcoal/55">Your account does not have the Bookings permission, so you cannot approve or decline.</p>
+              )}
+            </>
+          )}
+          {booking.status === "approved" && (
+            <p className="text-[13.5px] text-charcoal/75">
+              Approved{booking.decidedAt && <> on {formatManilaDateTime(booking.decidedAt)}</>}. The guest has a payment link
+              {booking.paymentLinkExpiresAt && <> valid until <strong>{formatManilaDateTime(booking.paymentLinkExpiresAt)}</strong> (Lipa time)</>}.
+              The dates are <strong>not held</strong> until the guest pays. To withdraw the approval, change the status to cancelled.
+              {booking.paymentToken && permission.ok && (
+                <span className="block mt-2 text-[12.5px] text-charcoal/60">
+                  Payment link, if you need to send it again:{" "}
+                  <span className="font-mono text-[12px] break-all select-all">{bookingPaymentUrl(booking.paymentToken)}</span>
+                </span>
+              )}
+            </p>
+          )}
+          {booking.status === "declined" && (
+            <p className="text-[13.5px] text-charcoal/75">
+              Declined{booking.decidedAt && <> on {formatManilaDateTime(booking.decidedAt)}</>}. The guest was told by email.
+            </p>
+          )}
+          {booking.status === "expired" && (
+            <p className="text-[13.5px] text-charcoal/75">
+              Expired {booking.decidedAt ? "because the payment link was not used in time" : "without a decision"}. The guest was told by
+              email. Nothing was paid.
+            </p>
+          )}
+          {booking.decisionNote && <p className="text-[13px] text-charcoal/60 mt-2">Note: {booking.decisionNote}</p>}
+        </section>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Guest + Stay (editable) */}
         <GuestStayEditor
@@ -155,7 +206,7 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
           <dl className="space-y-3 text-[13.5px]">
             <Row label="Method" value={booking.paymentMethod ? booking.paymentMethod.toUpperCase() : <span className="text-charcoal/35">—</span>} />
             <Row label="Status" value={
-              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${booking.status === "confirmed" ? "bg-green-100 text-green-700" : booking.status === "cancelled" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>{booking.status}</span>
+              <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${bookingStatusBadgeClass(booking.status)}`}>{booking.status}</span>
             } />
             {booking.stripePaymentIntentId && <Row label="Stripe intent" value={<span className="font-mono text-[12px] text-charcoal/60 break-all">{booking.stripePaymentIntentId}</span>} />}
           </dl>

@@ -11,7 +11,7 @@ import {
   cancelScheduledMessagesForBooking,
 } from "@/lib/scheduler";
 import { reconcileBookingDerivedBlocks, reconcileSource } from "@/lib/inventory-groups";
-import { bookingBlocksAvailability } from "@/lib/booking-status";
+import { bookingBlocksAvailability, canAdminSetStatus } from "@/lib/booking-status";
 import {
   formatConflictRange,
   getInventoryScopeConflicts,
@@ -19,6 +19,7 @@ import {
   type Conflict,
 } from "@/lib/availability";
 import { withInventoryLock } from "@/lib/inventory-lock";
+import { sendBookingConfirmedMeasurementEvent } from "@/lib/ga4-measurement-protocol";
 
 /** Thrown inside the reactivation transaction to roll it back and report why. */
 class ReactivationConflict extends Error {
@@ -38,17 +39,27 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     where: { id: Number(id) },
     select: { status: true, propertyId: true },
   });
+  if (!prev) return NextResponse.json({ error: "Booking not found." }, { status: 404 });
+
+  // Only the listed changes are made here. A request is approved or declined through
+  // /api/admin/bookings/[id]/request, and an approved request becomes pending or
+  // confirmed only when the guest pays — never by an admin setting the status.
+  if (typeof status !== "string" || !canAdminSetStatus(prev.status, status)) {
+    return NextResponse.json(
+      {
+        error: `A booking that is ${prev.status} cannot be changed to "${String(status)}" here.`,
+        code: "invalid_transition",
+      },
+      { status: 409 }
+    );
+  }
 
   // A booking that is NOT holding its dates (cancelled) being moved back to a status that
   // does (pending / confirmed) claims those nights again — exactly like a new booking. In
   // the meantime they may have been sold, blocked or booked on a sibling listing, so this
   // takes the same inventory lock and availability check as booking creation, and writes
   // the sibling blocks in the same transaction. Every other transition is unchanged.
-  const reactivating =
-    !!prev &&
-    typeof status === "string" &&
-    !bookingBlocksAvailability(prev.status) &&
-    bookingBlocksAvailability(status);
+  const reactivating = !bookingBlocksAvailability(prev.status) && bookingBlocksAvailability(status);
 
   let booking;
   if (reactivating) {
@@ -120,8 +131,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     });
   }
 
-  const becameConfirmed = prev?.status !== "confirmed" && status === "confirmed";
-  const leftConfirmed = prev?.status === "confirmed" && status !== "confirmed";
+  const becameConfirmed = prev.status !== "confirmed" && status === "confirmed";
+  const leftConfirmed = prev.status === "confirmed" && status !== "confirmed";
 
   await logAction({
     actor: session.user.name ?? "Admin",
@@ -131,7 +142,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     module: "bookings",
     target: `booking-${id}`,
     ipAddress: getIpFromRequest(req),
-    metadata: { bookingId: id, newStatus: status, propertyName: booking.property.name },
+    metadata: { bookingId: id, previousStatus: prev.status, newStatus: status, propertyName: booking.property.name },
   });
 
   // Send confirmation email to guest when status moves to "confirmed"
@@ -263,6 +274,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     } catch (err) {
       console.error("Scheduled message materialize/flush failed:", err);
     }
+
+    // GA4 server-side reconciliation (off by default — see src/lib/ga4-measurement-protocol.ts).
+    await sendBookingConfirmedMeasurementEvent({
+      bookingId: booking.id,
+      propertySlug: booking.property.slug,
+      total: Number(booking.totalPrice),
+      propertyName: booking.property.name,
+      nights: Math.ceil((booking.checkOut.getTime() - booking.checkIn.getTime()) / 86400000),
+    });
   }
 
   // If booking is no longer confirmed, cancel any pending scheduled sends.

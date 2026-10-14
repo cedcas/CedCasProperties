@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { bookingStatusBadgeClass } from "@/lib/booking-status";
 import Link from "next/link";
 import { formatStayDate } from "@/lib/dates";
 
@@ -13,9 +14,11 @@ async function getStats() {
   ]);
   const pendingBookings  = await prisma.booking.count({ where: { status: "pending" } });
   const confirmedBookings = await prisma.booking.count({ where: { status: "confirmed" } });
+  // Booking requests waiting for an approve / decline decision (Instant Booking off).
+  const requestedBookings = await prisma.booking.count({ where: { status: "requested" } });
   const recentBookings   = await prisma.booking.findMany({ orderBy: { createdAt: "desc" }, take: 5, include: { property: { select: { name: true } } } });
   const recentMessages   = await prisma.contactMessage.findMany({ orderBy: { createdAt: "desc" }, take: 5 });
-  return { properties, bookings, messages, testimonials, pendingBookings, confirmedBookings, recentBookings, recentMessages };
+  return { properties, bookings, messages, testimonials, pendingBookings, confirmedBookings, requestedBookings, recentBookings, recentMessages };
 }
 
 export default async function DashboardPage() {
@@ -54,6 +57,9 @@ export default async function DashboardPage() {
           <h2 className="font-serif font-semibold text-charcoal text-[1rem] mb-5">Booking Status</h2>
           <div className="flex gap-4">
             {[
+              ...(stats.requestedBookings > 0
+                ? [{ label: "Requests", value: stats.requestedBookings, color: "bg-indigo-100 text-indigo-700" }]
+                : []),
               { label: "Pending",   value: stats.pendingBookings,   color: "bg-amber-100 text-amber-700" },
               { label: "Confirmed", value: stats.confirmedBookings, color: "bg-green-100 text-green-700" },
               { label: "Total",     value: stats.bookings,          color: "bg-blue-100 text-blue-700" },
@@ -103,7 +109,7 @@ export default async function DashboardPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-[12px] text-charcoal/50">{formatStayDate(b.checkIn, { year: "numeric", month: "numeric", day: "numeric" })} → {formatStayDate(b.checkOut, { year: "numeric", month: "numeric", day: "numeric" })}</div>
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${b.status === "confirmed" ? "bg-green-100 text-green-700" : b.status === "cancelled" ? "bg-red-100 text-red-600" : "bg-amber-100 text-amber-700"}`}>
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${bookingStatusBadgeClass(b.status)}`}>
                     {b.status}
                   </span>
                 </div>

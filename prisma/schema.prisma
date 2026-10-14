@@ -9,45 +9,51 @@ datasource db {
 }
 
 model Property {
-  id            Int            @id @default(autoincrement())
-  slug          String         @unique
-  name          String
-  description   String         @db.Text
-  type          String // "2BR" | "3BR" | "Studio" etc.
-  pricePerNight Decimal        @default(0) @db.Decimal(10, 2) // weekday / base nightly rate; 0 = not yet configured. Edited only on the Rates page.
-  location      String
-  bedrooms      Int            @default(1)
-  bathrooms     Int            @default(1)
-  maxGuests     Int            @default(2)
-  includedGuests        Int      @default(1) // extra-guest fee applies to guests beyond this
-  extraGuestFeePerNight Decimal  @default(0) @db.Decimal(10, 2) // ₱/extra guest/night; 0 = disabled
-  images        String         @db.Text // JSON array of image URLs
-  featuredImage String?        @db.Text // URL of the featured/cover image
-  amenities     String         @db.Text // JSON array
-  propertyRules String?        @db.Text // House rules and policies
-  isFeatured    Boolean        @default(false)
-  isActive      Boolean        @default(true)
-  airbnbIcsUrl  String?        @db.Text // Airbnb .ics import URL (Airbnb → CedCas sync)
+  id                     Int                     @id @default(autoincrement())
+  slug                   String                  @unique
+  name                   String
+  description            String                  @db.Text
+  type                   String // "2BR" | "3BR" | "Studio" etc.
+  pricePerNight          Decimal                 @default(0) @db.Decimal(10, 2) // weekday / base nightly rate; 0 = not yet configured. Edited only on the Rates page.
+  location               String
+  bedrooms               Int                     @default(1)
+  bathrooms              Int                     @default(1)
+  maxGuests              Int                     @default(2)
+  includedGuests         Int                     @default(1) // extra-guest fee applies to guests beyond this
+  extraGuestFeePerNight  Decimal                 @default(0) @db.Decimal(10, 2) // ₱/extra guest/night; 0 = disabled
+  images                 String                  @db.Text // JSON array of image URLs
+  featuredImage          String?                 @db.Text // URL of the featured/cover image
+  amenities              String                  @db.Text // JSON array
+  propertyRules          String?                 @db.Text // House rules and policies
+  isFeatured             Boolean                 @default(false)
+  isActive               Boolean                 @default(true)
+  airbnbIcsUrl           String?                 @db.Text // Airbnb .ics import URL (Airbnb → CedCas sync)
+  // Direct-booking advance notice (src/lib/booking-policy.ts). Guest bookings only — never admin actions.
+  advanceNoticeDays      Int                     @default(0) // 0 = same day allowed; otherwise earliest check-in is today (Manila) + N days
+  sameDayCutoffMinutes   Int? // minutes after Manila midnight; applies only when advanceNoticeDays = 0. null = no cutoff
+  // Instant Booking (src/lib/booking-policy.ts): "on" = book instantly (default), "off" = every booking is a
+  // request the Owner approves first, "auto" = instant for trusted guests only (not offered until Step 3).
+  instantBookingMode     String                  @default("on")
   // SEO + long-form content (May 8 2026 SEO audit deliverables)
-  seoTitle              String?  @db.Text // <title> override
-  seoDescription        String?  @db.Text // meta description
-  tagline               String?  @db.Text // hero one-liner ("Netflix • Wi-Fi • 9 Pax • Parking")
-  heroSummary           String?  @db.Text // first paragraph above the fold
-  bestForSegments       String?  @db.Text // JSON: [{ title, body, internalLinkSlug, internalLinkLabel, internalLinkUrl }]
-  amenityDetails        String?  @db.Text // JSON: [{ section, body, items[] }]
-  neighborhoodPlaces    String?  @db.Text // JSON: [{ radiusLabel, places[] }]
-  housePolicies         String?  @db.Text // JSON: { checkInTime, checkOutTime, maxGuests, smoking, parties, pets, notes[] }
-  pricingNotes          String?  @db.Text // JSON: { weeklyDiscount, monthlyDiscount, deposit, cancellation: {...} }
-  propertyFaqs          String?  @db.Text // JSON: [{ question, answer }]
-  imageAlts             String?  @db.Text // JSON: string[] parallel to `images`
-  aggregateReviewCount  Int?
-  aggregateReviewRating Float?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  bookings      Booking[]
-  testimonials  Testimonial[]
-  rates         PropertyRate[]
-  quickReplies  QuickReply[]
+  seoTitle               String?                 @db.Text // <title> override
+  seoDescription         String?                 @db.Text // meta description
+  tagline                String?                 @db.Text // hero one-liner ("Netflix • Wi-Fi • 9 Pax • Parking")
+  heroSummary            String?                 @db.Text // first paragraph above the fold
+  bestForSegments        String?                 @db.Text // JSON: [{ title, body, internalLinkSlug, internalLinkLabel, internalLinkUrl }]
+  amenityDetails         String?                 @db.Text // JSON: [{ section, body, items[] }]
+  neighborhoodPlaces     String?                 @db.Text // JSON: [{ radiusLabel, places[] }]
+  housePolicies          String?                 @db.Text // JSON: { checkInTime, checkOutTime, maxGuests, smoking, parties, pets, notes[] }
+  pricingNotes           String?                 @db.Text // JSON: { weeklyDiscount, monthlyDiscount, deposit, cancellation: {...} }
+  propertyFaqs           String?                 @db.Text // JSON: [{ question, answer }]
+  imageAlts              String?                 @db.Text // JSON: string[] parallel to `images`
+  aggregateReviewCount   Int?
+  aggregateReviewRating  Float?
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  bookings               Booking[]
+  testimonials           Testimonial[]
+  rates                  PropertyRate[]
+  quickReplies           QuickReply[]
   // Shared inventory + availability blocks (Aug 2026). Relation fields only — no new columns.
   inventoryMembership    InventoryGroupMember?
   availabilityBlocks     AvailabilityBlock[]     @relation("BlockTargetProperty")
@@ -56,34 +62,46 @@ model Property {
 }
 
 model Booking {
-  id                    Int                @id @default(autoincrement())
-  property              Property           @relation(fields: [propertyId], references: [id])
+  id                    Int                 @id @default(autoincrement())
+  property              Property            @relation(fields: [propertyId], references: [id])
   propertyId            Int
   guestName             String
   guestEmail            String
   guestPhone            String
   checkIn               DateTime
   checkOut              DateTime
-  guests                Int                @default(1)
-  totalPrice            Decimal            @db.Decimal(10, 2)
-  nightlyTotal          Decimal?           @db.Decimal(10, 2) // base nightly rate total (before fees/discounts)
-  extraGuestFee         Decimal?           @db.Decimal(10, 2) // extra-guest fee charged for this booking
-  stripeFee             Decimal?           @db.Decimal(10, 2) // Stripe 6% transaction fee
+  guests                Int                 @default(1)
+  totalPrice            Decimal             @db.Decimal(10, 2)
+  nightlyTotal          Decimal?            @db.Decimal(10, 2) // base nightly rate total (before fees/discounts)
+  extraGuestFee         Decimal?            @db.Decimal(10, 2) // extra-guest fee charged for this booking
+  stripeFee             Decimal?            @db.Decimal(10, 2) // Stripe 6% transaction fee
   discountCode          String? // applied promo code
-  discountAmount        Decimal?           @db.Decimal(10, 2) // discount amount (PHP)
-  status                String             @default("pending") // pending | confirmed | cancelled
+  discountAmount        Decimal?            @db.Decimal(10, 2) // discount amount (PHP)
+  status                String              @default("pending") // requested | approved | pending | confirmed | declined | expired | cancelled — see src/lib/booking-status.ts
   paymentMethod         String? // "gcash" | "bpi" | "stripe"
-  stripePaymentIntentId String? // Stripe PaymentIntent ID
-  notes                 String?            @db.Text // GUEST-submitted special requests (from the booking form); shown read-only to admin
-  adminNotes            String?            @db.Text // internal admin comment on the Stay (never shown to the guest)
-  chargesNotes          String?            @db.Text // internal admin comment in the Additional Charges section (never shown to the guest)
+  stripePaymentIntentId String?             @unique // Stripe PaymentIntent ID — one payment pays for one booking
+  // Booking requests (listings with Instant Booking off) — src/lib/booking-requests.ts
+  paymentToken          String?             @unique // opaque, unguessable; drives the guest's payment link once approved
+  requestExpiresAt      DateTime? // a `requested` booking not decided by then expires
+  paymentLinkExpiresAt  DateTime? // an `approved` booking not paid by then expires
+  paymentSubmittedAt    DateTime? // when the guest tapped "I Paid" (GCash/BPI); starts the unverified-payment alert clock
+  holdAlertedAt         DateTime? // set when the unverified-payment alert was claimed/sent, so it is sent once
+  decidedAt             DateTime? // when the request was approved or declined
+  decidedBy             AdminUser?          @relation(fields: [decidedById], references: [id], onDelete: SetNull)
+  decidedById           Int?
+  decisionNote          String?             @db.Text // admin's note on the decision (a decline note is shown to the guest)
+  notes                 String?             @db.Text // GUEST-submitted special requests (from the booking form); shown read-only to admin
+  adminNotes            String?             @db.Text // internal admin comment on the Stay (never shown to the guest)
+  chargesNotes          String?             @db.Text // internal admin comment in the Additional Charges section (never shown to the guest)
   optedOutAt            DateTime? // set when guest replies STOP; suppresses future SMS
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
   scheduledMessages     ScheduledMessage[]
   guestMessages         GuestMessage[]
   additionalCharges     AdditionalCharge[]
   derivedBlocks         AvailabilityBlock[] // sibling blocks this booking generated on shared-inventory properties
+
+  @@index([status])
 }
 
 // A guest who reached the payment screen (QR or card) — written before any Booking exists,
@@ -226,38 +244,38 @@ model UnmatchedInboundMessage {
 }
 
 model DiscountCode {
-  id         Int      @id @default(autoincrement())
-  code       String   @unique
-  type       String // "fixed" | "percentage"
-  value      Decimal  @db.Decimal(10, 2) // PHP amount or percentage (0-100)
-  isActive   Boolean  @default(true)
-  usageCount Int      @default(0)
-  maxUses    Int? // null = unlimited
-  propertyIds String? @db.Text // JSON array of Property ids. null/empty = applies to ALL properties
-  notes      String? @db.Text // free-form admin notes/comments — editable after creation
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  type        String // "fixed" | "percentage"
+  value       Decimal  @db.Decimal(10, 2) // PHP amount or percentage (0-100)
+  isActive    Boolean  @default(true)
+  usageCount  Int      @default(0)
+  maxUses     Int? // null = unlimited
+  propertyIds String?  @db.Text // JSON array of Property ids. null/empty = applies to ALL properties
+  notes       String?  @db.Text // free-form admin notes/comments — editable after creation
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
 
 model Ambassador {
-  id              Int       @id @default(autoincrement())
+  id              Int      @id @default(autoincrement())
   name            String
   phone           String // mobile number
-  email           String    @unique // one application per email
-  facebookUrl     String    @db.Text
-  otherSocials    String?   @db.Text // Instagram / TikTok / YouTube — optional
+  email           String   @unique // one application per email
+  facebookUrl     String   @db.Text
+  otherSocials    String?  @db.Text // Instagram / TikTok / YouTube — optional
   audienceSize    String? // free-text reach, e.g. "~5k IG followers" — optional vetting signal
   city            String
   occupation      String
-  motivation      String    @db.Text // "Why do you want to partner with Haven in Lipa?"
-  promotionPlan   String    @db.Text // "How do you plan to promote us?"
+  motivation      String   @db.Text // "Why do you want to partner with Haven in Lipa?"
+  promotionPlan   String   @db.Text // "How do you plan to promote us?"
   gcashNumber     String // for reward payouts
   agreedToTermsAt DateTime // consent timestamp (Ambassador Guidelines)
-  status          String    @default("pending") // "pending" | "approved" | "rejected"
-  notes           String?   @db.Text // free-form admin notes
-  promoCode       String?   @unique // reserved: link to the issued DiscountCode.code on approval
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  status          String   @default("pending") // "pending" | "approved" | "rejected"
+  notes           String?  @db.Text // free-form admin notes
+  promoCode       String?  @unique // reserved: link to the issued DiscountCode.code on approval
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([status])
   @@index([email])
@@ -430,14 +448,15 @@ model ContactMessage {
 }
 
 model AdminUser {
-  id          Int              @id @default(autoincrement())
-  email       String           @unique
-  password    String // bcrypt hashed
-  name        String
-  role        String           @default("admin") // "admin" | "manager"
-  createdAt   DateTime         @default(now())
-  permissions AdminPermission?
-  logs        AdminLog[]
+  id              Int              @id @default(autoincrement())
+  email           String           @unique
+  password        String // bcrypt hashed
+  name            String
+  role            String           @default("admin") // "admin" | "manager"
+  createdAt       DateTime         @default(now())
+  permissions     AdminPermission?
+  logs            AdminLog[]
+  decidedBookings Booking[]
 }
 
 model AdminPermission {

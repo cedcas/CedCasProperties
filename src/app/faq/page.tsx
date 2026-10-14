@@ -42,7 +42,7 @@ export default function FAQPage() {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
       />
       <Navbar />
-      <main className="bg-cream min-h-screen pt-28 pb-20">
+      <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-4xl mx-auto px-6">
           <div className="flex flex-col items-start mb-12">
             <span

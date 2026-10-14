@@ -7,6 +7,9 @@
  * existing data. Used by the admin Customers list and customer detail pages.
  */
 
+/** Statuses of a booking request no money was ever taken for (src/lib/booking-status.ts). */
+const UNPAID_REQUEST_STATUSES = new Set(["requested", "approved", "declined", "expired"]);
+
 /** A booking shape carrying the fields the grouping/aggregation needs. */
 export interface CustomerBooking {
   id: number;
@@ -30,7 +33,7 @@ export interface Customer {
   bookingCount: number;
   /** Sum of totalPrice over CONFIRMED bookings only. */
   totalSpent: number;
-  /** Sum of totalPrice over ALL bookings (pending/cancelled included). */
+  /** Sum of totalPrice over all bookings (pending/cancelled included), but never a request that was not paid. */
   grossSpent: number;
   lastStay: Date; // max checkOut
   firstSeen: Date; // min createdAt
@@ -113,7 +116,8 @@ export function groupCustomers(bookings: CustomerBooking[]): Customer[] {
     let lastStay = members[0].checkOut;
     for (const m of members) {
       const price = Number(m.totalPrice) || 0;
-      grossSpent += price;
+      // A request (open, declined or expired) was never paid, so its quote is not spend.
+      if (!UNPAID_REQUEST_STATUSES.has(m.status)) grossSpent += price;
       if (m.status === "confirmed") totalSpent += price;
       if (m.checkOut.getTime() > lastStay.getTime()) lastStay = m.checkOut;
     }
@@ -123,7 +127,8 @@ export function groupCustomers(bookings: CustomerBooking[]): Customer[] {
       name: mostRecent.guestName,
       email: mostRecent.guestEmail,
       phone: mostRecent.guestPhone,
-      bookingCount: members.length,
+      // Stays, not enquiries: a request that was never paid is not a booking.
+      bookingCount: members.filter((m) => !UNPAID_REQUEST_STATUSES.has(m.status)).length,
       totalSpent,
       grossSpent,
       lastStay,

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import FeeBreakdown from "./FeeBreakdown";
 import { calcExtraGuestFee } from "@/lib/pricing-core";
 import { extraGuestFeeApplies } from "@/lib/occupancy";
+import { useEarliestCheckIn } from "@/components/booking/useEarliestCheckIn";
 
 interface Props {
   slug: string;
@@ -38,7 +39,7 @@ export default function BookingCard({
   initialGuests = "",
 }: Props) {
   const router = useRouter();
-  const today = new Date().toISOString().split("T")[0];
+  const today = useEarliestCheckIn(slug);
 
   // Seeded only from an explicit URL param — never from browser cache/autofill.
   const [checkIn, setCheckIn] = useState(initialCheckIn);
@@ -49,6 +50,8 @@ export default function BookingCard({
     return Math.min(Math.trunc(n), maxGuests);
   });
   const [availability, setAvailability] = useState<"idle" | "checking" | "available" | "unavailable">("idle");
+  // Set when the server refuses the check-in as too soon (advance notice) rather than taken.
+  const [tooSoonMessage, setTooSoonMessage] = useState("");
   const [dateError, setDateError] = useState("");
   const [rulesAgreed, setRulesAgreed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
@@ -116,7 +119,10 @@ export default function BookingCard({
     setAvailability("checking");
     fetch(`/api/availability/${slug}?checkIn=${checkIn}&checkOut=${checkOut}`, { signal: ctrl.signal })
       .then((r) => r.json())
-      .then((data) => setAvailability(data.available ? "available" : "unavailable"))
+      .then((data) => {
+        setTooSoonMessage(data.reason === "too_soon" && typeof data.message === "string" ? data.message : "");
+        setAvailability(data.available ? "available" : "unavailable");
+      })
       .catch(() => setAvailability("idle"));
     fetchDailyRates(checkIn, checkOut);
   }, [checkIn, checkOut, slug, fetchDailyRates]);
@@ -248,7 +254,7 @@ export default function BookingCard({
         {availability === "unavailable" && (
           <div className="mt-3 flex items-start gap-2 text-[12px] text-red-700 bg-red-50 border border-red-200 rounded-[10px] px-3 py-2.5">
             <i className="fa-solid fa-calendar-xmark mt-0.5 flex-shrink-0" aria-hidden="true" />
-            <span>We apologize, your selected dates are not available. Please select another date range.</span>
+            <span>{tooSoonMessage || "We apologize, your selected dates are not available. Please select another date range."}</span>
           </div>
         )}
       </div>

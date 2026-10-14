@@ -28,6 +28,7 @@ import TrustSignals  from "@/components/sections/TrustSignals";
 import FAQ           from "@/components/sections/FAQ";
 import ContactForm   from "@/components/sections/ContactForm";
 import DiscoverLipa  from "@/components/sections/DiscoverLipa";
+import NewsletterSignup from "@/components/sections/NewsletterSignup";
 import ScrollReveal  from "@/components/ui/ScrollReveal";
 
 export default async function Home() {
@@ -44,6 +45,20 @@ export default async function Home() {
         <WhyUs />
         <FAQ />
         <DiscoverLipa />
+
+        {/* ── Newsletter Signup Strip ── */}
+        <section className="py-16 bg-cream/40">
+          <div className="max-w-2xl mx-auto px-6 text-center">
+            <h2 className="font-serif font-semibold text-charcoal leading-tight mb-2" style={{ fontSize: "clamp(1.5rem,3vw,2rem)" }}>
+              Get Holiday Stay Ideas &amp; Deals
+            </h2>
+            <p className="text-charcoal/55 text-[14.5px] leading-[1.7] mb-6">
+              Occasional emails with staycation ideas and direct-booking offers. Unsubscribe anytime.
+            </p>
+            <NewsletterSignup variant="strip" source="site:homepage" className="max-w-md mx-auto" />
+          </div>
+        </section>
+
         <ContactForm />
 
         {/* ── CTA Banner ── */}

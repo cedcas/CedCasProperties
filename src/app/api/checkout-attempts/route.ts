@@ -3,6 +3,8 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { computeBookingQuote } from "@/lib/booking-quote";
+import { assertBookingPolicy, assertInstantBooking, bookingPolicyRefusalBody } from "@/lib/booking-policy";
+import { loadBookingRules } from "@/lib/booking-policy-db";
 
 /**
  * Record (or refresh) a guest's arrival on the payment screen — see
@@ -49,6 +51,25 @@ export async function POST(req: NextRequest) {
   });
   if (!quoteResult.ok) return NextResponse.json({ error: quoteResult.error }, { status: quoteResult.status });
   const q = quoteResult.quote;
+
+  // Advance notice, strictly: an attempt is what later earns the grace window at final
+  // submission, so one must never be recorded (or re-dated) for a check-in already closed.
+  const rules = await loadBookingRules(q.propertyId);
+  const policyOutcome = assertBookingPolicy({
+    checkIn: q.checkInDate,
+    policy: rules.policy,
+    now: new Date(),
+  });
+  if (!policyOutcome.ok) {
+    return NextResponse.json(bookingPolicyRefusalBody(policyOutcome), { status: 409 });
+  }
+
+  // Instant Booking off: a request never reaches the payment screen, so there is nothing
+  // to record — and an attempt must never exist that could later pass for one.
+  const instant = assertInstantBooking({ mode: rules.instantBookingMode });
+  if (!instant.ok) {
+    return NextResponse.json(bookingPolicyRefusalBody(instant), { status: 409 });
+  }
 
   const data = {
     propertyId: q.propertyId,

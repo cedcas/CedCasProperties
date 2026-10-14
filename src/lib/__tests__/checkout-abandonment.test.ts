@@ -2,7 +2,7 @@
  * Checkout-abandonment alerts: pure selection/email logic, one full cron pass over a
  * mocked Prisma, the public attempt endpoint, and the /api/bookings link. No DB, no mail.
  */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NextRequest } from "next/server";
 
 const { db, sendMail } = vi.hoisted(() => ({
@@ -216,8 +216,19 @@ const ATTEMPT_BODY = {
   paymentMethod: "gcash",
 };
 
+// The guest routes refuse a check-in before today in Manila (src/lib/booking-policy.ts),
+// so their tests pin the clock ahead of ATTEMPT_BODY's check-in. Only Date is faked.
+const pinClockBeforeStay = () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-01T04:00:00Z"));
+};
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe("POST /api/checkout-attempts", () => {
   beforeEach(() => {
+    pinClockBeforeStay();
     db.property.findUnique.mockResolvedValue(PROPERTY);
     db.propertyRate.findMany.mockResolvedValue([]);
   });
@@ -255,6 +266,7 @@ describe("POST /api/checkout-attempts", () => {
 
 describe("POST /api/bookings — checkout attempt link", () => {
   beforeEach(() => {
+    pinClockBeforeStay();
     db.property.findUnique.mockResolvedValue(PROPERTY);
     db.propertyRate.findMany.mockResolvedValue([]);
     db.booking.create.mockResolvedValue({

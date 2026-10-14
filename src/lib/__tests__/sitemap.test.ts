@@ -44,7 +44,7 @@ describe("sitemap", () => {
   it("gives fixed-copy pages no lastModified", async () => {
     loaders.getPublicListings.mockResolvedValue([{ slug: "cozy-1-bedroom", updatedAt: new Date("2026-09-01T00:00:00Z") }]);
     const map = await byPath();
-    for (const path of ["/faq", "/privacy", "/terms", "/ambassadors"]) {
+    for (const path of ["/faq", "/privacy", "/terms", "/ambassadors", "/newsletter"]) {
       expect(map.has(path), path).toBe(true);
       expect(map.get(path)!.lastModified, path).toBeUndefined();
     }

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { bookingBlocksAvailability, isOpenRequest } from "@/lib/booking-status";
 
 /**
  * Availability calendar + manual block manager.
@@ -276,7 +277,7 @@ export default function CalendarClient({
       let label: string | null = null;
 
       for (const b of data.bookings) {
-        if (b.status === "cancelled") continue;
+        if (!bookingBlocksAvailability(b.status)) continue;
         const own = eachDayKey(b.checkIn, b.checkOut);
         if (own.some((n) => nights.includes(n))) {
           own.forEach((n) => covered.add(n));
@@ -296,7 +297,9 @@ export default function CalendarClient({
     };
 
     for (const b of data.bookings) {
-      if (b.status === "cancelled") continue;
+      // Only bookings that hold dates are drawn. A request (requested / approved) holds
+      // nothing until it is paid, so showing it here would make free nights look taken.
+      if (!bookingBlocksAvailability(b.status)) continue;
       for (const key of eachDayKey(b.checkIn, b.checkOut)) {
         push(key, {
           kind: "booking",
@@ -513,7 +516,8 @@ export default function CalendarClient({
   const editableBlocks = activeBlocks.filter((b) => !b.isSystemGenerated);
   // This listing's OWN reservations. They occupy dates but are not AvailabilityBlock rows,
   // so they never appear in the blocks table below — counted here to say so explicitly.
-  const ownBookingCount = (data?.bookings ?? []).filter((b) => b.status !== "cancelled").length;
+  const ownBookingCount = (data?.bookings ?? []).filter((b) => bookingBlocksAvailability(b.status)).length;
+  const openRequestCount = (data?.bookings ?? []).filter((b) => isOpenRequest(b.status)).length;
 
   return (
     <div className="space-y-5">
@@ -1036,6 +1040,13 @@ export default function CalendarClient({
                   This listing&apos;s own {ownBookingCount} booking
                   {ownBookingCount === 1 ? "" : "s"} in this window{" "}
                   {ownBookingCount === 1 ? "is" : "are"} shown on the calendar above, not here.
+                  {openRequestCount > 0 && (
+                    <>
+                      {" "}
+                      {openRequestCount} booking request{openRequestCount === 1 ? "" : "s"} in this window{" "}
+                      {openRequestCount === 1 ? "is" : "are"} not shown: a request holds no dates until it is paid.
+                    </>
+                  )}
                 </>
               ) : (
                 <>This listing has no bookings of its own in this window.</>

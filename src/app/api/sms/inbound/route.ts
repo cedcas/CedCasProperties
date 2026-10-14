@@ -3,6 +3,7 @@ import twilio from "twilio";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/phone";
 import { sendEmail } from "@/lib/email";
+import { CLOSED_BOOKING_STATUSES } from "@/lib/booking-status";
 
 // Twilio inbound webhook handler.
 // Configure in Twilio console (Phone Numbers → Active Numbers → your number → Messaging
@@ -126,7 +127,7 @@ export async function POST(req: NextRequest) {
 
   // Find candidate bookings by phone (most-recent first, non-cancelled preferred).
   const candidates = await prisma.booking.findMany({
-    where: { guestPhone: fromE164, status: { not: "cancelled" } },
+    where: { guestPhone: fromE164, status: { notIn: [...CLOSED_BOOKING_STATUSES] } },
     orderBy: [{ checkIn: "desc" }, { id: "desc" }],
     take: 5,
   });

@@ -29,7 +29,7 @@ None
 ## DEC-002 — Availability is centralized in one service; blocking statuses are `pending` + `confirmed`
 
 Date: 2026-08-06
-Status: Active
+Status: Active — amended by DEC-028 (2026-10-12): `pending` now means a submitted GCash/BPI payment awaiting verification; an unpaid request is `requested`/`approved` and does not block
 Area: Website
 
 ### Decision
@@ -731,6 +731,75 @@ Runbook: [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
 
 ### Supersedes
 Amends [DEC-017](#dec-017--cis-build-job-compiles-the-app-only-database-sync-stays-vercel-only-and-every-route-tree-code-path-must-tolerate-a-build-time-db-outage) (its "database sync stays Vercel-only" half — the CI-isolation half stands). Updates the build-command guidance in [DEC-013](#dec-013--dev-and-production-use-separate-hostinger-databases-smtpstripeblob-stay-shared) and [DEC-022](#dec-022--unfinished-checkouts-are-recorded-before-the-booking-exists-and-alerted-after-10-minutes-via-vercel-cron-add_payment_info-is-a-funnel-step-not-a-key-event).
+
+## DEC-027 — Guest advance notice is a separate policy layer, set per listing, in Manila time; a short grace applies only at final submission
+
+Date: 2026-10-12
+Status: Active — **Owner-approved 2026-10-12; complete and live on production the same day** (PR #74 `a372f1a`: rule, migration on dev and production; PR #76 `bc3bd40`: admin Booking Settings and picker `min`). All 5 listings are set to same day with an 11:30 PM cutoff.
+Area: Website
+
+### Decision
+- **Today floor.** The server refuses a guest check-in earlier than today in `Asia/Manila`, for every payment method. Both date pickers use the Manila date.
+- **Per-listing settings.** `Property.advanceNoticeDays` (0, 1, 2, 3 or 7; default 0) and `Property.sameDayCutoffMinutes` (minutes after Manila midnight, null = none; applies only when notice is 0). The Owner chose per listing over one setting per house (2026-10-12). Defaults change nothing except the today floor.
+- **Where the rule lives.** `src/lib/booking-policy.ts`, pure and clock-injected. It is called by the three guest routes (`/api/stripe/payment-intent`, `/api/checkout-attempts`, `/api/bookings`) and the public `/api/availability/[slug]`. It is **not** in `computeBookingQuote` or `src/lib/availability.ts`.
+- **Grace.** Payment-intent and checkout-attempt calls enforce strictly. The final `POST /api/bookings` lets a guest through who reached the payment screen before a deadline and submits within 30 minutes of it (Owner-approved length), measured from the verified PaymentIntent's creation (card) or the linked `CheckoutAttempt` (GCash/BPI). The today floor has no grace.
+- **Card paid outside the grace window** follows DEC-024 policy 5: no booking, guest gets the payment reference, admin gets one alert, no automatic refund.
+
+### Reason
+- The only guard against a past check-in was the date picker, and it used the UTC date, so from 12:00 AM to 7:59 AM in Lipa it offered yesterday; the server accepted any date whose nights were free.
+- `computeBookingQuote` also prices the admin reference quote, and the availability service backs admin amendments, reactivation of cancelled bookings and the iCal export. An admin action must never be subject to guest advance notice.
+- A guest can reach payment before a cutoff and finish after it. Refusing then strands a payment already made.
+- The earliest check-in depends on the time of day, so it is served by a route and never baked into a cached page ([DEC-005](#dec-005--cache-the-query-not-the-response-a-page-cannot-set-its-own-cache-control-on-vercel)).
+
+### Implications
+- These are rules for direct bookings only. Airbnb's advance notice is configured in Airbnb; iCal feeds carry dates, never policies.
+- Any new guest route that prices or saves a stay must call `assertBookingPolicy`. Admin routes must not.
+- `assertBookingPolicy` returns a typed outcome (`ok` / `too_soon`). Instant Booking adds `requires_approval` there; callers switch on `code`.
+- Settings are edited in Admin → Edit Property → Booking Settings and validated by `parseBookingPolicyInput`: notice 0/1/2/3/7 days; cutoff every half hour from 6:00 AM to 11:30 PM or none (the Owner's first choice, 11:30 PM, set the range). The copy-to-house helper writes the same two values to the other listings in the inventory group; each changed listing gets an `AdminLog` entry.
+- The cutoff minute itself is already too late (a 10:00 cutoff closes tonight at 10:00). The grace window also covers a notice period rolling over at midnight.
+- Route tests that post a stay must pin the clock; a fixed past date is now refused.
+- Schema change ships migrate-first ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)): `20261012184848_add_property_advance_notice`, additive.
+
+### Supersedes
+None
+
+---
+
+## DEC-028 — Instant Booking is per listing; a booking request holds no dates until it is paid, and is paid through a link after approval
+
+Date: 2026-10-12
+Status: Active — Owner-approved 2026-10-09 (design) and 2026-10-12 (open decisions). **Live on production since 2026-10-13 00:49 UTC** (PR #78, merge `206dbde`; migration on dev and production). All 5 listings are On. Owner acceptance test not yet run; no listing has been switched to Off.
+Area: Website
+
+### Decision
+- **Mode per listing.** `Property.instantBookingMode`: `on` (default; the site's behaviour until now), `off` (every booking is a request the Owner approves first), `auto` (instant for trusted guests only; stored but not offered until guest verification exists).
+- **Seven statuses.** `requested`, `approved`, `pending`, `confirmed`, `declined`, `expired`, `cancelled`. `BLOCKING_BOOKING_STATUSES` stays `["pending", "confirmed"]`: a request (`requested`/`approved`) never blocks the calendar, sibling listings or the Airbnb export.
+- **Approval is permission to pay, not a hold.** Approving re-checks availability and emails a payment link. Dates are claimed, under the inventory lock ([DEC-024](#dec-024--every-write-that-claims-nights-takes-the-inventory-lock-a-booking-amendment-is-one-transaction-and-keeps-the-agreed-price)), only when the guest pays: GCash/BPI "I've Paid" → `pending`; verified card → `confirmed`.
+- **Time limits.** A request waits 24 hours for a decision; a payment link is valid 24 hours. Both end sooner at the listing's booking deadline for that check-in ([DEC-027](#dec-027--guest-advance-notice-is-a-separate-policy-layer-set-per-listing-in-manila-time-a-short-grace-applies-only-at-final-submission)). Advance notice applies to a request exactly as to a booking.
+- **Unverified payment.** A GCash/BPI booking still `pending` 24 hours after "I've Paid" raises one admin alert. Nothing is released automatically.
+- **No confirmation without payment.** The admin status control cannot approve, decline, or move an approved request to `pending`/`confirmed`. `declined` and `expired` are final.
+- **Correct, then approve.** An unapproved request may have its guests, dates or listing changed, and its total is re-quoted. A booking that already holds dates still keeps its agreed price (DEC-024 unchanged).
+- **Refund for a lost race.** Card: existing paid-but-unavailable handling. GCash/BPI: refused, guest told, `AdminLog`, one alert; the Owner refunds by hand.
+
+### Reason
+- The Owner wants to vet some stays before taking money, without blocking the calendar for guests who never pay. A request that held dates would let anyone block a house for free.
+- A submitted GCash/BPI payment must hold dates, or a guest who has paid could lose them to someone else while the payment waits to be verified (the booking #140 situation, [DEC-022](#dec-022--unfinished-checkouts-are-recorded-before-the-booking-exists-and-alerted-after-10-minutes-via-vercel-cron-add_payment_info-is-a-funnel-step-not-a-key-event)).
+- A payment link, not a card hold at request time: a hold works only for cards, ties up money for a request that may be declined, and would change payment verification for every card booking. Additional charges already use pay-by-link.
+- `Booking.status` is a string and the blocking list is an allowlist, so the new statuses needed no change to existing rows and are non-blocking by default.
+
+### Implications
+- **Amends [DEC-002](#dec-002--availability-is-centralized-in-one-service-blocking-statuses-are-pending--confirmed):** `pending` now means "GCash/BPI payment submitted, awaiting verification", never "unpaid request". The blocking list itself is unchanged.
+- Code that reads `Booking.status` must not treat "not cancelled" as "a real booking". Use `bookingBlocksAvailability`, `isOpenRequest` or `isClosedBooking` from `src/lib/booking-status.ts`.
+- The guest payment routes (`/api/stripe/payment-intent`, `/api/checkout-attempts`) refuse a listing that requires approval, so approval cannot be bypassed by calling them directly. A card intent for an approved request is created only from its payment token (`kind: "booking_payment"`).
+- A request's stored total excludes the card fee; the payment link adds it. A promo code's use is counted when the request is paid.
+- GA4: a request fires `booking_request` (not a key event). `booking_confirmed` and `purchase` fire on the payment-link page. `/pay/booking/<token>` is redacted from `page_location`.
+- New admin routes enforce `checkPermission("bookings")`. The older admin routes still check only for a session (Next #17).
+- `Booking.stripePaymentIntentId` is now unique, closing the residual race in [DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount).
+- A listing switched while a guest is mid-checkout: On → Off still takes a verified card payment, or a GCash/BPI guest who reached the payment screen within 2 hours, as an instant booking. Off → On refuses a request from a stale form and sends the guest to payment.
+- Migration `20261012223750_add_instant_booking_requests`, additive, migrate-first ([DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)).
+
+### Supersedes
+None. Amends DEC-002 (meaning of `pending`).
 
 ---
 

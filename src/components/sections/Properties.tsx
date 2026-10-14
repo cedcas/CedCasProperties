@@ -55,10 +55,19 @@ export default async function Properties() {
           );
         })()}
 
-        {/* Entry point into the staycation money page (cluster C1). The grid
-            above answers "which home"; this answers "what does a Lipa
-            staycation actually cost". */}
-        <div className="flex justify-center mt-12">
+        {/* Entry points into the two money pages: /properties (plain lodging
+            intent — the full inventory index) and /staycation (occasion-
+            flavored, "what does a Lipa staycation actually cost"). The grid
+            above only shows 6 of N listings, so /properties needed a direct
+            homepage link of its own (booking-intent SEO proposal,
+            content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md). */}
+        <div className="flex flex-wrap justify-center gap-4 mt-12">
+          <Link
+            href="/properties"
+            className="inline-flex items-center justify-center gap-2 px-7 py-3 min-h-[44px] rounded-full text-[13.5px] font-semibold border-2 border-forest bg-forest text-white hover:bg-[#2d4820] hover:border-[#2d4820] transition-all duration-250"
+          >
+            Browse all homes <i className="fa-solid fa-arrow-right text-[11px]" />
+          </Link>
           <Link
             href="/staycation"
             className="inline-flex items-center justify-center gap-2 px-7 py-3 min-h-[44px] rounded-full text-[13.5px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"

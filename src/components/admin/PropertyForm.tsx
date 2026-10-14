@@ -4,12 +4,25 @@ import { useRouter } from "next/navigation";
 import type { Property } from "@prisma/client";
 import { safeParsePricingNotes } from "@/lib/pricing-notes";
 import { SEO_DESCRIPTION_TARGET, SEO_TITLE_TARGET, stripBrandSuffix } from "@/lib/seo-metadata";
+import {
+  ADVANCE_NOTICE_DAY_CHOICES,
+  SAME_DAY_CUTOFF_CHOICES,
+  formatAdvanceNoticeDays,
+  formatCutoffMinutes,
+} from "@/lib/booking-policy";
 
 const AMENITY_OPTIONS = ["WiFi", "AC", "Parking", "TV", "Kitchen", "Pool", "Washer", "Coffee"];
 const APPROVED_PAYMENT_METHODS_TEXT =
   "GCash, BPI InstaPay (no fees), Credit/Debit Card (6% processing fee applies)";
 
-export default function PropertyForm({ property }: { property?: Property }) {
+export default function PropertyForm({
+  property,
+  houseSiblings = [],
+}: {
+  property?: Property;
+  /** Other listings in the same inventory group, for the Booking settings copy helper. */
+  houseSiblings?: { id: number; name: string }[];
+}) {
   const router = useRouter();
   const isEdit = !!property;
 
@@ -31,6 +44,11 @@ export default function PropertyForm({ property }: { property?: Property }) {
     paymentMethods: typeof safeParsePricingNotes(property?.pricingNotes).paymentMethods === "string"
       ? (safeParsePricingNotes(property?.pricingNotes).paymentMethods as string)
       : "",
+    // Booking settings — select values, so strings; "" = no cutoff.
+    advanceNoticeDays:    String(property?.advanceNoticeDays ?? 0),
+    sameDayCutoffMinutes: property?.sameDayCutoffMinutes == null ? "" : String(property.sameDayCutoffMinutes),
+    applyBookingPolicyToHouse: false,
+    instantBookingMode: property?.instantBookingMode ?? "on",
   });
   const [exportUrl, setExportUrl] = useState("");
   const [amenities, setAmenities] = useState<string[]>(
@@ -69,7 +87,19 @@ export default function PropertyForm({ property }: { property?: Property }) {
       // it on create — new properties don't have a pricingNotes row to merge into yet.
       const body = isEdit
         ? { ...form, amenities: JSON.stringify(amenities), paymentMethods: form.paymentMethods.trim() || undefined }
-        : { ...form, amenities: JSON.stringify(amenities), images: "[]", paymentMethods: undefined, seoTitle: undefined, seoDescription: undefined };
+        : {
+            ...form,
+            amenities: JSON.stringify(amenities),
+            images: "[]",
+            paymentMethods: undefined,
+            seoTitle: undefined,
+            seoDescription: undefined,
+            // Booking settings are edit-only; a new property starts on the defaults.
+            advanceNoticeDays: undefined,
+            sameDayCutoffMinutes: undefined,
+            instantBookingMode: undefined,
+            applyBookingPolicyToHouse: undefined,
+          };
       const url  = isEdit ? `/api/admin/properties/${property.id}` : "/api/admin/properties";
       const res  = await fetch(url, {
         method: isEdit ? "PUT" : "POST",
@@ -186,6 +216,66 @@ export default function PropertyForm({ property }: { property?: Property }) {
           </p>
         </div>
       </div>
+
+      {/* ── Booking settings (guest advance notice — src/lib/booking-policy.ts) ── */}
+      {isEdit && (
+        <div className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04]">
+          <h3 className="font-serif font-semibold text-charcoal mb-1">Booking Settings</h3>
+          <p className="text-[12px] text-charcoal/50 mb-5">
+            How soon before arrival a guest can book this listing on the website. Times are Lipa time.
+            This does not change Airbnb, and it does not limit bookings you edit in admin.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label htmlFor="advanceNoticeDays" className={labelCls}>Advance notice</label>
+              <select id="advanceNoticeDays" name="advanceNoticeDays" value={form.advanceNoticeDays} onChange={handle} className={inputCls}>
+                {ADVANCE_NOTICE_DAY_CHOICES.map((d) => (
+                  <option key={d} value={d}>{formatAdvanceNoticeDays(d)}</option>
+                ))}
+              </select>
+            </div>
+            {form.advanceNoticeDays === "0" && (
+              <div>
+                <label htmlFor="sameDayCutoffMinutes" className={labelCls}>Same-day cutoff</label>
+                <select id="sameDayCutoffMinutes" name="sameDayCutoffMinutes" value={form.sameDayCutoffMinutes} onChange={handle} className={inputCls}>
+                  <option value="">No cutoff</option>
+                  {SAME_DAY_CUTOFF_CHOICES.map((m) => (
+                    <option key={m} value={m}>{formatCutoffMinutes(m)}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+          <p className="text-[11.5px] text-charcoal/45 mt-3">
+            {form.advanceNoticeDays !== "0"
+              ? `Guests must book at least ${formatAdvanceNoticeDays(Number(form.advanceNoticeDays)).toLowerCase()} before check-in.`
+              : form.sameDayCutoffMinutes === ""
+                ? "Guests can book tonight at any time up to midnight."
+                : `Guests can book tonight until ${formatCutoffMinutes(Number(form.sameDayCutoffMinutes))}. After that, the earliest check-in is tomorrow.`}
+          </p>
+          <div className="mt-5 pt-5 border-t border-black/[.06]">
+            <label htmlFor="instantBookingMode" className={labelCls}>Instant Booking</label>
+            <select id="instantBookingMode" name="instantBookingMode" value={form.instantBookingMode} onChange={handle} className={`${inputCls} sm:max-w-[320px]`}>
+              <option value="on">On: guests book and pay right away</option>
+              <option value="off">Off: you approve each request first</option>
+              {form.instantBookingMode === "auto" && <option value="auto">Auto</option>}
+            </select>
+            <p className="text-[11.5px] text-charcoal/45 mt-3">
+              {form.instantBookingMode === "off"
+                ? "A guest sends a request with no payment. You approve or decline it within 24 hours; an approved guest gets a payment link valid for 24 hours. Dates are not held until the guest pays. This setting is for this listing only."
+                : "Guests book and pay on the website as they do today. This setting is for this listing only."}
+            </p>
+          </div>
+          {houseSiblings.length > 0 && (
+            <label className="flex items-start gap-2.5 cursor-pointer mt-4">
+              <input type="checkbox" name="applyBookingPolicyToHouse" checked={form.applyBookingPolicyToHouse} onChange={handle} className="w-4 h-4 mt-0.5 accent-[#335238]" />
+              <span className="text-[13px] text-charcoal/70">
+                Also apply the advance notice and cutoff to the other listings in this house: {houseSiblings.map((s) => s.name).join(", ")}
+              </span>
+            </label>
+          )}
+        </div>
+      )}
 
       {/* ── Payment Methods (pricingNotes.paymentMethods) ───────────────────── */}
       {isEdit && (

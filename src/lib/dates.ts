@@ -83,6 +83,15 @@ export function todayInManila(now: Date = new Date()): Date {
   return toUtcMidnight(new Date(now.getTime() + 8 * 60 * 60 * 1000));
 }
 
+/**
+ * `YYYY-MM-DD` for today at the properties — the `min` of a guest date picker. Not
+ * `new Date().toISOString()`: that is the UTC date, which is still yesterday in Lipa
+ * until 8:00 AM.
+ */
+export function manilaTodayKey(now: Date = new Date()): string {
+  return utcDateKey(todayInManila(now));
+}
+
 /** Shift a UTC-midnight date by whole days. Negative `n` goes backwards. */
 export function addUtcDays(d: Date, n: number): Date {
   const out = new Date(d.getTime());

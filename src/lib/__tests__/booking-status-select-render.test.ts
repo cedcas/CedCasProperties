@@ -55,4 +55,27 @@ describe("BookingStatusSelect", () => {
     expect(host.querySelector('[role="alert"]')).toBeNull();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
+
+  const mount = (status: string) => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+    act(() => root.render(createElement(BookingStatusSelect, { id: 9, status })));
+    return host;
+  };
+  const optionsOf = (host: HTMLElement) => [...host.querySelectorAll("option")].map((o) => o.value);
+
+  it("offers the same three statuses as before for an ordinary booking", () => {
+    expect(optionsOf(mount("pending"))).toEqual(["pending", "confirmed", "cancelled"]);
+  });
+
+  it("an approved request can only be cancelled here — never confirmed without payment", () => {
+    expect(optionsOf(mount("approved"))).toEqual(["approved", "cancelled"]);
+  });
+
+  it.each(["requested", "declined", "expired"])("a %s booking shows its status with nothing to change", (status) => {
+    const host = mount(status);
+    expect(host.querySelector("select")).toBeNull();
+    expect(host.textContent).toBe(status);
+  });
 });

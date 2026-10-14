@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
 import { stripQuotedReply, type ParsedInboundEmail } from "@/lib/imap";
+import { CLOSED_BOOKING_STATUSES } from "@/lib/booking-status";
 
 export type EmailReplyOutcome =
   | { kind: "matched"; bookingId: number; guestMessageId: number }
@@ -67,11 +68,12 @@ export async function processInboundEmail(parsed: ParsedInboundEmail): Promise<E
     }
   }
 
-  // Strategy 2: From email → most-recent non-cancelled booking
+  // Strategy 2: From email → most-recent booking that is still live (an open request
+  // counts: the guest may be replying to its email; a declined or expired one does not)
   const booking = await prisma.booking.findFirst({
     where: {
       guestEmail: { equals: parsed.fromEmail },
-      status: { not: "cancelled" },
+      status: { notIn: [...CLOSED_BOOKING_STATUSES] },
     },
     orderBy: [{ checkIn: "desc" }, { id: "desc" }],
     select: { id: true, guestName: true },

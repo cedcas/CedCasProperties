@@ -4,6 +4,299 @@
 
 ---
 
+## 2026-10-14 — Release dev → main: DEC-025 footer-credit closeout docs (release/dev-to-main-2026-10-14)
+
+Area: Website | Docs
+
+Status: **PR open against `main`; Owner merges.** Docs-only. The footer code itself has been live since 2026-10-06 (PR #63); this release carries the five `dev`-only docs commits (PRs #64, #65: DEC-025 marked live on main site and blog, housekeeping decisions). One conflict in `HIL_PROJECT_STATUS.md`, resolved in favour of `main`'s newer content with the DEC-025 row taken from `dev`. DEC-025 is unique on `main` (no renumbering). Back-merge `main` → `dev` needed after merge.
+
+## 2026-10-12 — Instant Booking Modes & Booking Requests (PR #78, DEC-028)
+
+Area: Website
+
+Status: **Live on production since 2026-10-13 00:49 UTC** (PR #78, merge `206dbde`; Vercel Production deployment for `206dbde` Ready; release gate ran against `u694568445_cedcasprop`; CI on the PR green: Lint, Type Check, Unit Tests, Build, Migrations). Verified live, signed out: `/api/availability/[slug]` returns `requiresApproval` (false on all 5 listings); `/pay/booking/<unknown>` is 404; `POST /api/bookings/pay/<unknown>` is `not_found`; `POST /api/admin/bookings/1/request` is 401; `/api/cron/booking-requests` is 401 without the cron secret. **All 5 listings are On, so guest behaviour is unchanged.**
+
+**Not yet done:** the Owner's acceptance test (request → correct → approve → pay by GCash and by card → decline → phone check). The merge went in before it. No listing should be switched to Off on production until it passes on a preview or dev build. No request, approval or payment-link payment has been made on production.
+
+### Outcome
+- `Property.instantBookingMode` (`on` default / `off` / `auto`, `auto` stored but not offered); set in Admin → Edit Property → Booking Settings.
+- Statuses `requested`, `approved`, `declined`, `expired` added; `BLOCKING_BOOKING_STATUSES` unchanged, so a request holds no dates.
+- Request creation in `POST /api/bookings`; the card and checkout routes refuse an approval-required listing.
+- Admin Approve / Decline (`checkPermission("bookings")`), status control limited to valid transitions, correct-then-approve with re-quote.
+- `/pay/booking/[token]` and `POST /api/bookings/pay/[token]`: dates claimed under the inventory lock on payment (GCash/BPI → `pending`, verified card → `confirmed`).
+- Vercel Cron `/api/cron/booking-requests` every 5 minutes: 24-hour expiry of requests and payment links, one-time alert for a GCash/BPI payment unverified after 24 hours.
+- Status audit fixes: admin calendar, message threading, customers, dashboard, checkout-abandonment backstop. `/pay/booking/<token>` redacted from GA4 `page_location`.
+- GA4 `booking_request` for a request; `booking_confirmed` and `purchase` fire on the payment-link page.
+- Unique index on `Booking.stripePaymentIntentId` (closes the DEC-020 residual race).
+- Tests: 2,289 unit tests pass (about 210 new). Local real-database suite: all new request and payment-link cases pass, including concurrent payers.
+
+### Migration run records
+| Target | Database | Commit | Applied (UTC) | Result |
+|---|---|---|---|---|
+| dev | `u694568445_cedcasprop_dev` | `89a4d94` | 2026-10-13 00:24:15–00:24:34 | applied, `Schema verified`, `NO DRIFT` |
+| production | `u694568445_cedcasprop` | `206dbde` | 2026-10-13 00:39:11–00:39:31 | applied, `Schema verified`, `NO DRIFT` |
+
+Migration: `20261012223750_add_instant_booking_requests` (additive: 1 `Property` column, 8 `Booking` columns, 2 unique indexes, 1 index, 1 foreign key). `89a4d94` → `206dbde` is the merge commit only. Before the production run: 0 duplicate `stripePaymentIntentId` values.
+
+Production backup before the run: `~/hil-db-backups/hil-production-20261013T003810Z.sql.gz` on the Owner's Mac (outside the repository and Dropbox, file `600`, sha256 `cd529e46d2ed1087…`). Restore-tested into a throwaway local server: all 24 tables matched production on row count. Contains guest data; **retention is the Owner's decision**.
+
+### Gotchas
+- **Merged before the production migration.** The first Production build of `206dbde` (00:32 UTC) was stopped by the release gate: `BLOCKED: migration(s) not applied`. The previous deployment kept serving and nothing was written. The migration was then applied and the Owner redeployed. This is the order the runbook warns about; the gate did its job.
+- The PR's first preview build failed the same way until the migration was on dev, then passed on redeploy.
+- Production URL: `.env` has only the dev `DATABASE_URL`. The production run read `DATABASE_URL` from `.env.bak-encode` (2026-08-06), and the command confirmed the database name with the server before writing. That file holds a working production credential.
+- `npm run test:db` has 5 failing cases in "amendment vs. reminder send", identical on `main` before this change (they fail with "This stay is in progress"). Not investigated.
+- `next dev` (Turbopack) panics with `Permission denied (os error 13)` in the agent sandbox; the local smoke test used `next build` + `next start` against a scratch database with SMTP pointed at a dead port.
+- The Mac's MariaDB accepts socket connections only; a throwaway `mariadbd` on port 33917 served as `--reference-url` and for `npm run test:migrations`.
+
+---
+
+## 2026-10-12 — Same-Day Booking & Advance Notice, Session 1: today floor and per-listing policy (PR #74, DEC-027)
+
+Area: Website
+
+Status: **Live on production since 2026-10-12** (PR #74, merge `a372f1a`, merged 21:40 UTC; Vercel Production deployment `success`; CI on `main` green). Verified live: `/api/availability/[slug]` returns the Manila-date `earliestCheckIn`; `/api/stripe/payment-intent`, `/api/checkout-attempts` and `/api/bookings` each refuse a past check-in with 409 `too_soon`; property and `/book` pages 200.
+
+**Session 2 live on production since 2026-10-12** (PR #76, merge `bc3bd40`, merged 22:00 UTC; Vercel Production deployment `success`; CI on `main` green): Admin → Edit Property → Booking Settings (advance notice; same-day cutoff every half hour 6:00 AM–11:30 PM; copy-to-house checkbox; one `AdminLog` entry per changed listing) and guest date pickers taking `min` from `/api/availability/[slug]?earliest=1`. No schema change. Owner accepted the preview and checked production in a browser.
+
+**Settings in effect:** all 5 listings are same day with an 11:30 PM cutoff, set by the Owner in admin 2026-10-12 22:05 and 22:15 UTC (5 `AdminLog` entries; values read back from the production database). The feature is complete; Instant Booking (step 2) is not started.
+
+### Outcome
+- The three guest routes refuse a check-in before today in Lipa (Asia/Manila) for every payment method; both date pickers use the Manila date instead of the UTC date.
+- `Property.advanceNoticeDays` (default 0) and `Property.sameDayCutoffMinutes` (null) added; all 5 listings hold the defaults, so the today floor is the only behaviour change.
+- `src/lib/booking-policy.ts` (pure, clock-injected); 30-minute grace at final submission; a card paid outside it takes the paid-but-not-booked path; `/api/availability/[slug]` returns `earliestCheckIn`.
+- `scripts/test-migrations.mjs` updated: it assumed the baseline was the only migration and failed CI on the first real one.
+
+### Migration run records
+| Target | Database | Commit | Applied (UTC) | Result |
+|---|---|---|---|---|
+| dev | `u694568445_cedcasprop_dev` | `467a5c2` | 2026-10-12 21:27 | applied, `Schema verified`, `NO DRIFT` |
+| production | `u694568445_cedcasprop` | `e25a563` | 2026-10-12 21:34:58–21:35:16 | applied, `Schema verified`, `NO DRIFT`; pending `[]`, failed `[]` |
+
+Migration: `20261012184848_add_property_advance_notice` (additive `ALTER TABLE Property ADD COLUMN` ×2). `467a5c2` → `e25a563` is docs only.
+
+Production backup before the run: `~/hil-db-backups/hil-production-20261012T213321Z.sql.gz` on the Owner's Mac (outside the repository and Dropbox, file `600`, sha256 `3286d34299ae3c91…`). Restore-tested into a throwaway local server: all 24 tables matched production on row count and `CHECKSUM TABLE`. Contains guest data; **retention is the Owner's decision**. Row counts unchanged after the migration (Booking 13, Property 5, AdminLog 1367, GuestMessage 78).
+
+### Gotchas
+- Local `.env` no longer has active `DEV_DATABASE_URL` / `PRODUCTION_DATABASE_URL` keys (both are commented); dev was read from `DATABASE_URL` and production from the commented line via `MIGRATE_DATABASE_URL`, without editing the file.
+- The Mac's MariaDB refuses `root@127.0.0.1:3306`, which the runbook's `--reference-url` uses. A throwaway `mariadbd` on another loopback port (`mariadb-install-db --auth-root-authentication-method=normal`) served as the reference and was deleted afterwards.
+
+---
+
+## 2026-10-10 — Booking-intent SEO copy on `/properties`/`/staycation` + homepage link; dark-pink backgrounds → homepage pink
+
+Area: Website / SEO
+
+Status: **Built, tested, not yet merged.** Owner approved both parts same-day (copy proposal `content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md`; background change requested directly).
+
+### Outcome — booking-intent copy (Part 1)
+Shipped exactly as Owner-approved, with one exception found and held rather than shipped:
+- `/properties`: fixed title `Apartments for Rent in Lipa City, Batangas` (58 rendered, was 68 — over budget), DB-count-gated description (160 / 153 chars), new H1 `Apartments & Transient Houses for Rent in Lipa City`, reworded intro paragraph (still `numberWord(count)`-derived, DEC-007).
+- `/staycation`: fixed title `Lipa City Staycation & Vacation Rental Homes` (60 rendered), H1 keeps the DB-derived count/plural pattern with a renamed prefix, one sentence appended to the existing intro.
+- **Held, not shipped:** `/staycation`'s proposed meta description. As rendered it measures 187 chars (fallback) / 213–214 chars (`count === 5`, with a real peso amount) — both well over the 160-char budget the proposal itself was supposed to respect. The proposal's own length note (159 chars) described the pre-existing copy, not the new text, which was never re-measured before Owner approval. Per the task's own rule ("stop and report rather than reword"), the description was left exactly as it was. Also found in passing: the *pre-existing, unchanged* fallback description already renders at 167 chars, over budget independently of this work — a separate, pre-existing issue, not introduced here.
+- Homepage ("Our Rentals" section) gained a second button, "Browse all homes" → `/properties`, next to the existing "See staycation options" → `/staycation`. Confirmed by grep that no direct homepage link to `/properties` existed before (the navbar's "Properties" link is the on-page anchor `/#properties`).
+- New tests: `src/lib/__tests__/properties-page.test.ts`, `src/lib/__tests__/staycation-page.test.ts`, `src/lib/__tests__/homepage-properties-link.test.ts` — title/H1/intro content and rendered-length budgets, with and without a database.
+
+### Outcome — dark-pink background → homepage pink (Part 2)
+The Owner flagged `/properties`' background as a dark pink that should match the homepage's lighter pink. Evidence: `bg-cream`/`bg-sand` (`#F5BECA`, alias tokens, same hex) is a saturated pink despite the name; `bg-offwhite` (`#FFF8FA`) is the homepage body color and the color `/staycation`/`/weddings-accommodation` already use for the same reason (their own code comments predate this task and already call out the `#F5BECA` naming trap).
+- Changed the Tailwind **class usage**, not the token definitions — `cream`/`sand` are still the right color for small accents (icon chips, hover states, admin chat UI) that were deliberately left untouched.
+- `bg-cream` → `bg-offwhite` on 7 full-page `<main>` backgrounds (`/properties`, `/about`, `/faq`, `/terms`, `/privacy`, `/ambassadors`, `/pay/[token]`) and the homepage's own `FAQ.tsx` section background.
+- **Contrast (WCAG AA):** every text/background pair measured improves after the swap (never regresses) — e.g. full-opacity `charcoal` on the old dark pink was 5.45:1, now 8.34:1 on the new background; the worst-case `charcoal/35` muted text goes 1.67:1 → 1.81:1. Some sub-AA pairs pre-dated this change and remain sub-AA after it (most `charcoal/*` opacity levels below ~80%, the `forest` link color, and the `coral` accent color, against either background) — these are a known, already-tracked gap (`HIL_PROJECT_STATUS.md`'s "main-site property-page accessibility items (contrast…)" item), not something this background-only change attempted to fix, since doing so would mean changing brand accent/link colors site-wide, which is out of this task's scope and not Owner-authorized.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 111 files / 1629 tests passed (10 new, across 3 of 3 timezone configs). `npm run build:app` could not be verified in this sandboxed git worktree — Turbopack fails on a pre-existing cross-worktree `node_modules` symlink ("Symlink node_modules is invalid, it points out of the filesystem root"), unrelated to this change and reproducible on an unmodified checkout of the same worktree.
+
+---
+
+## 2026-10-10 — Newsletter signup → Hostinger Reach
+
+Area: Website
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean, 1776 tests), committed on `feature/newsletter-signup-101026`, not yet merged.** Owner-approved 2026-10-10; to be linked from a future SMS campaign.
+
+### Outcome
+A standalone `/newsletter` page plus email-only signup strips on the homepage and in the
+footer, all backed by one `NewsletterSignup.tsx` client component (`variant="page"|"strip"`,
+`source`) and one route, `POST /api/newsletter`. No `Booking`/DB table is created — the
+contact is written directly into **Hostinger Reach** (`src/lib/hostinger-reach.ts`), HIL's
+mailing-list tool, so this ships with **no Prisma schema change**.
+- **Validation** (`src/lib/newsletter.ts`, pure/unit-tested): email required; optional
+  first name (≤50 chars) and PH mobile — the phone path reuses the existing
+  `src/lib/phone.ts` `normalizePhone()` rather than a second parser, requiring a
+  `+639XXXXXXXXX` mobile shape.
+- **Honeypot** (`company`, hidden) and a **per-IP in-memory rate limiter** (5 / 10 min,
+  same best-effort pattern as `/api/security-alert`) guard the route.
+- **UTM passthrough:** the client captures `utm_source/medium/campaign/content/term` from
+  the landing URL into `sessionStorage`, so a signup later in the same session (e.g. the
+  footer, after landing via a tagged link) still carries the original attribution; the
+  server re-whitelists/length-caps them before folding into Reach's free-text `note`
+  alongside `source` and `page`.
+- **Hostinger Reach client:** duplicate contact (409, or 422 mentioning
+  "already"/"exists"/"taken") is treated as a friendly success
+  (`alreadySubscribed: true`); a missing `HOSTINGER_REACH_API_TOKEN` never throws — 503,
+  logged as a warning with no secret value; other upstream failures/timeouts (8 s
+  `AbortController`) are 502 with a friendly message, never echoing the upstream body or
+  the token.
+- **GA4:** `generate_lead` fires on success (including `alreadySubscribed`) with
+  `{ method: "newsletter", lead_source: <source> }`, no PII — added to the Website spec's
+  GA4 events table.
+- `/newsletter` added to `sitemap.ts` (priority 0.3, yearly, no `lastModified` — fixed-copy
+  treatment, like `/privacy`/`/terms`); title/description pinned under the SERP length caps.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 120 files / 1776 tests passed (18 new in
+`src/lib/__tests__/newsletter.test.ts`, `hostinger-reach.test.ts`, `newsletter-route.test.ts`,
+`newsletter-page.test.ts`, `newsletter-signup-render.test.ts`; `sitemap.test.ts` extended for
+`/newsletter`). `npm run build:app` not exercised this session — same documented
+environment-only Turbopack/`node_modules`-symlink limitation as the 2026-10-10 `purchase`
+event session, not a code defect. No real call to the Hostinger Reach API was made from this
+session (constraint of the task); `fetch` is mocked in every test that reaches
+`subscribeToReach()`.
+
+---
+
+## 2026-10-10 — GA4 `purchase` event added alongside `booking_confirmed` (ecommerce revenue reporting fix)
+
+Area: Website / Analytics
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean), committed, not yet merged.** Owner-approved 2026-10-10.
+
+### Outcome
+A GA4 Data API reconciliation (property 532187541) found `booking_confirmed` arriving
+correctly with its custom params (14 events, `eventValue` 61,627, `Booking Ref`/`Listing`
+dimensions populated) but GA4's **built-in** `transactionId` stayed `(not set)` and
+`purchaseRevenue` stayed 0 — those fields, and the Monetization → Ecommerce purchases
+reports, are only populated by the recommended `purchase` event
+(`transaction_id`/`value`/`currency`/`items`), which had never been sent. Fix: fire
+`purchase` **alongside** `booking_confirmed` (never replacing it — continuity preserved,
+same key event):
+- **Client:** [BookingForm.tsx](HIL%20Website%20Technical%20Specification.md)'s existing
+  `booking_confirmed` effect also calls the new `trackPurchaseOnce()` from
+  `src/lib/ga4-purchase.ts` — pure param builder (`buildPurchaseParams`, with a
+  nights-unknown fallback to `quantity: 1`) plus a `sessionStorage`-backed per-`transaction_id`
+  dedup guard (`shouldSendPurchase`/`markPurchaseSent`, fails open if storage throws).
+- **Server (still OFF by default):** `src/lib/ga4-measurement-protocol.ts`'s
+  `sendBookingConfirmedMeasurementEvent` optionally queues a `purchase` event in the same
+  Measurement Protocol request when given `propertyName`/`nights` — both call sites
+  (`POST /api/bookings` Stripe auto-confirm; `PUT /api/admin/bookings/[id]`
+  `becameConfirmed`) now supply them, so if `GA4_MP_ENABLED` is ever turned on the
+  GCash/BPI admin-confirm path also reports `purchase` revenue. GA4 de-duplicates
+  `purchase` by `transaction_id`; `booking_confirmed` is a custom event and is not
+  de-duplicated.
+- Full write-up, params, and Owner verification steps: [GA4 Analytics Events → `purchase`](HIL%20Website%20Technical%20Specification.md#purchase--fired-alongside-booking_confirmed-2026-10-10).
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 105 files / 1632 tests passed (9 new in
+`src/lib/__tests__/ga4-purchase.test.ts`; 2 new in `ga4-measurement-protocol.test.ts`;
+existing `booking_confirmed`/MP tests unchanged and still pass). `npm run build:app` could
+not be exercised in this session — the worktree's `node_modules` is a symlink into a
+different workspace root, which Turbopack's sandboxed build rejects (`Symlink node_modules
+is invalid`); this is an environment limitation, not a code issue, and `tsc --noEmit`
+already covers the type-level surface `next build` would check.
+
+---
+
+## 2026-10-10 — Mickey Sleeps 11 "Groups of 12 or more" segment retitled (Stay Match false-positive fix)
+
+Area: Website / Content / Blog (Stay Match)
+
+Status: **Code complete and tested; production update pending the Owner running a new targeted script.** PR #67 (plugin v1.0.3) closed as superseded by this content fix.
+
+### Outcome
+Stay Match (blog plugin) scores an intent phrase against each property's `bestForSegments` title (3x) + body (1x). Sleeps 11's upsell segment was titled "Groups of 12 or more," so a reader's "groups of 12 or more" phrase recommended the 11-guest house for a group it can't actually fit. Retitled/reworded in `prisma/property-content/mickey-content.ts` (slug `mickey-in-lipa--family-house--sleeps-11`, property id 4):
+- Title: "Groups of 12 or more" → "Need more room? See the full house"
+- Body: now states the rate covers 9 / sleeps up to 11 / extra per-guest fee for guests 10–11, then points to the full-house configuration — no longer implying this house fits 12+.
+- `internalLinkLabel`/`internalLinkUrl` (→ the Sleeps-15 full house) unchanged.
+- Body stays number-free (no peso amount, per [DEC-007](HIL_DECISIONS.md)) and keeps the exact `"covers 9 guests"` substring so `normalizePricingProse`'s `/covers \d+(?= guests?)/gi` rewrite still applies at render time.
+
+**HIL Marketing re-scored all 31 enrolled Stay Match intents against the proposed feed: no change in recommendation for any real enrolled intent.** Only synthetic test phrases like "groups of 12 or more" stop matching Sleeps 11 — the fix is scoped to exactly the false-positive case.
+
+### What shipped vs. what's pending
+- **Shipped (this repo, committed, not pushed):** the content-module edit above; `src/lib/sleeps11-segment-fix.ts` (pure transform: finds the one segment titled exactly "Groups of 12 or more," replaces only its title/body, refuses on anything unexpected — round-trip JSON check, wrong id/slug, zero or multiple matches); unit tests in `src/lib/__tests__/sleeps11-segment-fix.test.ts`; `scripts/fix-sleeps11-segment.ts`, a dry-run-by-default CLI modeled on `scripts/fix-property-content.ts` ([DEC-016](HIL_DECISIONS.md)'s targeted-substring-replacement pattern) that asserts property id 4 + slug before writing.
+- **Not run against any database** — `bestForSegments` has no admin UI ([DEC-015](HIL_DECISIONS.md)), so production still carries the old title until the Owner runs `scripts/fix-sleeps11-segment.ts` (dry run first, then `--execute`) from an operator machine that can reach Hostinger, per [DEC-012](HIL_DECISIONS.md)/the migration runbook's reachability posture. Re-running the full Mickey seed instead would overwrite any admin edits on all three Mickey listings and was explicitly avoided.
+- **PR #67** (an earlier plugin-side fix, Stay Match v1.0.3) was closed in favor of this content-level fix.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `vitest run`: 96 files / 1554 tests passed (11 new).
+
+---
+
+## 2026-10-10 — Main-site LodgingBusiness JSON-LD: GBP hasMap/geo, LodgingBusiness type
+
+Area: Website / SEO
+
+Status: **Built, tested, not yet merged.**
+
+### Outcome
+`src/lib/local-business-schema.ts` replaces the inline `LocalBusiness` object literal in `src/app/layout.tsx` (and the matching `worksFor` stub on `/about`) with a shared `buildLocalBusinessJsonLd()`:
+- `@type` changed `LocalBusiness` → **`LodgingBusiness`** (a schema.org subtype of `LocalBusiness` — valid everywhere a `LocalBusiness` was, more specific for a short-term rental operator).
+- Added **`hasMap`** and **`geo`** pointing at the verified Google Business Profile pin ("Haven in Lipa", kgmid `/g/11vcxkyhh4`, 4.6★/11 reviews) — this node previously carried no map reference at all.
+- **`telephone`** already matched the GBP's number exactly (`+639066554415` ≡ `+63 906 655 4415`) — confirmed, not changed.
+- **`sameAs`** already matches the blog's Organization graph (`hil-seo` 1.1.8) for Facebook, Instagram, and TikTok. **Not changed:** the Airbnb listing link — the blog's Organization `sameAs` doesn't carry it, so the two sites are not yet fully aligned on this one entry; left as-is pending an explicit Owner decision (CLAUDE.md: ask before customer-visible/public claim changes).
+- **Deliberately not added:** a business-level `aggregateRating` from the GBP snapshot — it would go stale the moment a new Google review lands, the same staleness DEC-007 exists to prevent for prose.
+- The "cedcasproperties.com redirect check" referenced in the task brief was searched for across `src/`, `docs/`, and `content/seo/` and not found — nothing to drop; the domain's retirement is already recorded in `docs/HIL Commits.md`/`HIL_COMPLETION_LOG.md` as historical only.
+- 7 new unit tests (`src/lib/__tests__/local-business-schema.test.ts`).
+
+### Owner decision needed
+Keep or drop the Airbnb `sameAs` entry (`https://airbnb.com/h/fullhousebellavita`) on the main site's business node, to match the blog exactly.
+
+### Evidence
+`npm run lint`, `npm run typecheck`, `npm test` (1,542/1,542), `npm run build:app` all clean on this branch.
+
+---
+
+## 2026-10-10 — Booking/GA4 reconciliation tooling; proposed (disabled) server-side GA4 send
+
+Area: Website / Analytics
+
+Status: **Code and tests built and merged; the Measurement Protocol send stays off (`GA4_MP_ENABLED` unset).** No production data was read by this session — see Blocker below.
+
+### Outcome
+2026-10-10 HIL Marketing measured 10 `booking_confirmed` events on `haveninlipa.com` in GA4 for Aug 22 → Sep 28, 2026 (90-day window; 4 more hits were pre-DEC-021 test traffic from `dev.haveninlipa.com`/a laptop host). To let a human compare that figure against production, `scripts/reconcile-ga4-bookings.ts` lists confirmed bookings in a date range with their `HIL-<bookingId>` transaction IDs (the same format `BookingForm.tsx` sends client-side) — **read-only, prints only, excludes nothing automatically**. There is no `Booking.isTest` flag (DEC-021 proposal declined), so it only *flags* guest emails that look like a test/admin address for manual review.
+
+If the comparison finds GA4 undercounting real confirmed bookings (plausible causes: guest leaves before the "done" screen renders, ad blockers, or a GCash/BPI booking that only becomes `confirmed` later via the admin panel with no browser present at all), `src/lib/ga4-measurement-protocol.ts` is a proposed fix: a server-side GA4 Measurement Protocol `booking_confirmed` send from the two places the server itself knows a booking just became confirmed — the Stripe auto-confirm branch of `POST /api/bookings`, and the `becameConfirmed` transition in `PUT /api/admin/bookings/[id]`. It is **built, tested, and wired in, but inert**: `isGa4MpEnabled()` requires both `GA4_MP_ENABLED=true` and a `GA4_MP_API_SECRET` (an Owner-created GA4 MP API secret), and neither is set anywhere. 8 unit tests cover the disabled-by-default state, the exact request shape when enabled, and that a fetch failure never throws.
+
+**Known limitation, stated in the code comments, not hidden:** GA4 does not automatically deduplicate a server-sent hit against a client-sent one sharing the same `transaction_id` — "dedup" here means the two call sites never double-fire for the same booking, and the shared transaction ID lets a human reconciling an export filter overlaps. True automatic dedup is not implemented and would need a decision about which side wins.
+
+### Blocker — production data not read
+Per DEC-012/DEC-026, production MySQL is reachable only from an operator machine (and this change does not alter that); this session had no `PRODUCTION_DATABASE_URL` and made no attempt to use one. `scripts/reconcile-ga4-bookings.ts` is written but has **not been run against production** — the actual Aug 22 → Oct 9 reconciliation is a Next step for the Owner/operator, per the runbook pattern in [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md).
+
+### Evidence
+- New: `src/lib/ga4-measurement-protocol.ts`, `src/lib/__tests__/ga4-measurement-protocol.test.ts` (8 tests), `scripts/reconcile-ga4-bookings.ts`.
+- Changed: `src/app/api/bookings/route.ts` (Stripe auto-confirm branch), `src/app/api/admin/bookings/[id]/route.ts` (`becameConfirmed` branch) — one `sendBookingConfirmedMeasurementEvent(...)` call added to each, both no-ops while the flag is unset.
+- `npm run lint`, `npm run typecheck`, `npm test` (1,545/1,545), `npm run build:app` all clean on this branch.
+
+---
+
+## 2026-10-10 — Main-site booking-intent SEO proposal (not implemented)
+
+Area: Website / SEO
+
+Status: **Proposal only — no code changed.** Awaiting Owner approval of the exact wording.
+
+### Outcome
+2026-10-10 GSC measurement found main-site booking-intent queries ranking poorly despite all money pages being indexed: "apartment for rent lipa city" pos 28, "airbnb lipa" pos 16–38, "transient house in lipa batangas" pos 16–29. `content/seo/runs/101026/Booking_Intent_SEO_Proposal_101026.md` proposes specific title/description/H1/intro-block text for `/properties` and `/staycation` (one primary keyword per page, per SEO-DEC-012) and a missing homepage → `/properties` internal link (the homepage already links `/staycation`; the navbar's "Properties" link only goes to the on-page `/#properties` anchor, not the dedicated index page). Also fixes, as part of the same proposed titles, that `/properties`'s current rendered `<title>` is 68 characters — already over the 60-char budget the `/weddings-accommodation` page follows — independent of the keyword additions.
+
+### Not done
+No file under `src/app/properties`, `src/app/staycation`, or `src/components/sections/Properties.tsx` was touched. Per CLAUDE.md, implementation waits for the Owner's sign-off on the proposed copy.
+
+---
+
+## 2026-10-10 — Verification closures (PR #50, hil-seo 1.1.8, post 205) and Stay Match enrollment additions
+
+Area: SEO / Blog
+
+Status: **Documentation only — confirms prior work and records a prior session's WordPress writes; no code in this entry.**
+
+### Outcome
+Per the 2026-10-10 marketing-measurement brief: **PR #50** (sitemap real `lastModified` + `/ambassadors`) and **`hil-seo` 1.1.8** (blog Organization `sameAs` → `facebook.com/haveninlipa`) are confirmed live on production, closing the "merged but not independently verified live" caveat `HIL_PROJECT_STATUS.md` had been carrying since 2026-10-04 (DEC-006: a merge is not a deploy). **Post 205's SEO title paste slip is closed** — it reads "Mickey in Lipa: A Mickey-Themed Family House in Lipa" (the Owner's 2026-10-05 revision); no paste error visible as of 2026-10-10, pending the Owner's final confirmation.
+
+`content/seo/runs/101026/Stay_Match_Enrollment_101026.md` records a second Stay Match enrollment batch from the same brief: `_hil_stay_intent` set on posts 27, 602, 489, 75, 307, 763 plus a CTA+intent on scheduled posts 847–850. **This session has no WordPress credentials**, so unlike the 2026-10-04 batch's own record, this one could not independently verify the writes or fetch slugs — it records the brief's claims, adds tier/confidence/properties-shown computed by running the live plugin's scorer (v1.0.2) against this repo's real `bestForSegments` content, and explicitly flags what it could not confirm (post slugs; the specific intent text used on 847–850).
+
+### Evidence
+`docs/HIL_PROJECT_STATUS.md` updated (two rows, "Last updated" line); `content/seo/runs/101026/Stay_Match_Enrollment_101026.md` new.
+
+---
+
 ## 2026-10-06 — `prisma db push` removed from builds; version-controlled migrations with a release gate
 
 Area: Website / Deployment / Database
