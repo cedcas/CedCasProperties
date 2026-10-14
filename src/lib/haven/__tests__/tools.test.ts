@@ -69,7 +69,7 @@ describe("check_availability", () => {
 
 describe("get_quote", () => {
   it("relays computeBookingQuote's numbers verbatim and builds the booking link", async () => {
-    db.property.findFirst.mockResolvedValue({ id: 1 });
+    db.property.findFirst.mockResolvedValue({ id: 1, name: "Cozy 1BR Haven" });
     quoteApi.computeBookingQuote.mockResolvedValue({
       ok: true,
       quote: { nightlyTotal: 7000, extraGuestFee: 500, discountAmount: 0, total: 7500, dailyRates: [{}, {}] },
@@ -84,6 +84,7 @@ describe("get_quote", () => {
 
     expect(result.total).toBe(7500);
     expect(result.nights).toBe(2);
+    expect(result.name).toBe("Cozy 1BR Haven");
     expect(result.bookingLink).toBe("/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=3");
   });
 
@@ -93,6 +94,42 @@ describe("get_quote", () => {
 
     const result = await runHavenTool("get_quote", { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 50 });
     expect(result).toEqual({ error: "This property accommodates up to 5 guests." });
+  });
+});
+
+describe("get_property_details", () => {
+  it("returns structured, numeric fee fields so the model never has to guess a fee amount", async () => {
+    db.property.findFirst.mockResolvedValue({
+      slug: "cozy-1-bedroom",
+      name: "Cozy 1BR Haven",
+      description: "A cozy place.",
+      amenities: "[]",
+      amenityDetails: null,
+      propertyRules: "Standard house rules.",
+      housePolicies: null,
+      pricingNotes: null,
+      propertyFaqs: null,
+      neighborhoodPlaces: null,
+      maxGuests: 5,
+      includedGuests: 3,
+      extraGuestFeePerNight: 300,
+    });
+
+    const result = (await runHavenTool("get_property_details", { slug: "cozy-1-bedroom" })) as {
+      fees: { extraGuestFeePerNight: number; earlyCheckInPerHour: number; lateCheckoutPerHour: number };
+    };
+
+    expect(result.fees).toEqual({
+      extraGuestFeePerNight: 300,
+      earlyCheckInPerHour: 200,
+      lateCheckoutPerHour: 200,
+    });
+  });
+
+  it("reports the property-not-found error without fabricating fee data", async () => {
+    db.property.findFirst.mockResolvedValue(null);
+    const result = await runHavenTool("get_property_details", { slug: "ghost" });
+    expect(result).toEqual({ error: "Property not found." });
   });
 });
 

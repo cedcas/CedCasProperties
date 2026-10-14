@@ -7,6 +7,7 @@ import { computeBookingQuote } from "@/lib/booking-quote";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
 import { toUtcMidnight } from "@/lib/dates";
+import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import type { ToolDefinition } from "./provider";
 
@@ -144,6 +145,15 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
       pricingNotes: safeJsonParse(p.pricingNotes, null),
       propertyFaqs: safeJsonParse(p.propertyFaqs, []),
       neighborhoodPlaces: safeJsonParse(p.neighborhoodPlaces, []),
+      // Structured, numeric fee fields — so a guest question about a specific fee (early
+      // check-in/late checkout, extra guest) can be answered with a real traceable number
+      // instead of the model guessing one. Mirrors the same published figures used in
+      // src/lib/hourly-fee.ts and the occupancy fee note (never computed here).
+      fees: {
+        extraGuestFeePerNight: occupancy.extraGuestFeePerNight,
+        earlyCheckInPerHour: HOURLY_FEE_RATE,
+        lateCheckoutPerHour: HOURLY_FEE_RATE,
+      },
     };
   },
 };
@@ -222,7 +232,7 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
   handler: async ({ slug, checkIn, checkOut, guests }) => {
     const property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
-      select: { id: true },
+      select: { id: true, name: true },
     });
     if (!property) return { error: "Property not found." };
 
@@ -231,6 +241,7 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
 
     const { quote } = result;
     return {
+      name: property.name,
       nightlyTotal: quote.nightlyTotal,
       extraGuestFee: quote.extraGuestFee,
       discountAmount: quote.discountAmount,

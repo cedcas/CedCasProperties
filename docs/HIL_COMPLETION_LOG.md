@@ -4,6 +4,40 @@
 
 ---
 
+## 2026-10-14 — Haven AI polish pass: booking-link buttons, sentence-level price guard, stronger Batangueño, handoff (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+Live dev testing of H0+H1 (the prior entry below) surfaced several rough edges, fixed in
+`src/lib/haven/post-process.ts`, `tools.ts`, `system-prompt.ts`, and `chat-service.ts`:
+- **Booking-link buttons** — `collectBookingLinks()` turns every booking link a tool
+  actually produced this turn (`get_quote`, `find_stay`) into a labeled button ("Book
+  <property> · <dates>", deduped, capped at 5), instead of relying on the model to format
+  one as a markdown link (it often didn't, so replies returned `links: []`).
+- **Sentence-level price guard** — `enforcePriceClaims()` used to replace only the matched
+  ₱ amount, leaving broken fragments like "(You'll see the exact total at checkout./hour)".
+  It now replaces the whole sentence or bullet line, with a fee-vs-total-aware fallback
+  ("For that fee, please ask us via Messenger…" vs "You'll see the exact total at
+  checkout."). `get_quote`/`get_property_details` now surface a property `name` and a
+  structured `fees` object (extra-guest, early-check-in/late-checkout) so real fee numbers
+  are traceable instead of forcing every fee question into the Messenger fallback.
+- **Stronger Batangueño mode** — `btg` gained a 4-exchange few-shot block in a playful
+  Batangueña host voice, using real expressions ("ala eh", "aba'y", "ga", "nga", "ari", "ala
+  e ganoon") with placeholder-only facts so an example can never leak as real data.
+- **Explicit resolved dates, neutral address, Messenger handoff, "provisional" once** — the
+  system prompt now requires stating resolved dates explicitly, bans "pare"/"bro"/"sis" in
+  English, and requires the literal m.me/haveninlipa text for any off-topic/unknown
+  question; `ensureHandoffLink()` and `limitToOneProvisional()` back the last two with a
+  server-side check that doesn't depend on the model complying.
+- Added/extended unit tests for all of the above (`post-process.test.ts`, `tools.test.ts`,
+  `chat-service.test.ts`) and a per-property guest-split-cap assertion to
+  `find-stay-combinations.test.ts`.
+
+---
+
 ## 2026-10-14 — CI "Migrations" row-count check fixed for expand-only migrations (feature/haven-ai-h1-101426)
 
 Area: Website

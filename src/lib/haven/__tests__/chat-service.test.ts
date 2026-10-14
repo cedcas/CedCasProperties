@@ -217,6 +217,63 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     expect(call.data.costUsd).toBeGreaterThanOrEqual(0);
   });
 
+  it("returns a booking-link button from a tool result even when the model didn't write a markdown link", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check that for you.",
+        toolCalls: [{ id: "1", name: "get_quote", input: { slug: "cozy-1-bedroom", checkIn: "2026-12-24", checkOut: "2026-12-26", guests: 2 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Your total is ₱4,500 for that stay.",
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue({
+      name: "Cozy 1BR Haven",
+      total: 4500,
+      bookingLink: "/properties/cozy-1-bedroom/book?checkIn=2026-12-24&checkOut=2026-12-26&guests=2",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.links).toEqual([
+      expect.objectContaining({ href: "/properties/cozy-1-bedroom/book?checkIn=2026-12-24&checkOut=2026-12-26&guests=2" }),
+    ]);
+    expect(result.links?.[0].label).toContain("Cozy 1BR Haven");
+  });
+
+  it("adds a Messenger button for an off-topic reply even when the model wrote it as plain text", async () => {
+    providerChat.mockResolvedValue({
+      text: "That's outside what I can help with here — message us at m.me/haveninlipa for that.",
+      toolCalls: [],
+      usage: { inputTokens: 10, outputTokens: 10 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ messages: [{ role: "user", content: "What's the weather on Mars?" }] }), "1.2.3.4");
+
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "m.me/haveninlipa" }]);
+  });
+
+  it("keeps only the first 'provisional' when the model repeats it", async () => {
+    providerChat.mockResolvedValue({
+      text: "That total is provisional. Everything here is provisional until checkout.",
+      toolCalls: [],
+      usage: { inputTokens: 10, outputTokens: 10 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply?.match(/provisional/gi)).toHaveLength(1);
+  });
+
   it("masks PII before writing the transcript", async () => {
     providerChat.mockResolvedValue({
       text: "Noted, I'll follow up.",

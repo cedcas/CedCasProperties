@@ -5,7 +5,17 @@ import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
-import { extractAllowedLinks, collectToolAmounts, enforcePriceClaims, type LinkButton } from "./post-process";
+import {
+  extractAllowedLinks,
+  collectToolAmounts,
+  enforcePriceClaims,
+  collectBookingLinks,
+  dedupeLinks,
+  ensureHandoffLink,
+  limitToOneProvisional,
+  type LinkButton,
+  type ToolExchange,
+} from "./post-process";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
   havenAiActive,
@@ -75,6 +85,7 @@ async function runToolLoop(body: ChatRequestBody): Promise<ToolLoopResult> {
   let outputTokens = 0;
   let toolCalls = 0;
   const toolResultsThisTurn: unknown[] = [];
+  const toolExchangesThisTurn: ToolExchange[] = [];
   const toolNames = new Set<string>();
   let text = "";
 
@@ -92,6 +103,7 @@ async function runToolLoop(body: ChatRequestBody): Promise<ToolLoopResult> {
       toolNames.add(call.name);
       const toolResult = await runHavenTool(call.name, call.input);
       toolResultsThisTurn.push(toolResult);
+      toolExchangesThisTurn.push({ name: call.name, input: call.input, result: toolResult });
       messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(toolResult) });
     }
   }
@@ -99,8 +111,10 @@ async function runToolLoop(body: ChatRequestBody): Promise<ToolLoopResult> {
   if (!text.trim()) text = NO_ANSWER_FALLBACK;
 
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
-  const priceChecked = enforcePriceClaims(text, allowedAmounts);
-  const { reply, links } = extractAllowedLinks(priceChecked);
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(text, allowedAmounts));
+  const { reply, links: modelLinks } = extractAllowedLinks(priceChecked);
+  const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
+  const links = ensureHandoffLink(priceChecked, dedupeLinks([...modelLinks, ...bookingLinks]));
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls };
 }

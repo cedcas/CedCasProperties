@@ -806,8 +806,30 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF)
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` (same day, not a new decision — see note below).
 Area: Website
+
+### Implementation note (2026-10-14 polish pass)
+Live dev testing of H0+H1 surfaced three implementation gaps in the guardrails this decision
+already calls for, closed without changing the decision itself:
+- `enforcePriceClaims()` (`src/lib/haven/post-process.ts`) now replaces the **whole sentence
+  or bullet line** containing an unverified ₱/PHP amount, not just the number — the old
+  substring replacement could leave a grammatically broken fragment (e.g. a dangling
+  "/hour"). The replacement text is now fee-vs-total aware: a rate/fee context ("/hour",
+  "fee", "charge") gets "For that fee, please ask us via Messenger (m.me/haveninlipa)."; a
+  stay total gets the original "You'll see the exact total at checkout." `get_quote` and
+  `get_property_details` (`src/lib/haven/tools.ts`) were extended with `name` and a
+  structured `fees` object respectively so a real fee number is traceable through the same
+  allowlist whenever one exists.
+- Booking links a tool actually produced (`get_quote`, `find_stay`) are now always returned
+  as link buttons (`collectBookingLinks()`), independent of whether the model formatted one
+  as a markdown link in its prose — the prior implementation only ever surfaced a link the
+  model itself wrote out. Same with the Messenger handoff (`ensureHandoffLink()`): any
+  mention of m.me/haveninlipa, however phrased, now always produces a button.
+- `system-prompt.ts`'s Batangueño (`btg`) mode gained a placeholder-only few-shot block
+  (no real prices/dates, so an example can never leak as a fact) and the hard rules gained
+  explicit-date, neutral-address, and "provisional"-once instructions, the last backed by a
+  post-process dedupe (`limitToOneProvisional()`).
 
 ### Decision
 - **Off by default, two independent switches.** `HAVEN_AI_ENABLED` must read exactly `"true"` to turn Haven's AI mode on anywhere; anything else (unset, `"false"`, a typo) is OFF and the chat widget behaves exactly as it did before this decision — the static `chat-tree.ts` flow, unchanged. `HAVEN_AI_KILL=true` forces static even when enabled, for an incident with no deploy. Both are read in `src/lib/haven/config.ts`.
