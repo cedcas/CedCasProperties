@@ -4,6 +4,69 @@
 
 ---
 
+## 2026-10-14 — Haven AI chat mode, H0+H1 (feature/haven-ai-h1-101426, DEC-029)
+
+Area: Website
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean), committed on `feature/haven-ai-h1-101426`, not yet merged. Flag off by default (`HAVEN_AI_ENABLED` unset) — no behavior change for any guest until an Owner sets it.**
+
+### Outcome
+Adds an optional free-text LLM mode to the existing static chat widget, entirely behind
+`HAVEN_AI_ENABLED` (kill switch `HAVEN_AI_KILL`). With the flag off, behavior is
+byte-identical to before this session.
+- **`src/lib/haven/`** — provider adapter (`anthropic` default / `openai`, raw `fetch`, no
+  vendor SDK dependency); `resolveDates()` for natural-language date phrases ("this
+  weekend", "2nd Saturday of November", "Dec 24-26"), pure and Asia/Manila-anchored;
+  seven read-only, zod-validated tools (`list_properties`, `get_property_details`,
+  `check_availability`, `get_quote`, `find_stay`, `get_faq`, `resolve_dates`), each
+  calling an **existing** service — nothing in the AI path computes a price or
+  availability decision itself; the fixed persona/rules system prompt; post-generation
+  guardrails (link allowlist, price-claim enforcement against this turn's tool results);
+  PII masking before any transcript write; DB-backed rate limits (20/10 min, 100/day per
+  IP, 600/hour global) and a monthly spend cap (`HAVEN_AI_MONTHLY_CAP_USD`, default $20,
+  with a one-alert-per-month admin email); the `handleHavenChat()` orchestrator, which
+  never throws — every failure degrades to `{mode: "static"}`.
+- **`POST /api/haven/chat`** (Node runtime, 20 s race) and **`/api/cron/haven-retention`**
+  (daily Vercel Cron — 90-day transcript retention, 13-month usage retention).
+- **Widget:** `ChatWidgetServer` passes `aiEnabled` (server-computed); when on, a language
+  toggle (Auto/English/Tagalog/Batangueño) and a free-text input with a typing indicator
+  appear, persisted in `sessionStorage` with a client-generated `sessionId`; a privacy
+  note links `/privacy`. The existing topic buttons and "Talk to a Human" link are
+  unconditional — both modes coexist.
+- **GA4:** `haven_ai_message`, `haven_ai_lang_select`, `haven_ai_fallback`,
+  `haven_ai_availability_checked`, `haven_ai_booking_link_click` — all via `track()`, no
+  message text or PII.
+- **Schema:** two new, additive tables — `HavenChatUsage` (one row per guest message, for
+  rate limiting and the spend cap) and `HavenChatTranscript` (masked message content, 90-day
+  retention). Migration `20261014120000_add_haven_chat_ai`, generated via a schema-to-schema
+  diff (`prisma migrate diff --from-schema-datamodel <before> --to-schema-datamodel
+  schema.prisma --script`, no database connection). **Not yet applied to any database** —
+  ships migrate-first per the runbook; the release gate will block the build until an
+  operator applies it to dev, then production.
+- **Docs:** [DEC-029](HIL_DECISIONS.md); [Haven AI Chat](HIL%20Website%20Technical%20Specification.md#haven-ai-chat)
+  in the Website spec; env vars in both `CLAUDE.md` and the Website spec's Environment
+  Variables table; a new "Haven, Our Chat Assistant" section in `/privacy`.
+- **Not in scope for H1 (by design):** no write action — booking creation, payment, admin
+  mutation — is exposed as a tool. Payment, booking-creation, Stripe, and admin code are
+  untouched. Next: H2 (lead capture/inquiry handoff) and a private, read-only admin Haven
+  mode behind `/admin`.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `npx vitest run`: full suite green (177 files / 2,634
+tests, ~290 of them new Haven AI tests across 11 files: `dates`, `masking`,
+`post-process`, `find-stay-combinations`, `provider`, `rate-limit`, `config`, `tools`,
+`chat-service`, `retention`, `no-public-env`). Covers: flag off/kill → static; request
+validation; rate limits; monthly-cap fallback and the one-alert-per-month dedupe; date
+resolver cases including year rollover and the Manila UTC-16:00 timezone edge;
+`find_stay` single-property and combination results with inventory-group exclusion; the
+price post-check and link allowlist; PII masking; provider swap (anthropic ↔ openai); a
+provider error falling back to static; and that no Haven AI source file reads a
+`NEXT_PUBLIC_*` env var. `npm run build:app` not exercised (no DB connection permitted for
+this task; the migration gate needs a database). No real call to Anthropic or OpenAI was
+made — `fetch` is mocked in every provider test.
+
+---
+
 ## 2026-10-14 — Release dev → main: DEC-025 footer-credit closeout docs (release/dev-to-main-2026-10-14)
 
 Area: Website | Docs

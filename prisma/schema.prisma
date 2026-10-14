@@ -498,3 +498,40 @@ model AdminLog {
   metadata  String?    @db.Text // JSON extra context
   createdAt DateTime   @default(now())
 }
+
+// Haven AI (H0+H1) — behind HAVEN_AI_ENABLED, default off. See src/lib/haven/ and DEC-029.
+// One row per guest message (usage summed across any internal tool-call rounds) — a plain
+// row count is therefore also the message count the rate limiter checks (rate-limit.ts).
+model HavenChatUsage {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  sessionId    String // client-generated UUID; not a FK, purely for grouping/debugging
+  ipHash       String // sha256(ip + HAVEN_IP_SALT) — never the raw IP
+  provider     String // "anthropic" | "openai"
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Decimal  @db.Decimal(10, 6)
+  toolCalls    Int      @default(0)
+  outcome      String // "ai" | "static" | "error"
+  reason       String? // "cap" | "error" | "kill" | "off" | "rate_limit" | null
+
+  @@index([createdAt])
+  @@index([ipHash, createdAt])
+}
+
+// One row per chat message (guest or Haven), masked before storage. 90-day retention via
+// /api/cron/haven-retention. sessionId is a client-generated UUID, not a FK — a transcript
+// must survive even if nothing else about the session is kept.
+model HavenChatTranscript {
+  id        Int      @id @default(autoincrement())
+  sessionId String
+  createdAt DateTime @default(now())
+  lang      String // "en" | "tl" | "btg" | "auto"
+  role      String // "user" | "assistant"
+  content   String   @db.Text // masked: emails, PH phone numbers, card-like numbers stripped before this is ever written
+  toolNames String?  @db.Text // JSON array of tool names the assistant invoked this turn
+
+  @@index([sessionId])
+  @@index([createdAt])
+}

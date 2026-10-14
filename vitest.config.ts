@@ -15,15 +15,25 @@ import path from "node:path";
  * calendar dates, and the classic failure mode is code that looks correct on a UTC server
  * and shifts by a day for a US admin. Pinning TZ per project makes that regression fail
  * loudly instead of depending on where the test happens to run.
+ *
+ * `server-only` is aliased to an empty stub (test/stubs/server-only.ts): the real package
+ * unconditionally throws on import and relies on webpack/Next.js swapping in a no-op for
+ * server bundles — a substitution plain-Node Vitest never performs. Without the alias, any
+ * file that correctly `import`s it for production (keeping a secret out of the client
+ * bundle) would throw under every test, not just the ones that shouldn't run server-only
+ * code client-side.
  */
+const ALIAS = {
+  "@": path.resolve(__dirname, "./src"),
+  "server-only": path.resolve(__dirname, "./test/stubs/server-only.ts"),
+};
+
 export default defineConfig({
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "./src") },
-  },
+  resolve: { alias: ALIAS },
   test: {
     projects: [
       {
-        resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+        resolve: { alias: ALIAS },
         test: {
           name: "tz-chicago",
           include: ["src/**/*.test.ts"],
@@ -31,7 +41,7 @@ export default defineConfig({
         },
       },
       {
-        resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+        resolve: { alias: ALIAS },
         test: {
           name: "tz-utc",
           include: ["src/**/*.test.ts"],
@@ -39,7 +49,7 @@ export default defineConfig({
         },
       },
       {
-        resolve: { alias: { "@": path.resolve(__dirname, "./src") } },
+        resolve: { alias: ALIAS },
         test: {
           name: "tz-manila",
           include: ["src/**/*.test.ts"],
