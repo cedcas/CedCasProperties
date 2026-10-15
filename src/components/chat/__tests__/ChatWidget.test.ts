@@ -15,9 +15,11 @@ import { chatTree } from "@/lib/chat/chat-tree";
 
 /**
  * Rendered-behaviour regression for the owner's chat-widget UX feedback: the 7 static
- * topic chips buried Haven's AI replies. Static mode (flag off, or a turn that fell back
- * to the tree) must stay byte-for-byte what it was before this change — only an actual
- * AI-mode turn (`{mode: "ai"}`) collapses the chips and adds the persistent Messenger link.
+ * topic chips buried Haven's welcome message and every reply. Static mode (flag off)
+ * must stay byte-for-byte what it was before this change. With the AI flag on, the
+ * chips must start collapsed behind a "Topics" toggle from the very first render —
+ * including the static-tree welcome message — regardless of whether the latest reply
+ * actually came from the AI, and the "Talk to a Human" Messenger link is always visible.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -77,7 +79,36 @@ describe("ChatWidget — static mode (flag off)", () => {
 });
 
 describe("ChatWidget — AI mode", () => {
-  it("collapses the topic chips behind a Topics toggle once an AI reply lands, and exposes a persistent Talk to a Human link", async () => {
+  it("first render (before any message) shows the Topics toggle, no chip buttons, and a persistent Talk to a Human link", () => {
+    const host = mount(true);
+    openChat(host);
+
+    const labels = chipLabels(host);
+    expect(labels).toContain("Topics");
+    for (const label of ROOT_TOPIC_LABELS) {
+      expect(labels).not.toContain(label);
+    }
+
+    const talkLink = [...host.querySelectorAll("a")].find((a) =>
+      a.textContent?.includes("Talk to a Human")
+    );
+    expect(talkLink?.getAttribute("href")).toBe("https://m.me/haveninlipa");
+  });
+
+  it("tapping Topics expands all 7 chips, and a chip tap still navigates the tree", () => {
+    const host = mount(true);
+    openChat(host);
+
+    const topicsToggle = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Topics")!;
+    act(() => topicsToggle.click());
+
+    const labels = chipLabels(host);
+    for (const label of ROOT_TOPIC_LABELS) {
+      expect(labels).toContain(label);
+    }
+  });
+
+  it("collapses the topic chips again once the guest sends a message, and renders a distinct AI bubble on reply", async () => {
     const fetchMock = vi.fn(async () => ({
       json: async () => ({
         mode: "ai",
@@ -89,6 +120,10 @@ describe("ChatWidget — AI mode", () => {
 
     const host = mount(true);
     openChat(host);
+
+    // Expand, then send a message — collapse should re-engage.
+    const topicsToggle = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Topics")!;
+    act(() => topicsToggle.click());
     await sendFreeText(host, "Do you have anything free this weekend?");
 
     const labels = chipLabels(host);
@@ -105,14 +140,9 @@ describe("ChatWidget — AI mode", () => {
     const havenLabel = [...host.querySelectorAll("span")].find((s) => s.textContent === "Haven");
     expect(havenLabel).toBeTruthy();
     expect(havenLabel!.nextElementSibling?.className).toContain("bg-cream");
-
-    // Tapping "Topics" still works as today.
-    const topicsToggle = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Topics")!;
-    act(() => topicsToggle.click());
-    expect(chipLabels(host)).toContain("Our Properties");
   });
 
-  it("a fallback turn renders exactly like static mode — chips full, no persistent Messenger link", async () => {
+  it("a fallback turn still keeps the root 7 chips collapsed, with the Messenger link present", async () => {
     const fetchMock = vi.fn(async () => ({
       json: async () => ({ mode: "static", reason: "rate_limit" }),
     }));
@@ -123,14 +153,14 @@ describe("ChatWidget — AI mode", () => {
     await sendFreeText(host, "Hello?");
 
     const labels = chipLabels(host);
+    expect(labels).toContain("Topics");
     for (const label of ROOT_TOPIC_LABELS) {
-      expect(labels).toContain(label);
+      expect(labels).not.toContain(label);
     }
-    expect(labels).not.toContain("Topics");
 
     const talkLink = [...host.querySelectorAll("a")].find((a) =>
       a.textContent?.includes("Talk to a Human") && a.getAttribute("href") === "https://m.me/haveninlipa"
     );
-    expect(talkLink).toBeUndefined();
+    expect(talkLink).toBeTruthy();
   });
 });

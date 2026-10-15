@@ -4,6 +4,37 @@
 
 ---
 
+## 2026-10-14 — Haven AI chat-widget bug fix: topic chips expanded on the welcome screen (fix/haven-ai-guardrails-101426, PR #84)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on
+`fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Owner screenshot on `dev` (after PR #83 merged) showed that with the AI flag on, the
+welcome screen still rendered all 7 topic chips expanded, pushing the conversation down —
+the collapse was gated on `aiModeActive = aiEnabled && lastMode === "ai"`, but the welcome
+message always comes from the static tree (`lastMode: "tree"`), so chips started expanded
+on first render and stayed expanded after any static-tree turn. Fixed in
+`ChatWidget.tsx`: the topic-chip collapse-behind-"Topics"-toggle and the persistent "Talk
+to a Human" (`m.me/haveninlipa`) link now gate on `aiEnabled` alone, not `lastMode` —
+collapsed by default from the very first render (including a restored `sessionStorage`
+session), regardless of whether the latest reply was AI-generated or static. Topics
+re-collapse after a chip tap (already did) and now also after the guest sends a free-text
+message (`setTopicsOpen(false)` added to `handleFreeTextSubmit`). `aiModeActive` is
+unchanged and still gates the AI-reply scroll-to-top-of-message behavior, which is
+specifically about "did the latest message come from the AI" rather than "is AI mode on."
+Flag-off (`aiEnabled` false) is untouched — renders exactly as before.
+
+Tests: `ChatWidget.test.ts` extended — AI mode now asserts the Topics toggle and no chip
+buttons on first render (before any message) with the Messenger link present, that tapping
+Topics expands all 7, that chips collapse again after a guest message with the AI bubble
+still rendering correctly, and that a static-fallback turn mid-conversation keeps the root
+7 chips collapsed with the Messenger link still present (previously asserted the opposite).
+
+---
+
 ## 2026-10-14 — Haven AI owner guardrails and facts: capacity, payment, early-check-in/late-checkout fee, quiet hours, karaoke, plus dadalaw/English/name/date-statement fixes (fix/haven-ai-guardrails-101426, DEC-029)
 
 Area: Website
