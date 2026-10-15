@@ -1,6 +1,7 @@
 import "server-only";
 import { formatStayRangeShort, toUtcMidnight } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
+import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import type { HavenLang } from "./system-prompt";
 
 /**
@@ -82,23 +83,51 @@ export function collectToolAmounts(toolResults: unknown[]): Set<number> {
 
 // ── Price guard: whole-sentence / whole-bullet-line replacement ────────────────
 
-const PESO_AMOUNT_SOURCE = String.raw`(?:₱|PHP\s?)\s?\d[\d,]*(?:\.\d{1,2})?`;
+/**
+ * Recognizes ₱/PHP-prefixed amounts, plus the other formats guests and the owner-fact
+ * prompt sometimes use for the SAME number — a bare "P" prefix right before a digit
+ * (never mid-word, via the negative lookbehind, so "Top200" doesn't match) and a
+ * "<number> pesos" suffix with no symbol at all (e.g. "P200", "200 pesos").
+ */
+const PESO_PREFIX = String.raw`(?:₱|PHP\s?|(?<![A-Za-z])P(?=\d))`;
+const PESO_AMOUNT_SOURCE = String.raw`${PESO_PREFIX}\s?\d[\d,]*(?:\.\d{1,2})?|\d[\d,]*(?:\.\d{1,2})?\s*pesos?\b`;
 /** Fresh global regex per use — avoids `lastIndex` state bugs from a shared `/g` instance. */
 function pesoAmountRegex(): RegExp {
   return new RegExp(PESO_AMOUNT_SOURCE, "gi");
 }
 
+/**
+ * The model showing its own multiplication/sum ("₱2,800 × 2 = ₱5,600") is never allowed,
+ * even on the rare chance the resulting number happens to be right — Haven may only ever
+ * relay a total `get_quote`/`find_stay` returned, never arithmetic it performed itself
+ * (see system-prompt.ts and the DEC-029 "a Thu→Sat total read as nights × one rate" bug).
+ * No `g` flag, so this is safe to keep as a shared module-level instance.
+ */
+const PRICE_ARITHMETIC_RE = new RegExp(`(?:${PESO_AMOUNT_SOURCE})\\s*[x×*]\\s*\\d+`, "i");
+
 export const FALLBACK_TOTAL_TEXT = "You'll see the exact total at checkout.";
 export const FALLBACK_FEE_TEXT = `For that fee, please ask us via Messenger (${MESSENGER_HREF}).`;
+/**
+ * Unlike `FALLBACK_FEE_TEXT`, this fee is a published owner fact Haven always knows the
+ * answer to (see owner-facts.ts) — a hallucinated number for an early check-in/late
+ * checkout question should fall back to restating the real rate, never to "ask us via
+ * Messenger", which wrongly implies Haven doesn't know.
+ */
+export const FALLBACK_HOURLY_FEE_TEXT = `Early check-in and late checkout are ₱${HOURLY_FEE_RATE}/hour, subject to availability and confirmation with the team.`;
 
 /** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. */
 const FEE_CONTEXT = /\/\s*(?:hour|hr|night|day|guest)\b|\bper\s+(?:hour|hr|night|day|guest)\b|\bfee\b|\bcharges?\b|\bcharged\b/i;
+/** Early check-in/late checkout context, in any of the owner-approved phrasings. */
+const HOURLY_FEE_CONTEXT_RE =
+  /\/\s*(?:hr|hour)\b|\bper\s+hour\b|\ban\s+hour\b|\bkada\s+oras\b|\bbawat\s+oras\b|\bearly\s*check-?in\b|\blate\s*check-?out\b|\bmaagang\s+check-?in\b/i;
 
 function classifyFallback(unit: string): string {
+  if (HOURLY_FEE_CONTEXT_RE.test(unit)) return FALLBACK_HOURLY_FEE_TEXT;
   return FEE_CONTEXT.test(unit) ? FALLBACK_FEE_TEXT : FALLBACK_TOTAL_TEXT;
 }
 
 function unitHasDisallowedAmount(unit: string, allowedAmounts: Set<number>): boolean {
+  if (PRICE_ARITHMETIC_RE.test(unit)) return true;
   let disallowed = false;
   unit.replace(pesoAmountRegex(), (match) => {
     const numeric = Number(match.replace(/[^\d.]/g, ""));
@@ -365,6 +394,18 @@ export function shortenPropertyNamesInText(text: string, exchanges: ToolExchange
   return out;
 }
 
+/**
+ * True when a `find_amenity` call this turn came back empty — the independent backstop
+ * for the amenity rule in owner-facts.ts: if nothing was found anywhere, Haven must always
+ * surface the Messenger handoff rather than leaving the guest with no next step.
+ */
+export function needsAmenityHandoff(exchanges: ToolExchange[]): boolean {
+  return exchanges.some(({ name, result }) => {
+    if (name !== "find_amenity") return false;
+    return asRecord(result).found === false;
+  });
+}
+
 // ── Messenger handoff safety net ────────────────────────────────────────────
 
 const MESSENGER_MENTION = /m\.me\/haveninlipa/i;
@@ -435,6 +476,35 @@ const BATANGUENO_MARKER = /ala eh|aba'y|\bire\b|\bnga\b|\bari\b|\bare\b|(?<!\boo
 export function ensureBatanguenoMarker(text: string): string {
   if (BATANGUENO_MARKER.test(text)) return text;
   return `Ala eh, ${text}`;
+}
+
+// ── Tagalog-mode Batangueño-particle guard ──────────────────────────────────
+
+/**
+ * "ga"/"baga" as a yes/no question particle, and "ari"/"ire" as "this/here", are
+ * Batangueño-specific markers (see system-prompt.ts's LANGUAGE_RULES.btg) that must stay
+ * confined to `btg` mode — a plain Tagalog reply (`lang: "tl"`, or `"auto"` mirroring a
+ * Tagalog-speaking guest) must not read as Batangueño. The "Oo ga"/"Oo baga" misuse
+ * (a bare affirmation, not a question) is left alone here, same as the btg-mode marker
+ * check — converting it would produce the nonsensical "Oo ba".
+ */
+const GA_QUESTION_PARTICLE_RE = /(?<!\boo\s)\bga\b/gi;
+const BAGA_RE = /(?<!\boo\s)\bbaga\b/gi;
+const ARI_IRE_RE = /\b(?:ari|ire)\b/gi;
+
+/**
+ * Converts a leaked Batangueño particle back to standard Tagalog when the effective reply
+ * language is plain Tagalog — `lang: "tl"` always, or `"auto"` whenever the turn isn't in
+ * English (`isEnglish`, the same test `stripTagalogWordsInEnglish` is gated on). A no-op
+ * for `"en"` and `"btg"` (where these markers are correct, see `ensureBatanguenoMarker`).
+ */
+export function stripBatanguenoFromTagalog(text: string, lang: HavenLang, isEnglish: boolean): string {
+  if (lang === "btg" || lang === "en") return text;
+  if (lang === "auto" && isEnglish) return text;
+  return text
+    .replace(BAGA_RE, (m) => capitalizeLike(m, "ba"))
+    .replace(GA_QUESTION_PARTICLE_RE, (m) => capitalizeLike(m, "ba"))
+    .replace(ARI_IRE_RE, (m) => capitalizeLike(m, "ito"));
 }
 
 // ── Terms-of-address guard ───────────────────────────────────────────────────

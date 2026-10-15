@@ -33,6 +33,32 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  describe("pricing arithmetic ban", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("forbids multiplying or summing a nightly rate itself", () => {
+      expect(prompt).toMatch(/never multiply, sum, or otherwise do arithmetic/i);
+      expect(prompt).toMatch(/nights? ×.*nightly rate|nights.*rate/i);
+    });
+
+    it("says pricePerNight may only be stated as a 'from' figure, never multiplied", () => {
+      expect(prompt).toMatch(/from ₱X\/night/);
+    });
+
+    it("says the only total allowed is the one get_quote/find_stay returned this turn", () => {
+      expect(prompt).toMatch(/get_quote or find_stay returned THIS turn/);
+    });
+  });
+
+  describe("early check-in/late checkout fee", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("forbids computing a total for a specific number of hours, stating only the flat rate", () => {
+      expect(prompt).toMatch(/never compute a total peso amount for a specific number of hours/i);
+      expect(prompt).toMatch(/always state the flat ₱200\/hour rate/i);
+    });
+  });
+
   describe("btg mode", () => {
     const prompt = buildHavenSystemPrompt("btg");
 

@@ -6,7 +6,7 @@ import { getPropertyConflicts, getInventoryScopeConflicts, formatConflictRange }
 import { computeBookingQuote } from "@/lib/booking-quote";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
-import { toUtcMidnight, addUtcDays } from "@/lib/dates";
+import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import type { ToolDefinition } from "./provider";
@@ -29,6 +29,19 @@ function safeJsonParse<T>(text: string | null | undefined, fallback: T): T {
 
 function bookingLink(slug: string, checkIn: string, checkOut: string, guests: number): string {
   return `/properties/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`;
+}
+
+/**
+ * Per-night (date, weekday, rate) rows from a quote's own `dailyRates` — so Haven can
+ * optionally show a stay's nightly breakdown (e.g. a weekday vs. weekend rate) without
+ * ever having to add the nights up itself (DEC-029 — see system-prompt.ts's ban on the
+ * model multiplying/summing rates). Filters out any entry missing a `date` defensively;
+ * every real `getDailyRates` row has one, this only guards a malformed input.
+ */
+function dailyRateBreakdown(dailyRates: { date: string; rate: number }[]): { date: string; weekday: string; rate: number }[] {
+  return dailyRates
+    .filter((d) => typeof d.date === "string")
+    .map((d) => ({ date: d.date, weekday: formatStayDate(d.date, { weekday: "long" }), rate: d.rate }));
 }
 
 export interface HavenToolSpec<Args = unknown> {
@@ -247,6 +260,9 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
       discountAmount: quote.discountAmount,
       total: quote.total,
       nights: quote.dailyRates.length,
+      // Per-night (date, weekday, rate) rows — state the `total` above for the stay; never
+      // multiply/sum these rows yourself (see system-prompt.ts).
+      perNight: dailyRateBreakdown(quote.dailyRates),
       bookingLink: bookingLink(slug, checkIn, checkOut, guests),
     };
   },
@@ -413,7 +429,11 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
               name: p.name,
               guests: combo.guestSplit[i],
               quote: quoteResult.ok
-                ? { total: quoteResult.quote.total, nightlyTotal: quoteResult.quote.nightlyTotal }
+                ? {
+                    total: quoteResult.quote.total,
+                    nightlyTotal: quoteResult.quote.nightlyTotal,
+                    perNight: dailyRateBreakdown(quoteResult.quote.dailyRates),
+                  }
                 : null,
               bookingLink: bookingLink(p.slug, checkIn, checkOut, combo.guestSplit[i]),
             };
@@ -577,6 +597,50 @@ const getFaqTool: HavenToolSpec<z.infer<typeof getFaqSchema>> = {
   },
 };
 
+// ── find_amenity ──────────────────────────────────────────────────────────────
+
+const findAmenitySchema = z.object({ term: z.string().min(1).max(100) });
+
+/**
+ * Searches EVERY public property's amenities + amenityDetails for one item (karaoke,
+ * videoke, pool, grill, etc.) — so the model never has to ask "which house?" before it
+ * knows whether we have something at all, and never falls back to inferring equipment
+ * from marketing/description copy (DEC-029 addendum — see owner-facts.ts).
+ */
+const findAmenityTool: HavenToolSpec<z.infer<typeof findAmenitySchema>> = {
+  definition: {
+    name: "find_amenity",
+    description:
+      "Search ALL public properties' amenities/amenityDetails for a specific item (e.g. " +
+      "karaoke, videoke, pool, grill). ALWAYS use this for an amenity/equipment question " +
+      "instead of asking which house has it, and never infer equipment from marketing copy.",
+    inputSchema: {
+      type: "object",
+      properties: { term: { type: "string", description: "The amenity/equipment the guest asked about, e.g. 'karaoke'." } },
+      required: ["term"],
+      additionalProperties: false,
+    },
+  },
+  schema: findAmenitySchema,
+  handler: async ({ term }) => {
+    const properties = await prisma.property.findMany({
+      where: { isActive: true, pricePerNight: { gt: 0 } },
+      select: { slug: true, name: true, amenities: true, amenityDetails: true },
+    });
+
+    const needle = term.trim().toLowerCase();
+    const matches: { slug: string; name: string }[] = [];
+    for (const p of properties) {
+      const amenities = safeJsonParse<string[]>(p.amenities, []);
+      const amenityDetails = safeJsonParse<unknown[]>(p.amenityDetails, []);
+      const haystack = [...amenities, ...amenityDetails.map((d) => JSON.stringify(d))].join(" | ").toLowerCase();
+      if (haystack.includes(needle)) matches.push({ slug: p.slug, name: p.name });
+    }
+
+    return matches.length > 0 ? { found: true, properties: matches } : { found: false, properties: [] };
+  },
+};
+
 // ── Registry ───────────────────────────────────────────────────────────────
 
 /** Type-erased storage shape — every tool's handler is called only after its own `schema`
@@ -604,6 +668,7 @@ export const HAVEN_TOOLS: HavenToolEntry[] = [
   defineTool(findStayTool),
   defineTool(checkEarlyLateTool),
   defineTool(getFaqTool),
+  defineTool(findAmenityTool),
 ];
 
 export function getToolDefinitions(): ToolDefinition[] {

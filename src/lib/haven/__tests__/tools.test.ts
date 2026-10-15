@@ -6,7 +6,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { db, listingsApi, availabilityApi, quoteApi } = vi.hoisted(() => ({
-  db: { property: { findFirst: vi.fn() } },
+  db: { property: { findFirst: vi.fn(), findMany: vi.fn() } },
   listingsApi: { getPublicListings: vi.fn(), getPublicListingGroups: vi.fn() },
   availabilityApi: {
     getPropertyConflicts: vi.fn(),
@@ -98,6 +98,78 @@ describe("get_quote", () => {
 
     const result = await runHavenTool("get_quote", { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 50 });
     expect(result).toEqual({ error: "This property accommodates up to 5 guests." });
+  });
+
+  it("includes a per-night (date, weekday, rate) breakdown alongside the total, for a Thu→Sat stay spanning a weekend rate", async () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, name: "Spacious 2BR" });
+    quoteApi.computeBookingQuote.mockResolvedValue({
+      ok: true,
+      quote: {
+        nightlyTotal: 6300,
+        extraGuestFee: 0,
+        discountAmount: 0,
+        total: 6300,
+        dailyRates: [
+          { date: "2026-11-19", rate: 2800 },
+          { date: "2026-11-20", rate: 3500 },
+        ],
+      },
+    });
+
+    const result = (await runHavenTool("get_quote", {
+      slug: "spacious-2-bedroom",
+      checkIn: "2026-11-19",
+      checkOut: "2026-11-21",
+      guests: 4,
+    })) as { total: number; perNight: Array<{ date: string; weekday: string; rate: number }> };
+
+    expect(result.total).toBe(6300);
+    expect(result.perNight).toEqual([
+      { date: "2026-11-19", weekday: "Thursday", rate: 2800 },
+      { date: "2026-11-20", weekday: "Friday", rate: 3500 },
+    ]);
+    // The total is the SUM of the per-night rates, never one night's rate × night count.
+    expect(result.total).toBe(result.perNight.reduce((sum, d) => sum + d.rate, 0));
+  });
+});
+
+describe("find_amenity", () => {
+  it("reports which properties have an amenity, searching amenities and amenityDetails across all properties", async () => {
+    db.property.findMany.mockResolvedValue([
+      { slug: "cozy-1-bedroom", name: "Cozy 1BR", amenities: JSON.stringify(["WiFi", "Parking"]), amenityDetails: null },
+      {
+        slug: "mickey-full",
+        name: "Mickey Full House",
+        amenities: JSON.stringify(["WiFi"]),
+        amenityDetails: JSON.stringify([{ name: "Karaoke machine" }]),
+      },
+    ]);
+
+    const result = (await runHavenTool("find_amenity", { term: "karaoke" })) as {
+      found: boolean;
+      properties: Array<{ slug: string }>;
+    };
+
+    expect(result.found).toBe(true);
+    expect(result.properties).toEqual([{ slug: "mickey-full", name: "Mickey Full House" }]);
+  });
+
+  it("reports not found when no property's amenities mention the term", async () => {
+    db.property.findMany.mockResolvedValue([
+      { slug: "cozy-1-bedroom", name: "Cozy 1BR", amenities: JSON.stringify(["WiFi"]), amenityDetails: null },
+    ]);
+
+    const result = (await runHavenTool("find_amenity", { term: "jacuzzi" })) as { found: boolean; properties: unknown[] };
+    expect(result).toEqual({ found: false, properties: [] });
+  });
+
+  it("is case-insensitive and does not require asking which house first", async () => {
+    db.property.findMany.mockResolvedValue([
+      { slug: "b38", name: "Mickey", amenities: JSON.stringify(["Videoke Machine"]), amenityDetails: null },
+    ]);
+
+    const result = (await runHavenTool("find_amenity", { term: "VIDEOKE" })) as { found: boolean };
+    expect(result.found).toBe(true);
   });
 });
 

@@ -32,7 +32,7 @@ export function buildOwnerFactsPrompt(): string {
     "- Payment: full payment is due at the time of booking. There is no half payment and no down payment/deposit to reserve dates — the guest's full total is charged/paid up front via GCash, BPI InstaPay, or card, per the site's own payment methods.",
     `- Early check-in / late checkout: ₱${HOURLY_FEE_RATE} per hour, the same rate for every listing, always subject to availability and confirmation with the team (never a guaranteed yes). Use the property's own standard check-in/check-out time when you have it from a tool result.`,
     "- Quiet hours are 10:00 PM to 8:00 AM at every listing — the same house rule everywhere, so answer it directly without asking which house. Other rules that are the same everywhere: no pets, no smoking inside, no parties/events without host approval. When a rule genuinely differs by house (e.g. check-in time), say so and name the difference instead of asking which house first.",
-    "- Karaoke/videoke and other specific equipment: answer ONLY from a property's amenities/amenityDetails (a get_property_details tool result this turn). Marketing phrases like \"a karaoke-and-lechon dinner\" describe an experience, not confirmed equipment — never infer equipment from that kind of copy. If the amenities don't list it, say you're not sure and the team will confirm via Messenger, and remind the guest quiet hours still apply.",
+    "- Karaoke/videoke/pool/grill and other specific equipment: call find_amenity with the item — it searches every property's amenities/amenityDetails for you, so never ask the guest which house first. Marketing phrases like \"a karaoke-and-lechon dinner\" describe an experience, not confirmed equipment — never infer equipment from that kind of copy, even when find_amenity comes up empty. If find_amenity finds it, say which propert(y/ies) have it. If it finds nothing anywhere, say it's not listed in our amenities and the team will confirm via Messenger, and remind the guest quiet hours still apply.",
   ].join("\n");
 }
 
@@ -109,6 +109,8 @@ export function needsCapacityHandoff(guestMessage: string, exchanges: ToolExchan
     return typeof guests === "number" && guests >= MAX_TOTAL_CAPACITY;
   });
   if (guestsAtOrOverCap) return true;
+  const parsedCount = parseGuestCount(guestMessage);
+  if (parsedCount !== null && parsedCount >= MAX_TOTAL_CAPACITY) return true;
   return KIDS_CAPACITY_CONTEXT_RE.test(guestMessage) || SQUEEZE_RE.test(guestMessage);
 }
 
@@ -117,4 +119,64 @@ export function ensureCapacityHandoffLink(links: LinkButton[], shouldForce: bool
   if (!shouldForce) return links;
   if (links.some((l) => l.href === MESSENGER_HREF)) return links;
   return [...links, { label: "Message us on Messenger", href: MESSENGER_HREF }];
+}
+
+// ── Guest-count parser ──────────────────────────────────────────────────────
+
+/**
+ * Nouns that mean "people" in English/Tagalog, used to recognize a guest-count phrase
+ * without being confused by an unrelated number (a date, a price, a night count). A bare
+ * number is NEVER treated as a guest count — it must sit next to one of these words.
+ */
+const PEOPLE_NOUN = String.raw`(?:adults?|guests?|pax|persons?|people|bisita|matatanda|kids?|children|bata|tao|katao)`;
+
+const NUMBER_PEOPLE_RE = new RegExp(String.raw`(\d{1,3})\s*(?:na\s+)?${PEOPLE_NOUN}\b`, "gi");
+
+/** "Kami ay 24" ("we are 24") — a common Tagalog group-count idiom with no trailing noun. */
+const KAMI_AY_RE = /\bkami\s+ay\s+(\d{1,3})\b/i;
+
+/**
+ * Parses a guest-count claim out of a free-text message, in English or Tagalog —
+ * "24 people/pax/guests/adults", "kami ay 24", "24 na tao", "24 katao", or a split group
+ * like "8 adults + 4 kids" (summed). A bare number next to a date, time, or price (no
+ * people-noun adjacent) is never picked up. Returns `null` when no guest count is found.
+ */
+export function parseGuestCount(message: string): number | null {
+  const text = message.toLowerCase();
+
+  const matches = [...text.matchAll(NUMBER_PEOPLE_RE)];
+  if (matches.length > 0) {
+    const sum = matches.reduce((total, m) => total + parseInt(m[1], 10), 0);
+    return sum > 0 ? sum : null;
+  }
+
+  const kamiAy = text.match(KAMI_AY_RE);
+  if (kamiAy) {
+    const n = parseInt(kamiAy[1], 10);
+    return n > 0 ? n : null;
+  }
+
+  return null;
+}
+
+/**
+ * Server-resolved context note for the model (same pattern as chat-service.ts's
+ * `dateContextNote`): when the guest's latest message itself claims a group of
+ * `MAX_TOTAL_CAPACITY` or more, tell the model directly — don't wait for it to call
+ * `find_stay`/`get_quote` with that guest count first (live testing showed it sometimes
+ * asks a clarifying question like "how many nights?" instead of recognizing the group
+ * is over capacity). `needsCapacityHandoff` above is the independent enforcement that
+ * forces the Messenger button on regardless of whether the model follows this note.
+ */
+export function buildCapacityContextNote(guestMessage: string): string {
+  const count = parseGuestCount(guestMessage);
+  if (count === null || count < MAX_TOTAL_CAPACITY) return "";
+  return (
+    "\n\nContext (already detected by the system, not a guest claim to verify): the guest's " +
+    `most recent message indicates a group of ${count}. The largest bookable combination, ` +
+    `across both houses on the same dates, is ${MAX_TOTAL_CAPACITY} adults. Do not ask how many ` +
+    "nights or for more details before handing off, and do not promise flexibility or guess " +
+    `whether the group fits — tell the guest directly that the team will confirm via Messenger ` +
+    `(${MESSENGER_HREF}).`
+  );
 }

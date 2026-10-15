@@ -22,6 +22,8 @@ import {
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
   ensureDatesStated,
+  needsAmenityHandoff,
+  stripBatanguenoFromTagalog,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
@@ -31,6 +33,7 @@ import {
   removeKidsFreeClaims,
   needsCapacityHandoff,
   ensureCapacityHandoffLink,
+  buildCapacityContextNote,
 } from "./owner-facts";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
@@ -114,7 +117,11 @@ function dateContextNote(latestUserMessage: string, now: Date): string {
  */
 async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopResult> {
   const provider = getChatProvider();
-  const system = buildHavenSystemPrompt(body.lang as HavenLang) + dateContextNote(lastUserMessage(body.messages), now);
+  const latestMessage = lastUserMessage(body.messages);
+  const system =
+    buildHavenSystemPrompt(body.lang as HavenLang) +
+    dateContextNote(latestMessage, now) +
+    buildCapacityContextNote(latestMessage);
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -152,7 +159,6 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     .filter((m) => m.role === "user")
     .map((m) => m.content)
     .join(" ");
-  const latestGuestMessage = lastUserMessage(body.messages);
   const englishMode = isEnglishContext(lang, guestMessages);
 
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
@@ -167,7 +173,8 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
   const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
-  const reply = lang === "btg" ? ensureBatanguenoMarker(datesStated) : datesStated;
+  const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);
+  const reply = lang === "btg" ? ensureBatanguenoMarker(batanguenoFixed) : batanguenoFixed;
 
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
   // bookingLinks may legitimately repeat the same href across different find_stay options —
@@ -176,7 +183,9 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const bookingHrefs = new Set(bookingLinks.map((l) => l.href));
   const dedupedModelLinks = dedupeLinks(modelLinks).filter((l) => !bookingHrefs.has(l.href));
   const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
-  const links = ensureCapacityHandoffLink(handoffLinks, needsCapacityHandoff(latestGuestMessage, toolExchangesThisTurn));
+  const forceHandoff =
+    needsCapacityHandoff(latestMessage, toolExchangesThisTurn) || needsAmenityHandoff(toolExchangesThisTurn);
+  const links = ensureCapacityHandoffLink(handoffLinks, forceHandoff);
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls };
 }

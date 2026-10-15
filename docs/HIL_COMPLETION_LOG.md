@@ -4,6 +4,72 @@
 
 ---
 
+## 2026-10-14 — Haven AI preview-retest fixes: 24+ handoff parser, early/late fee guard, amenity search, Tagalog-mode Batangueño leak, pricing-arithmetic guard (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,219 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Five bugs found in a preview retest of the H1 AI chat mode, all fixed in `src/lib/haven/*`:
+
+1. **24+ group handoff didn't fire without a tool call.** `Kami ay 24 na tao sa ikalawang
+   Sabado ng Nobyembre. Saan kami pwede?` got a "how many nights?" follow-up instead of a
+   handoff — `needsCapacityHandoff()` only checked `find_stay`/`get_quote` tool-call
+   arguments, never the guest's own wording. Added `parseGuestCount()` (owner-facts.ts): a
+   language-agnostic parser recognizing "24 people/pax/guests/adults", "kami ay 24", "24 na
+   tao", "24 katao", and a split group like "8 adults + 4 kids" (summed) — scoped to a
+   number sitting next to a people-noun, so a date/time/price number is never picked up.
+   `needsCapacityHandoff()` now also checks the parsed count; a new `buildCapacityContextNote()`
+   injects a server-resolved instruction into the system prompt (same pattern as
+   `dateContextNote`) telling the model to hand off immediately rather than ask for more
+   details, with the Messenger button still forced on independently either way.
+2. **Price guard swallowed the approved early-check-in/late-checkout fee.** A reply with a
+   hallucinated per-hour total (the model computing a specific hours × ₱200 figure instead
+   of stating the flat rate) got its whole sentence replaced with the generic "ask us via
+   Messenger" fallback — including the correct ₱200/hour fact that was in the same
+   sentence. Added `FALLBACK_HOURLY_FEE_TEXT` (post-process.ts): any disallowed amount in
+   an early-check-in/late-checkout context now falls back to restating the real ₱200/hour
+   rate instead of deflecting to Messenger. `PESO_AMOUNT_SOURCE` broadened to also
+   recognize "P200" and "200 pesos" phrasing (not just ₱/PHP), and the system prompt now
+   explicitly forbids computing an hours × rate total — state the flat rate only.
+3. **Amenity questions (e.g. "Do you have karaoke?") asked which house first**, because the
+   model only had `get_property_details` (one property at a time). Added a new `find_amenity`
+   tool (tools.ts) that searches every public property's `amenities`/`amenityDetails` for a
+   term and reports which propert(y/ies) have it, or `found: false` if none do — read-only,
+   no write tools exposed. A new `needsAmenityHandoff()` independently forces the Messenger
+   button on whenever `find_amenity` comes back empty.
+4. **Tagalog mode (`lang: "tl"`) leaked Batangueño particles** — "ga"/"baga" as a question
+   particle, "ari"/"ire" as "this/here" — that should be confined to `btg` mode. Added
+   `stripBatanguenoFromTagalog()`, applied whenever the effective reply language is plain
+   Tagalog (`tl` always, or `auto` mirroring a Tagalog-speaking guest): converts "ga"/"baga"
+   → "ba" and "ari"/"ire" → "ito", preserving capitalization. Leaves the "Oo ga" bare-
+   affirmation misuse alone (same carve-out as the btg-mode marker check), and is a no-op
+   for `btg`/`en`.
+5. **HIGH priority — a Thu→Sat quote read as nights × one night's rate**, undercounting a
+   weekend-rate stay (owner report: looked like 2 × ₱2,800 instead of ₱2,800 + ₱3,500 =
+   ₱6,300). `computeBookingQuote`/`getDailyRates` were confirmed correct — every `get_quote`/
+   `find_stay` call already passes the exact full `checkIn`/`checkOut`; the risk was the
+   model doing its own multiplication in prose. Fixed three ways: the system prompt now
+   explicitly bans multiplying/summing a rate itself (a `pricePerNight` "from" figure may
+   only be stated as "from ₱X/night", and the only total/nightlyTotal Haven may state is the
+   one `get_quote`/`find_stay` returned this turn); `get_quote` and `find_stay` now also
+   return a `perNight` breakdown (date, weekday, rate) so Haven can show the nightly split
+   without recomputing it; and a new `PRICE_ARITHMETIC_RE` check in the price guard rejects
+   any "₱2,800 × 2 = ₱5,600"-style arithmetic in the reply outright, even if every number
+   involved happens to be individually valid.
+
+Tests: `owner-facts.test.ts` (`parseGuestCount`, `buildCapacityContextNote`, updated
+`needsCapacityHandoff`), `post-process.test.ts` (hourly-fee fallback reclassification,
+broadened amount formats, `PRICE_ARITHMETIC_RE`, `needsAmenityHandoff`,
+`stripBatanguenoFromTagalog`), `tools.test.ts` (`find_amenity`, `get_quote`'s `perNight`
+breakdown on a Thu→Sat weekend-rate stay), `system-prompt.test.ts` (arithmetic ban, early/
+late fee rule), and `chat-service.test.ts` end-to-end coverage of the exact field-reported
+24-guest sentence, the amenity handoff, and the Tagalog-mode particle leak.
+
+---
+
 ## 2026-10-14 — Haven AI chat-widget bug fix: topic chips expanded on the welcome screen (fix/haven-ai-guardrails-101426, PR #84)
 
 Area: Website

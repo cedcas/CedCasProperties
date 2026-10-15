@@ -7,6 +7,8 @@ import {
   removeKidsFreeClaims,
   needsCapacityHandoff,
   ensureCapacityHandoffLink,
+  parseGuestCount,
+  buildCapacityContextNote,
 } from "../owner-facts";
 import { MESSENGER_HREF, type ToolExchange } from "../post-process";
 
@@ -40,6 +42,11 @@ describe("buildOwnerFactsPrompt", () => {
     expect(prompt).toMatch(/amenities\/amenityDetails/);
     expect(prompt).toMatch(/karaoke-and-lechon dinner/);
     expect(prompt).toMatch(/never infer equipment/i);
+  });
+
+  it("instructs calling find_amenity across all properties instead of asking which house", () => {
+    expect(prompt).toMatch(/find_amenity/);
+    expect(prompt).toMatch(/never ask the guest which house first/i);
   });
 
   it("is sourced and dated to the Owner", () => {
@@ -165,5 +172,71 @@ describe("ensureCapacityHandoffLink", () => {
   it("leaves links untouched when not forced", () => {
     const links = [{ label: "Book Now", href: "/properties/a/book" }];
     expect(ensureCapacityHandoffLink(links, false)).toBe(links);
+  });
+});
+
+describe("parseGuestCount", () => {
+  it("parses the exact field-reported sentence ('Kami ay 24 na tao ...')", () => {
+    expect(parseGuestCount("Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan kami pwede?")).toBe(24);
+  });
+
+  it("parses '24 people'/'24 pax'/'24 guests'/'24 adults'", () => {
+    expect(parseGuestCount("We are 24 people for that weekend.")).toBe(24);
+    expect(parseGuestCount("24 pax po kami.")).toBe(24);
+    expect(parseGuestCount("Can you fit 24 guests?")).toBe(24);
+    expect(parseGuestCount("There will be 24 adults.")).toBe(24);
+  });
+
+  it("parses '24 katao' (Tagalog compound for 'people')", () => {
+    expect(parseGuestCount("24 katao kami sa darating na Sabado.")).toBe(24);
+  });
+
+  it("parses a bare 'kami ay 24' idiom with no trailing noun", () => {
+    expect(parseGuestCount("Kami ay 24, available ba kayo?")).toBe(24);
+  });
+
+  it("sums a split group like '8 adults + 4 kids'", () => {
+    expect(parseGuestCount("We're 8 adults + 4 kids for that weekend.")).toBe(12);
+  });
+
+  it("ignores a bare number next to a date, time, or price with no people-noun adjacent", () => {
+    expect(parseGuestCount("Pwede ba sa Nov 24? ₱2,800 per night, 9am check-in.")).toBeNull();
+  });
+
+  it("returns null when no guest count is mentioned", () => {
+    expect(parseGuestCount("Do you have WiFi and parking?")).toBeNull();
+  });
+});
+
+describe("needsCapacityHandoff — parsed guest count from the guest's own message", () => {
+  it("is true for the exact field-reported sentence, with no tool call at all", () => {
+    expect(
+      needsCapacityHandoff("Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan kami pwede?", [])
+    ).toBe(true);
+  });
+
+  it("is true for '24 people' stated in plain English with no tool call", () => {
+    expect(needsCapacityHandoff("Can we book for 24 people?", [])).toBe(true);
+  });
+
+  it("is false for a guest count under the cap parsed from the message alone", () => {
+    expect(needsCapacityHandoff("We are 10 people for that weekend.", [])).toBe(false);
+  });
+});
+
+describe("buildCapacityContextNote", () => {
+  it("includes the parsed count and the Messenger handoff instruction for 24+", () => {
+    const note = buildCapacityContextNote("Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan kami pwede?");
+    expect(note).toContain("24");
+    expect(note).toContain(MESSENGER_HREF);
+    expect(note).toMatch(/do not ask how many nights/i);
+  });
+
+  it("is empty when the guest count is under the cap", () => {
+    expect(buildCapacityContextNote("We are 10 people for that weekend.")).toBe("");
+  });
+
+  it("is empty when no guest count is mentioned", () => {
+    expect(buildCapacityContextNote("Do you have WiFi?")).toBe("");
   });
 });

@@ -8,8 +8,10 @@ import {
   dedupeLinks,
   collectBookingLinks,
   ensureHandoffLink,
+  needsAmenityHandoff,
   limitToOneProvisional,
   ensureBatanguenoMarker,
+  stripBatanguenoFromTagalog,
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
@@ -20,6 +22,7 @@ import {
   ensureDatesStated,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
+  FALLBACK_HOURLY_FEE_TEXT,
   MESSENGER_HREF,
   type ToolExchange,
 } from "../post-process";
@@ -124,15 +127,19 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
   it("never leaves a dangling fragment like a trailing unit behind (the /hour regression)", () => {
     const amounts = collectToolAmounts([{ earlyCheckInPerHour: 200 }]);
     const result = enforcePriceClaims("Early check-in runs about ₱9999/hour if we can swing it.", amounts);
-    expect(result).toBe(FALLBACK_FEE_TEXT);
-    expect(result).not.toContain("/hour");
+    expect(result).toBe(FALLBACK_HOURLY_FEE_TEXT);
     expect(result).not.toContain("9999");
   });
 
-  it("uses the fee-handoff fallback (not the checkout fallback) for an unverified per-hour/per-night rate", () => {
+  it("states the real ₱200/hour fact (not the generic Messenger fallback) for an unverified early check-in/late checkout rate", () => {
     const amounts = new Set<number>();
-    expect(enforcePriceClaims("Late checkout is ₱500/hour.", amounts)).toBe(FALLBACK_FEE_TEXT);
-    expect(enforcePriceClaims("There's an extra fee of ₱500 for late checkout.", amounts)).toBe(FALLBACK_FEE_TEXT);
+    expect(enforcePriceClaims("Late checkout is ₱500/hour.", amounts)).toBe(FALLBACK_HOURLY_FEE_TEXT);
+    expect(enforcePriceClaims("There's an extra fee of ₱500 for late checkout.", amounts)).toBe(FALLBACK_HOURLY_FEE_TEXT);
+  });
+
+  it("uses the generic fee-handoff fallback for an unverified rate unrelated to early check-in/late checkout", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("There's an extra fee of ₱500 per guest.", amounts)).toBe(FALLBACK_FEE_TEXT);
   });
 
   it("uses the checkout fallback for an unverified stay total with no fee language", () => {
@@ -147,7 +154,7 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     );
     const result = enforcePriceClaims(text, amounts);
     expect(result).toBe(
-      ["Here's the breakdown:", "- Nightly total: ₱4,500", `- ${FALLBACK_FEE_TEXT}`, "Let us know!"].join("\n")
+      ["Here's the breakdown:", "- Nightly total: ₱4,500", `- ${FALLBACK_HOURLY_FEE_TEXT}`, "Let us know!"].join("\n")
     );
   });
 
@@ -166,6 +173,63 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     expect(enforcePriceClaims("We hope you enjoy your stay with us!", amounts)).toBe(
       "We hope you enjoy your stay with us!"
     );
+  });
+
+  it("recognizes P200/PHP 200/200 pesos as the same allowed amount as ₱200 (owner fact, any format)", () => {
+    const amounts = new Set([200]);
+    expect(enforcePriceClaims("Early check-in is P200/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is P200/hour, subject to availability."
+    );
+    expect(enforcePriceClaims("Late checkout runs PHP 200/hour, subject to confirmation.", amounts)).toBe(
+      "Late checkout runs PHP 200/hour, subject to confirmation."
+    );
+    expect(enforcePriceClaims("Early check-in is 200 pesos/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is 200 pesos/hour, subject to availability."
+    );
+  });
+
+  it("flags a disallowed amount written as 'P' or 'pesos' the same as a ₱-prefixed one", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("That'll be P9999 total.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+    expect(enforcePriceClaims("That'll be 9999 pesos total.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+  });
+
+  it("rejects '₱2,800 × 2 = ₱5,600' style arithmetic even when every number involved happens to be allowed", () => {
+    const amounts = new Set([2800, 2, 5600]);
+    const result = enforcePriceClaims("The total is ₱2,800 × 2 = ₱5,600 for two nights.", amounts);
+    expect(result).toBe(FALLBACK_TOTAL_TEXT);
+    expect(result).not.toContain("5,600");
+  });
+
+  it("rejects the same arithmetic written with a lowercase 'x'", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("That's ₱2,800 x 2 for the stay.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+  });
+
+  it("still allows a tool-provided per-night breakdown with no arithmetic operator", () => {
+    const amounts = collectToolAmounts([{ perNight: [{ rate: 2800 }, { rate: 3500 }], total: 6300 }]);
+    const text = "Thursday: ₱2,800, Friday: ₱3,500. Total: ₱6,300.";
+    expect(enforcePriceClaims(text, amounts)).toBe(text);
+  });
+});
+
+describe("needsAmenityHandoff", () => {
+  it("is true when find_amenity found nothing anywhere", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "find_amenity", input: { term: "karaoke" }, result: { found: false, properties: [] } },
+    ];
+    expect(needsAmenityHandoff(exchanges)).toBe(true);
+  });
+
+  it("is false when find_amenity found a match", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "find_amenity", input: { term: "pool" }, result: { found: true, properties: [{ slug: "a", name: "A" }] } },
+    ];
+    expect(needsAmenityHandoff(exchanges)).toBe(false);
+  });
+
+  it("is false when find_amenity was never called", () => {
+    expect(needsAmenityHandoff([{ name: "get_faq", input: { query: "wifi" }, result: { results: [] } }])).toBe(false);
   });
 });
 
@@ -490,6 +554,52 @@ describe("ensureBatanguenoMarker", () => {
   it("counts 'baga' used correctly as a question particle", () => {
     const input = "Totoo baga, meron pa kaming bakante?";
     expect(ensureBatanguenoMarker(input)).toBe(input);
+  });
+});
+
+describe("stripBatanguenoFromTagalog", () => {
+  it("converts a question-particle 'ga' to 'ba' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Ilan ga kayo talaga?", "tl", false)).toBe("Ilan ba kayo talaga?");
+  });
+
+  it("converts 'baga' to 'ba' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Totoo baga, meron pa kaming bakante?", "tl", false)).toBe(
+      "Totoo ba, meron pa kaming bakante?"
+    );
+  });
+
+  it("converts 'ari'/'ire' used as 'this/here' to 'ito' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Ari ang bahay na bagay sa inyo.", "tl", false)).toBe("Ito ang bahay na bagay sa inyo.");
+    expect(stripBatanguenoFromTagalog("Ire ang link.", "tl", false)).toBe("Ito ang link.");
+  });
+
+  it("does not touch a misused 'Oo ga' bare affirmation (same carve-out as btg mode)", () => {
+    const input = "Oo ga, may bakante kami.";
+    expect(stripBatanguenoFromTagalog(input, "tl", false)).toBe(input);
+  });
+
+  it("leaves btg mode untouched", () => {
+    const input = "Ay ga, ilan ga kayo talaga?";
+    expect(stripBatanguenoFromTagalog(input, "btg", false)).toBe(input);
+  });
+
+  it("leaves explicit English mode untouched", () => {
+    const input = "Ga is not an English word anyway.";
+    expect(stripBatanguenoFromTagalog(input, "en", false)).toBe(input);
+  });
+
+  it("applies in auto mode when the turn isn't in English", () => {
+    expect(stripBatanguenoFromTagalog("Ilan ga kayo?", "auto", false)).toBe("Ilan ba kayo?");
+  });
+
+  it("does not apply in auto mode when the turn is in English", () => {
+    const input = "Ga is fine here, it's English mode.";
+    expect(stripBatanguenoFromTagalog(input, "auto", true)).toBe(input);
+  });
+
+  it("leaves a reply with no Batangueño particle untouched", () => {
+    const input = "Ilan tao kayo?";
+    expect(stripBatanguenoFromTagalog(input, "tl", false)).toBe(input);
   });
 });
 

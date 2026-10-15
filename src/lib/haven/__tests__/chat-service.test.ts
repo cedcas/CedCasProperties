@@ -407,6 +407,112 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     expect(result.reply).not.toMatch(/budget/i);
   });
 
+  it("forces the Messenger button for the exact field-reported 24-guest sentence, with no find_stay/get_quote call at all", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ilang gabi po kayong magstay?", // the reported bug: model asks nights instead of handing off
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({
+        lang: "tl",
+        messages: [{ role: "user", content: "Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan kami pwede?" }],
+      }),
+      "1.2.3.4"
+    );
+
+    expect(result.links).toEqual(expect.arrayContaining([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]));
+  });
+
+  it("injects a capacity-handoff context note into the system prompt for a parsed 24+ guest count", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure, let me check.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({
+        lang: "tl",
+        messages: [{ role: "user", content: "Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan kami pwede?" }],
+      }),
+      "1.2.3.4"
+    );
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toMatch(/group of 24/i);
+    expect(system).toMatch(/m\.me\/haveninlipa/i);
+  });
+
+  it("forces the Messenger button when find_amenity finds nothing anywhere", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check that for you.",
+        toolCalls: [{ id: "1", name: "find_amenity", input: { term: "jacuzzi" } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "That's not listed in our amenities.",
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue({ found: false, properties: [] });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Do you have a jacuzzi?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+  });
+
+  it("does not force the Messenger button when find_amenity finds a match", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check that for you.",
+        toolCalls: [{ id: "1", name: "find_amenity", input: { term: "karaoke" } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Yes, Mickey has a karaoke machine!",
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue({ found: true, properties: [{ slug: "mickey-full", name: "Mickey" }] });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Do you have karaoke?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.links ?? []).toEqual([]);
+  });
+
+  it("converts a leaked 'ga' question particle to 'ba' in plain Tagalog mode", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ilan ga kayo talaga?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang: "tl" }), "1.2.3.4");
+
+    expect(result.reply).toBe("Ilan ba kayo talaga?");
+  });
+
   it("forces the Messenger button when find_stay is called for 24+ guests", async () => {
     providerChat
       .mockResolvedValueOnce({
