@@ -1,6 +1,19 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-15 (Haven AI: banned "can you afford it" phrasing + booking
+> **Last updated:** 2026-10-15 (Haven AI: Owner override widens the Welcome Book's
+> restaurants/things-to-do lists from B34-only to global, same branch
+> `fix/haven-ai-freetext-reset-101526`: [Haven AI Chat](#haven-ai-chat) — Cedric amended
+> the same-day Welcome Book decision below: the 10 restaurants and 13 attractions now
+> apply to EVERY public listing, including the Mickey in Lipa (B38) houses — Haven says
+> they're "from our Welcome Book" and may combine them with a listing's own
+> `neighborhoodPlaces` tool data when present; `welcome-book.ts`'s `getWelcomeBook(slug)`
+> now always returns these two lists for any slug, including one that doesn't resolve.
+> House rules, how-tos, and check-out steps are unchanged — still `null` outside the two
+> B34 slugs (`cozy-1-bedroom`, `spacious-2-bedroom`) and never generalized to a B38/Mickey
+> listing. `get_local_guide`'s messaging and `owner-facts.ts`'s prompt bullet were updated
+> to state the split explicitly; `welcome-book.test.ts`/`tools.test.ts` gained cases
+> asserting a Mickey slug gets the global lists but not the B34-only house fields).
+> Prior, same day (Haven AI: banned "can you afford it" phrasing + booking
 > nudge, the B34 Welcome Book (restaurants/attractions by name, Owner decision), and a
 > Wi-Fi/physical-access guard, same branch `fix/haven-ai-freetext-reset-101526`:
 > [Haven AI Chat](#haven-ai-chat) — three more owner-approved guardrails (Cedric,
@@ -1848,15 +1861,18 @@ buttons and "Talk to a Human" link are unaffected either way.
 - `provider.ts` — `ChatProvider` adapter (`chat({system, messages, tools, maxTokens})`),
   raw `fetch` against Anthropic's Messages API or OpenAI's Chat Completions API (no vendor
   SDK dependency) behind `HAVEN_AI_PROVIDER`.
-- `welcome-book.ts` *(added 2026-10-15, Cedric)* — a typed server-only module holding an
+- `welcome-book.ts` *(added 2026-10-15, Cedric; restaurants/things-to-do scope widened to
+  global later the same day — owner override)* — a typed server-only module holding an
   owner-sanitized excerpt of the B34 house manual ("BV-B34L21 House Manual v020325"),
-  keyed by slug: `getWelcomeBook(slug)` returns restaurants (10), things to do (13), house
-  rules, how-tos, and check-out steps ONLY for `cozy-1-bedroom`/`spacious-2-bedroom`, `null`
-  for any other slug (the Mickey in Lipa/B38 listings included) — callers must never fall
-  back to this content for a non-B34 slug. Deliberately excludes what the source excerpt
-  excludes: Wi-Fi (QR-code only in the manual), door/gate/lock/keybox codes, the street/lot
-  address, staff phone numbers/emails, the host family bio, the dialect page, and the bars
-  list — `welcome-book.test.ts` asserts none of these ever appear in the module's content.
+  keyed by slug: `getWelcomeBook(slug)` always returns the 10 restaurants and 13
+  things-to-do — global, for every public listing including the Mickey in Lipa/B38
+  listings, and even an unresolved slug — but `houseRules`/`howTos`/`checkOutSteps` are
+  `null` for every slug except `cozy-1-bedroom`/`spacious-2-bedroom`; callers must never
+  generalize those three house-specific fields to a non-B34 slug. Deliberately excludes
+  what the source excerpt excludes: Wi-Fi (QR-code only in the manual), door/gate/lock/
+  keybox codes, the street/lot address, staff phone numbers/emails, the host family bio,
+  the dialect page, and the bars list — `welcome-book.test.ts` asserts none of these ever
+  appear in the module's content.
 - `access-guard.ts` *(added 2026-10-15, Cedric)* — Wi-Fi/physical-access guard, two
   independent layers mirroring the rest of DEC-029's tool-only-facts philosophy:
   `isWifiOrAccessRequest(message)` detects a direct Wi-Fi/password/door/gate/lock/keybox/
@@ -1896,19 +1912,19 @@ buttons and "Talk to a Human" link are unaffected either way.
   no-pets/no-smoking-inside/no-parties-without-approval house rules that are the same at
   every listing, and the karaoke/amenities caution (answer only from `amenities`/
   `amenityDetails`, never infer equipment from marketing copy like "a karaoke-and-lechon
-  dinner"). A dated bullet *(added 2026-10-15, Cedric, amended same day)* covers local
-  places / how things work: for the two B34 listings (Cozy 1BR Haven `cozy-1-bedroom`,
-  Spacious 2BR Getaway `spacious-2-bedroom`) a restaurant/things-to-do/how-to/check-out
-  question is answered from the B34 Welcome Book — `src/lib/haven/welcome-book.ts` — and
-  Haven may recommend its 10 restaurants and 13 attractions **by name** (Owner decision,
-  2026-10-15), saying they're "listed in the B34 Welcome Book"; for any other listing (the
-  Mickey in Lipa/B38 houses) or when no property is known yet, Haven still only points to
-  the printed "Welcome Book" in each house — never generalizing the B34 list to B38, and
-  never looking up or inventing a place beyond the fixed B34 list, though a tool result's
-  own `neighborhoodPlaces` data may still be used when present for that property. Two fixed
-  facts Haven may state directly for any property: an Alfamart right outside the
-  subdivision, plus minimarts around the property; anything the Welcome Book doesn't cover
-  still gets the Messenger handoff. Two more dated bullets *(added 2026-10-15, Cedric)*:
+  dinner"). A dated bullet *(added 2026-10-15, Cedric; restaurants/things-to-do widened to
+  global later the same day — owner override)* covers local places / how things work:
+  Haven may recommend the Welcome Book's 10 restaurants and 13 attractions **by name** for
+  ANY public listing, including the Mickey in Lipa/B38 houses, saying they're "from our
+  Welcome Book" and combining them with that property's own `neighborhoodPlaces` tool data
+  when present — never looking up or inventing a place beyond this fixed list for any
+  property. House rules/how-tos/check-out steps stay scoped to ONLY the two B34 listings
+  (Cozy 1BR Haven `cozy-1-bedroom`, Spacious 2BR Getaway `spacious-2-bedroom`) — never
+  generalized to a B38/Mickey listing or any other property, which instead get a pointer
+  to the printed "Welcome Book" in each house for those. Two fixed facts Haven may state
+  directly for any property: an Alfamart right outside the subdivision, plus minimarts
+  around the property; anything the Welcome Book doesn't cover still gets the Messenger
+  handoff. Two more dated bullets *(added 2026-10-15, Cedric)*:
   (1) banned "can you afford it" phrasing — "Kaya mo na ba?", "Kaya n'yo ba?", "Can you
   afford it?", "within your budget", "kaya ba ng budget" — must never appear; after a
   quote, Haven closes with a booking nudge ("Want me to help you book it?" / "Gusto n'yo na
@@ -1994,12 +2010,16 @@ buttons and "Talk to a Human" link are unaffected either way.
   "which house?" first (the old path required `get_property_details` for one property at a
   time). `needsAmenityHandoff()` (post-process.ts) independently forces the Messenger
   button on whenever `find_amenity` comes back empty. `get_property_details` also returns
-  a `welcomeBook` field *(added 2026-10-15, Cedric)* — non-null only for the two B34 slugs,
-  see `welcome-book.ts` above — and a new `get_local_guide(slug?)` tool *(same pass)*
-  returns the same B34 Welcome Book content directly (resolving an informal name through
-  `resolveSlugFallback`'s existing fuzzy fallback, never blocking on an unresolved slug),
-  or a message pointing to the printed Welcome Book in each house for any non-B34 property
-  or when no slug is given yet.
+  a `welcomeBook` field *(added 2026-10-15, Cedric; restaurants/things-to-do widened to
+  global later the same day — owner override)* — restaurants/things-to-do are non-null for
+  every property, `houseRules`/`howTos`/`checkOutSteps` only for the two B34 slugs, see
+  `welcome-book.ts` above — and a new `get_local_guide(slug?)` tool *(same pass)* returns
+  the same global restaurants/things-to-do for any property (resolving an informal name
+  through `resolveSlugFallback`'s existing fuzzy fallback, never blocking on an unresolved
+  slug, and even returning the global lists with no slug given yet), with
+  `houseRules`/`howTos`/`checkOutSteps` populated only for a resolved B34 slug and a
+  message pointing to the printed Welcome Book in each house for the house-specific
+  content on any other property.
 - `property-resolver.ts` *(added 2026-10-14, live bug-fix pass)* — pure, DB-free fuzzy
   property-name resolution: `resolvePropertyMatch(query, listings)` fixes a live bug where
   an informal/partial property name (e.g. "the Mickey Full Family House") got "isn't

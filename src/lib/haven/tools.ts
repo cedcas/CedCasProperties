@@ -11,7 +11,7 @@ import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
 import { shortPropertyLabels } from "./post-process";
-import { getWelcomeBook } from "./welcome-book";
+import { getWelcomeBook, isWelcomeBookSlug } from "./welcome-book";
 import type { ToolDefinition } from "./provider";
 
 /**
@@ -181,9 +181,9 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
     name: "get_property_details",
     description:
       "Full details for one property by slug: description, amenities, house rules, " +
-      "policies, pricing notes, FAQs, nearby places, and (B34 listings only) a " +
-      "welcomeBook field — restaurants, things to do, how-tos, and check-out steps from " +
-      "the B34 Welcome Book. null for any other listing; never invent one for it.",
+      "policies, pricing notes, FAQs, nearby places, and a welcomeBook field — our " +
+      "Welcome Book's restaurants and things-to-do apply to every listing; its " +
+      "houseRules/howTos/checkOutSteps are only non-null for the two B34 listings.",
     inputSchema: {
       type: "object",
       properties: { slug: { type: "string" } },
@@ -236,8 +236,9 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
       pricingNotes: safeJsonParse(p.pricingNotes, null),
       propertyFaqs: safeJsonParse(p.propertyFaqs, []),
       neighborhoodPlaces: safeJsonParse(p.neighborhoodPlaces, []),
-      // Only non-null for the two B34 listings (cozy-1-bedroom, spacious-2-bedroom) — see
-      // welcome-book.ts. Never generalize this to a B38/Mickey listing, which gets `null`.
+      // restaurants/thingsToDo are global (every listing, owner update 2026-10-15);
+      // houseRules/howTos/checkOutSteps stay `null` outside the two B34 listings
+      // (cozy-1-bedroom, spacious-2-bedroom) — see welcome-book.ts.
       welcomeBook: getWelcomeBook(p.slug),
       // Structured, numeric fee fields — so a guest question about a specific fee (early
       // check-in/late checkout, extra guest) can be answered with a real traceable number
@@ -753,36 +754,42 @@ const findAmenityTool: HavenToolSpec<z.infer<typeof findAmenitySchema>> = {
 
 const getLocalGuideSchema = z.object({ slug: z.string().min(1).max(200).optional() });
 
+const GLOBAL_WELCOME_BOOK_NOTE =
+  "Say the restaurants/things-to-do are from our Welcome Book — true for any listing — and " +
+  "combine them with this property's own neighborhoodPlaces tool data when present. Never " +
+  "look up or invent a restaurant/place online or from general knowledge.";
+
 const NO_PROPERTY_LOCAL_GUIDE_MESSAGE =
-  "No specific property is known yet. Point the guest to the printed Welcome Book in each " +
-  "house — never look up or invent a restaurant/place online or from general knowledge. " +
-  "Fixed facts you may state directly: there's an Alfamart right outside the subdivision, " +
-  "plus minimarts around the property.";
+  `${GLOBAL_WELCOME_BOOK_NOTE} No specific property is known yet, so house-specific ` +
+  "how-tos/check-out steps aren't available here. Fixed facts you may state directly: " +
+  "there's an Alfamart right outside the subdivision, plus minimarts around the property.";
 
 const NON_B34_LOCAL_GUIDE_MESSAGE =
-  "This property has no digital Welcome Book data here — only a printed copy inside the " +
-  "house. Never look up or invent a restaurant/place online or from general knowledge for " +
-  "it, and never reuse the B34 Welcome Book's list for this property. Fixed facts you may " +
-  "state directly: there's an Alfamart right outside the subdivision, plus minimarts " +
-  "around the property.";
+  `${GLOBAL_WELCOME_BOOK_NOTE} This property has no house-specific Welcome Book data here ` +
+  "(house rules/how-tos/check-out steps are B34-only) — only a printed copy inside the " +
+  "house covers those. Fixed facts you may state directly: there's an Alfamart right " +
+  "outside the subdivision, plus minimarts around the property.";
+
+const B34_LOCAL_GUIDE_MESSAGE =
+  `${GLOBAL_WELCOME_BOOK_NOTE} This listing's house rules/how-tos/check-out steps are also ` +
+  "from the Welcome Book.";
 
 /**
- * Local-area guide, scoped to the B34 Welcome Book (welcome-book.ts) — restaurants, things
- * to do, house how-tos, and check-out steps for Cozy 1BR Haven / Spacious 2BR Getaway ONLY.
- * Any other property (a Mickey in Lipa/B38 listing, an unresolved slug, or no slug at all)
- * gets a message pointing to the printed Welcome Book instead — this tool never invents
- * content for a property it has no data for, and never blocks on a slug it can't resolve
- * (DEC-029 addendum, Cedric 2026-10-15).
+ * Local-area guide from the Welcome Book (welcome-book.ts). Restaurants and things-to-do
+ * are GLOBAL — returned for every property, including an unresolved one (owner update,
+ * Cedric 2026-10-15). House rules, how-tos, and check-out steps stay B34-only (Cozy 1BR
+ * Haven / Spacious 2BR Getaway) — `null` for every other listing. This tool never invents
+ * content it has no data for, and never blocks on a slug it can't resolve.
  */
 const getLocalGuideTool: HavenToolSpec<z.infer<typeof getLocalGuideSchema>> = {
   definition: {
     name: "get_local_guide",
     description:
-      "Local-area guide (restaurants, things to do, house how-tos, check-out steps) from " +
-      "the B34 Welcome Book — ONLY available for the B34 listings (Cozy 1BR Haven, " +
-      "Spacious 2BR Getaway). Call with the resolved property slug when known; omit slug " +
-      "for a question with no property context yet. Never a substitute for the printed " +
-      "Welcome Book on any other property.",
+      "Local-area guide from our Welcome Book. Restaurants and things-to-do are returned " +
+      "for every public listing (combine with a listing's own neighborhoodPlaces data); " +
+      "house how-tos/check-out steps/house-rules are only returned for the B34 listings " +
+      "(Cozy 1BR Haven, Spacious 2BR Getaway). Call with the resolved property slug when " +
+      "known; omit slug for a question with no property context yet.",
     inputSchema: {
       type: "object",
       properties: { slug: { type: "string", description: "The resolved property slug, if known." } },
@@ -791,19 +798,21 @@ const getLocalGuideTool: HavenToolSpec<z.infer<typeof getLocalGuideSchema>> = {
   },
   schema: getLocalGuideSchema,
   handler: async ({ slug }) => {
-    if (!slug) return { welcomeBook: null, message: NO_PROPERTY_LOCAL_GUIDE_MESSAGE };
+    if (!slug) return { welcomeBook: getWelcomeBook(""), message: NO_PROPERTY_LOCAL_GUIDE_MESSAGE };
 
-    let welcomeBook = getWelcomeBook(slug);
-    if (!welcomeBook) {
+    let resolvedSlug = slug;
+    if (!isWelcomeBookSlug(slug)) {
       const fallback = await resolveSlugFallback(slug);
-      if (fallback.ok) welcomeBook = getWelcomeBook(fallback.slug);
+      if (fallback.ok) resolvedSlug = fallback.slug;
       else if ("ambiguous" in fallback.result) return fallback.result;
-      // A genuine "Property not found." miss falls through to the non-B34 message below —
-      // this tool's job is never to block the conversation on an unresolved slug.
+      // A genuine "Property not found." miss falls through below with the raw slug —
+      // this tool's job is never to block the conversation on an unresolved slug, and the
+      // global restaurants/things-to-do lists don't depend on the property resolving.
     }
 
-    if (!welcomeBook) return { welcomeBook: null, message: NON_B34_LOCAL_GUIDE_MESSAGE };
-    return { welcomeBook, message: "Say these are listed in the B34 Welcome Book." };
+    const welcomeBook = getWelcomeBook(resolvedSlug);
+    const message = isWelcomeBookSlug(resolvedSlug) ? B34_LOCAL_GUIDE_MESSAGE : NON_B34_LOCAL_GUIDE_MESSAGE;
+    return { welcomeBook, message };
   },
 };
 

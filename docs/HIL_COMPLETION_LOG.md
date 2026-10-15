@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-10-15 — Haven AI: Welcome Book restaurants/things-to-do widened to global (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,660 tests).
+
+### Outcome
+Same day as the B34 Welcome Book entry below, Cedric amended that decision's scoping:
+the Welcome Book's 10 restaurants and 13 things-to-do now apply to EVERY public listing,
+including the Mickey in Lipa (B38) houses — Haven says they're "from our Welcome Book" and
+may combine them with a listing's own `neighborhoodPlaces` tool data when present. House
+rules, how-tos, and check-out steps are unchanged — still scoped ONLY to the two B34
+listings (`cozy-1-bedroom`, `spacious-2-bedroom`), never generalized to a B38/Mickey
+listing or any other property. The excerpt's own exclusions (no address, phone numbers,
+emails, bars list, dialect page) are unchanged.
+
+### Material Changes
+- **`welcome-book.ts`:** `getWelcomeBook(slug)` now always returns `restaurants`/
+  `thingsToDo` (non-null for any slug, including one that doesn't resolve); `houseRules`/
+  `howTos`/`checkOutSteps` remain `null` outside the two B34 slugs.
+- **`tools.ts`:** `get_property_details`'s `welcomeBook` field is now non-null for every
+  property; `get_local_guide` returns the global lists even with no slug or an unresolved
+  one, and only attaches house-specific fields for a resolved B34 slug. Messaging updated
+  to say "from our Welcome Book" instead of "listed in the B34 Welcome Book."
+- **`owner-facts.ts`:** the dated Welcome Book prompt bullet rewritten to state the
+  lists-are-global / house-info-is-B34-only split explicitly.
+
+Tests: `welcome-book.test.ts`, `tools.test.ts`, `owner-facts.test.ts` updated — new cases
+assert a Mickey (B38) slug gets the global restaurants/things-to-do but `null`
+houseRules/howTos/checkOutSteps.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`). Amends the entry below.
+
+---
+
 ## 2026-10-15 — Haven AI: banned "afford" phrasing → booking nudge, B34 Welcome Book, Wi-Fi/access guard (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

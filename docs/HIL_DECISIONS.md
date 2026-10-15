@@ -876,6 +876,22 @@ branch, closed without changing the decision itself:
   `welcome-book.test.ts` and `access-guard.test.ts` assert the welcome-book content and
   every guarded tool output stay free of "wifi", "password", phone numbers, and emails.
 
+### Implementation note (2026-10-15 owner-guardrails pass, part 3 — amends part 2's Welcome Book scoping)
+Later the same day, Cedric (the Owner) overrode the Welcome Book scoping decided in part 2
+above — same day, same branch, closed without changing the decision itself:
+- **Restaurants and things-to-do are now global, not B34-only.** The Welcome Book's 10
+  restaurants and 13 attractions apply to EVERY public listing, including the Mickey in
+  Lipa (B38) houses — Haven says these are "from our Welcome Book" and may combine them
+  with a listing's own `neighborhoodPlaces` tool data when present. `welcome-book.ts`'s
+  `getWelcomeBook(slug)` now always returns these two lists, for any slug (even one that
+  doesn't resolve), instead of returning `null` outside the B34 pair.
+- **House rules, how-tos, and check-out steps stay B34-only.** These three fields remain
+  `null` for every listing except the two B34 slugs (`cozy-1-bedroom`, `spacious-2-bedroom`)
+  — never generalized to a B38/Mickey listing or any other property, per the excerpt's own
+  scope. `get_local_guide`'s messaging and `owner-facts.ts`'s prompt bullet were both
+  updated to state the lists/house-info split explicitly; the excerpt's exclusions (no
+  address, phone numbers, emails, bars list, dialect page) are unchanged.
+
 ### Implementation note (2026-10-14 owner-guardrails pass)
 Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and
 guardrails, closed without changing the decision itself — see `src/lib/haven/owner-facts.ts`

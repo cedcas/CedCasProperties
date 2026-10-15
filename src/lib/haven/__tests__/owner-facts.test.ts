@@ -66,12 +66,17 @@ describe("buildOwnerFactsPrompt", () => {
     expect(prompt).toMatch(/neighborhoodPlaces/);
   });
 
-  it("scopes the B34 Welcome Book to the two B34 slugs and never generalizes it to a B38/Mickey listing", () => {
-    expect(prompt).toMatch(/B34 Welcome Book/);
+  it("makes the restaurants/things-to-do lists global, including for B38/Mickey listings", () => {
+    expect(prompt).toMatch(/EVERY public listing/);
+    expect(prompt).toMatch(/Mickey in Lipa \(B38\) houses/i);
+    expect(prompt).toMatch(/get_local_guide/);
+  });
+
+  it("keeps house rules/how-tos/check-out steps scoped to the two B34 slugs only", () => {
+    expect(prompt).toMatch(/HOUSE RULES, HOW-TOs, and CHECK-OUT STEPS stay scoped ONLY to the two B34 listings/i);
     expect(prompt).toMatch(/cozy-1-bedroom/);
     expect(prompt).toMatch(/spacious-2-bedroom/);
-    expect(prompt).toMatch(/NEVER apply the B34 Welcome Book list to a Mickey in Lipa \(B38\) listing/i);
-    expect(prompt).toMatch(/get_local_guide/);
+    expect(prompt).toMatch(/NEVER generalize those three to a Mickey in Lipa \(B38\) listing/i);
   });
 
   it("bans 'can you afford it' phrasing and instructs a booking nudge after a quote", () => {

@@ -485,22 +485,28 @@ describe("get_property_details — welcomeBook field (DEC-029 addendum, 2026-10-
     extraGuestFeePerNight: 300,
   };
 
-  it("includes the B34 Welcome Book for cozy-1-bedroom", async () => {
+  it("includes the full B34 Welcome Book (restaurants + house info) for cozy-1-bedroom", async () => {
     db.property.findFirst.mockResolvedValue({ ...baseProperty, slug: "cozy-1-bedroom", name: "Cozy 1BR Haven", maxGuests: 5 });
 
-    const result = (await runHavenTool("get_property_details", { slug: "cozy-1-bedroom" })) as { welcomeBook: unknown };
+    const result = (await runHavenTool("get_property_details", { slug: "cozy-1-bedroom" })) as {
+      welcomeBook: { restaurants: unknown[]; houseRules: unknown };
+    };
     expect(result.welcomeBook).not.toBeNull();
     expect(JSON.stringify(result.welcomeBook)).toMatch(/Casa Marikit/);
+    expect(result.welcomeBook.houseRules).not.toBeNull();
   });
 
-  it("includes the B34 Welcome Book for spacious-2-bedroom", async () => {
+  it("includes the full B34 Welcome Book for spacious-2-bedroom", async () => {
     db.property.findFirst.mockResolvedValue({ ...baseProperty, slug: "spacious-2-bedroom", name: "Spacious 2BR Getaway", maxGuests: 9 });
 
-    const result = (await runHavenTool("get_property_details", { slug: "spacious-2-bedroom" })) as { welcomeBook: unknown };
+    const result = (await runHavenTool("get_property_details", { slug: "spacious-2-bedroom" })) as {
+      welcomeBook: { houseRules: unknown };
+    };
     expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook.houseRules).not.toBeNull();
   });
 
-  it("is null for a Mickey in Lipa (B38) listing — never generalized from B34", async () => {
+  it("includes the global restaurants/things-to-do but null house info for a Mickey in Lipa (B38) listing", async () => {
     db.property.findFirst.mockResolvedValue({
       ...baseProperty,
       slug: "mickey-in-lipa--full-family-house--sleeps-15",
@@ -509,38 +515,49 @@ describe("get_property_details — welcomeBook field (DEC-029 addendum, 2026-10-
     });
 
     const result = (await runHavenTool("get_property_details", { slug: "mickey-in-lipa--full-family-house--sleeps-15" })) as {
-      welcomeBook: unknown;
+      welcomeBook: { restaurants: unknown[]; houseRules: unknown; howTos: unknown; checkOutSteps: unknown };
     };
-    expect(result.welcomeBook).toBeNull();
+    expect(result.welcomeBook).not.toBeNull();
+    expect(JSON.stringify(result.welcomeBook)).toMatch(/Casa Marikit/);
+    expect(result.welcomeBook.houseRules).toBeNull();
+    expect(result.welcomeBook.howTos).toBeNull();
+    expect(result.welcomeBook.checkOutSteps).toBeNull();
   });
 });
 
-describe("get_local_guide (DEC-029 addendum, 2026-10-15)", () => {
-  it("returns the B34 Welcome Book for a resolved B34 slug", async () => {
+describe("get_local_guide (DEC-029 addendum, 2026-10-15; owner update same day)", () => {
+  it("returns the full B34 Welcome Book (restaurants + house info) for a resolved B34 slug", async () => {
     const result = (await runHavenTool("get_local_guide", { slug: "cozy-1-bedroom" })) as {
-      welcomeBook: { restaurants: Array<{ name: string }> } | null;
+      welcomeBook: { restaurants: Array<{ name: string }>; houseRules: unknown } | null;
     };
     expect(result.welcomeBook).not.toBeNull();
     expect(result.welcomeBook!.restaurants.some((r) => r.name === "Casa Marikit")).toBe(true);
+    expect(result.welcomeBook!.houseRules).not.toBeNull();
   });
 
-  it("returns a Welcome-Book-pointer message with no slug given, never inventing a place", async () => {
-    const result = (await runHavenTool("get_local_guide", {})) as { welcomeBook: unknown; message: string };
-    expect(result.welcomeBook).toBeNull();
-    expect(result.message).toMatch(/printed Welcome Book/i);
+  it("returns the global restaurants/things-to-do with no slug given, but no house info, never inventing a place", async () => {
+    const result = (await runHavenTool("get_local_guide", {})) as {
+      welcomeBook: { restaurants: Array<{ name: string }>; houseRules: unknown } | null;
+      message: string;
+    };
+    expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook!.restaurants.some((r) => r.name === "Casa Marikit")).toBe(true);
+    expect(result.welcomeBook!.houseRules).toBeNull();
+    expect(result.message).toMatch(/from our Welcome Book/i);
     expect(result.message).toMatch(/Alfamart/i);
   });
 
-  it("returns the same non-B34 pointer message for a Mickey in Lipa (B38) slug", async () => {
+  it("returns global restaurants/things-to-do but null house info for a Mickey in Lipa (B38) slug — never generalized from B34", async () => {
     db.property.findFirst.mockResolvedValue({ id: 1, slug: "mickey-full", name: "Mickey Full House" });
 
     const result = (await runHavenTool("get_local_guide", { slug: "mickey-in-lipa--full-family-house--sleeps-15" })) as {
-      welcomeBook: unknown;
+      welcomeBook: { restaurants: Array<{ name: string }>; houseRules: unknown } | null;
       message: string;
     };
-    expect(result.welcomeBook).toBeNull();
+    expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook!.restaurants.some((r) => r.name === "Casa Marikit")).toBe(true);
+    expect(result.welcomeBook!.houseRules).toBeNull();
     expect(result.message).toMatch(/printed copy/i);
-    expect(result.message).not.toMatch(/Casa Marikit/);
   });
 
   it("resolves an informal B34 name via the fuzzy fallback (e.g. 'the cozy one')", async () => {
@@ -549,15 +566,20 @@ describe("get_local_guide (DEC-029 addendum, 2026-10-15)", () => {
       { slug: "spacious-2-bedroom", name: "Spacious 2BR Getaway", maxGuests: 9 },
     ]);
 
-    const result = (await runHavenTool("get_local_guide", { slug: "cozy 1br" })) as { welcomeBook: unknown };
+    const result = (await runHavenTool("get_local_guide", { slug: "cozy 1br" })) as { welcomeBook: { houseRules: unknown } };
     expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook.houseRules).not.toBeNull();
   });
 
-  it("falls back to the non-B34 pointer message for a genuinely unresolvable slug, without blocking", async () => {
+  it("falls back to the global restaurants/things-to-do (null house info) for a genuinely unresolvable slug, without blocking", async () => {
     listingsApi.getPublicListings.mockResolvedValue([{ slug: "cozy-1-bedroom", name: "Cozy 1BR Haven", maxGuests: 5 }]);
 
-    const result = (await runHavenTool("get_local_guide", { slug: "zzz nonsense zzz" })) as { welcomeBook: unknown; message: string };
-    expect(result.welcomeBook).toBeNull();
+    const result = (await runHavenTool("get_local_guide", { slug: "zzz nonsense zzz" })) as {
+      welcomeBook: { restaurants: unknown[]; houseRules: unknown } | null;
+      message: string;
+    };
+    expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook!.houseRules).toBeNull();
     expect(result.message).toMatch(/printed copy/i);
   });
 });
