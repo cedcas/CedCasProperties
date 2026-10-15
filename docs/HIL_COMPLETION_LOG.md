@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-10-14 — Haven AI terms-of-address pass: provisional-dedupe punctuation cleanup, per-option booking-link dedup, single-offer labels, gendered/neutral address terms, "ga"/"baga" question-only guidance (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+A further bug-fix/polish round on `src/lib/haven/post-process.ts`, `system-prompt.ts`, and `chat-service.ts`:
+- **Provisional-dedupe punctuation debris** — removing a repeated "provisional" could leave punctuation litter behind (e.g. "(provisional total: ₱10,525)" → "( total: ₱10,525)"). A new `cleanupStrippedPunctuation()` pass collapses a stray "( " to "(", removes a fully empty "()"/"( )" (and a leading space before it), strips a stray leading separator (",", ";", ":", "-", "—") left right after an opening paren, and collapses double spaces.
+- **Booking-link dedup scope** — `collectBookingLinks()` used to dedupe by href globally, which incorrectly collapsed a property appearing under two different `find_stay` combo options (e.g. a property that fits both a 2-property and a 3-property combo) into one. Dedup is now scoped to within a single option only; the cap rose from 6 to 8. `chat-service.ts`'s final link assembly was updated to match — it dedupes the model's own prose links against `collectBookingLinks()`'s output and against each other, but no longer globally dedupes `collectBookingLinks()`'s own entries (which would silently re-collapse the intentional cross-option repeats).
+- **Single-offer booking-link labels** — a `find_stay` reply with exactly one option and one property (a single property, no combo, no alternatives) now labels its button "Book <name> (<guests> guests)" instead of "Option 1: <name> (<guests> guests)" — there's nothing to number.
+- **Terms of address** — the system prompt's existing "no pare/bro/sis/dude" rule is now explicit: also bans "partner", allows the word only if the guest used it first, and gates "parekoy"/"marekoy" (friendly male/female terms) on a clear gender cue — self-identification or a strongly gendered name (prompt examples: "Ako si Maria" → marekoy, "Ako si Juan" → parekoy, "Ako si Toni" → stays neutral). Otherwise the model defaults to "kabayan"/"kaibigan"/"ka-Haven". A new independent post-process check, `enforceTermsOfAddress()`, backs this: any of the five banned terms found in the reply that the guest never used themselves earlier in the conversation gets substituted with "kaibigan" (or "friend" in English mode), preserving capitalization.
+- **Batangueño "ga"/"baga" question-only guidance** — the `btg` system prompt now explicitly states "ga"/"baga" are a yes/no question particle ONLY, with a worked example of the common misuse ("Oo ga, may bakante" is WRONG; "Aba'y oo, may bakante!" is the fix), and documents "ire" alongside "ari"/"are". `ensureBatanguenoMarker()`'s regex was updated to match: a negative lookbehind excludes a bare "Oo ga"/"Oo baga" affirmation from counting as a genuine marker, while still recognizing "ire" and a correctly-used "baga". The prompt also gained a vetted list of further natural, respectful Batangueño and Filipino-courtesy expressions (e.g. "kapeng barako", "Tuloy po kayo", "Mabuhay") to use at most 1–2 per reply.
+
+New/updated tests: `post-process.test.ts` (the exact reported "( total: ₱10,525)" cleanup case, empty-parens removal, per-option booking-link dedup vs. cross-option repeats, the 8-link cap, single-offer vs. multi-offer labels, `ensureBatanguenoMarker`'s "ire"/"baga" recognition and "Oo ga"/"Oo baga" misuse exclusion, `enforceTermsOfAddress`), `system-prompt.test.ts` (terms-of-address rule content, the "ga"/"baga" question-only + misuse example, the vetted expression list), `chat-service.test.ts` (end-to-end banned-term substitution and guest-used-it-first exemption).
+
+---
+
 ## 2026-10-14 — Haven AI live-test bug-fix pass: Messenger link scheme, provisional-dedupe artifact, Tagalog/Batangueño dates, booking-link labels, Batangueño markers (fix/haven-ai-polish-101426, DEC-029)
 
 Area: Website

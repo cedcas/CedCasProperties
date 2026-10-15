@@ -15,6 +15,7 @@ import {
   ensureHandoffLink,
   limitToOneProvisional,
   ensureBatanguenoMarker,
+  enforceTermsOfAddress,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
@@ -134,11 +135,21 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   if (!text.trim()) text = NO_ANSWER_FALLBACK;
 
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
+  const guestMessages = body.messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" ");
   const priceChecked = limitToOneProvisional(enforcePriceClaims(text, allowedAmounts));
-  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(priceChecked);
+  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, body.lang as HavenLang);
+  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
   const reply = body.lang === "btg" ? ensureBatanguenoMarker(strippedReply) : strippedReply;
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
-  const links = ensureHandoffLink(priceChecked, dedupeLinks([...modelLinks, ...bookingLinks]));
+  // bookingLinks may legitimately repeat the same href across different find_stay options —
+  // only dedupe the model's own prose links against each other and against bookingLinks,
+  // never bookingLinks against itself.
+  const bookingHrefs = new Set(bookingLinks.map((l) => l.href));
+  const dedupedModelLinks = dedupeLinks(modelLinks).filter((l) => !bookingHrefs.has(l.href));
+  const links = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls };
 }

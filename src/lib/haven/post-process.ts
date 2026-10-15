@@ -1,6 +1,7 @@
 import "server-only";
 import { formatStayRangeShort } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
+import type { HavenLang } from "./system-prompt";
 
 /**
  * Guardrails applied to the model's text AFTER it's generated, on every turn — the model's
@@ -187,6 +188,15 @@ function optionLabel(optionIndex: number, name: string, guests: number | undefin
   return typeof guests === "number" ? `${prefix} (${guests} guest${guests === 1 ? "" : "s"})` : prefix;
 }
 
+/**
+ * When find_stay offers exactly one property with no alternatives (not a combo, not a
+ * choice among options), the "Option N:" prefix is noise — there's nothing to number.
+ */
+function singlePropertyLabel(name: string, guests: number | undefined): string {
+  const prefix = `Book ${name}`;
+  return typeof guests === "number" ? `${prefix} (${guests} guest${guests === 1 ? "" : "s"})` : prefix;
+}
+
 /** Strips a leading "[DEVDB]"-style bracket tag (dev-DB test data convention). */
 function stripBracketPrefix(name: string): string {
   return name.replace(/^\s*(\[[^\]]*\]\s*)+/, "").trim();
@@ -215,10 +225,12 @@ function shortPropertyLabels(pairs: { slug: string; name: string }[]): Map<strin
  * find_stay, …) — independent of whether the model wrote one into its prose. Still run
  * through the same href allowlist as model-written links. `find_stay` options are labeled
  * "Option N: <name> (<guests> guests)", in the same order the options array (and therefore
- * the reply prose built from it) lists them. Capped at 6, deduped by href — which already
- * encodes property + dates + guests, so the same property/guest pairing is never repeated.
+ * the reply prose built from it) lists them. Deduped only WITHIN a single option — the same
+ * property+guests link legitimately reappears under a different option (e.g. a property that
+ * fits both a 2-property and a 3-property combo), so dedup must not collapse those across
+ * options. Capped at 8, in reply order.
  */
-export function collectBookingLinks(exchanges: ToolExchange[], max = 6): LinkButton[] {
+export function collectBookingLinks(exchanges: ToolExchange[], max = 8): LinkButton[] {
   const pairs: { slug: string; name: string }[] = [];
   for (const { name: toolName, input, result } of exchanges) {
     const i = asRecord(input);
@@ -248,21 +260,27 @@ export function collectBookingLinks(exchanges: ToolExchange[], max = 6): LinkBut
       const label = shortNames.get(i.slug) ?? (typeof r.name === "string" ? stripToBaseName(r.name) : "this property");
       links.push({ label: bookLabel(label, dates), href: r.bookingLink });
     } else if (toolName === "find_stay" && Array.isArray(r.options)) {
+      const isSingleOffer = r.options.length === 1 && Array.isArray(asRecord(r.options[0]).properties) &&
+        (asRecord(r.options[0]).properties as unknown[]).length === 1;
       r.options.forEach((option, optionIndex) => {
         const properties = asRecord(option).properties;
         if (!Array.isArray(properties)) return;
+        const seenInOption = new Set<string>();
         for (const property of properties) {
           const p = asRecord(property);
           if (typeof p.bookingLink !== "string" || typeof p.slug !== "string") continue;
+          if (seenInOption.has(p.bookingLink)) continue;
+          seenInOption.add(p.bookingLink);
           const label = shortNames.get(p.slug) ?? (typeof p.name === "string" ? stripToBaseName(p.name) : "this property");
           const guests = typeof p.guests === "number" ? p.guests : undefined;
-          links.push({ label: optionLabel(optionIndex, label, guests), href: p.bookingLink });
+          const buttonLabel = isSingleOffer ? singlePropertyLabel(label, guests) : optionLabel(optionIndex, label, guests);
+          links.push({ label: buttonLabel, href: p.bookingLink });
         }
       });
     }
   }
 
-  return dedupeLinks(links.filter((l) => isAllowedHref(l.href))).slice(0, max);
+  return links.filter((l) => isAllowedHref(l.href)).slice(0, max);
 }
 
 // ── Messenger handoff safety net ────────────────────────────────────────────
@@ -294,19 +312,38 @@ const PROVISIONAL_RE = /\*\*provisional\*\*|\*provisional\*|__provisional__|_pro
 /** Keeps only the first occurrence of the word "provisional" per reply (see system-prompt.ts). */
 export function limitToOneProvisional(text: string): string {
   let seen = false;
+  const deduped = text.replace(PROVISIONAL_RE, (match) => {
+    if (seen) return "";
+    seen = true;
+    return match;
+  });
+  return cleanupStrippedPunctuation(deduped);
+}
+
+/**
+ * Cleans up the punctuation debris a word/phrase removal can leave behind — e.g. stripping
+ * "provisional" out of "(provisional total: ₱10,525)" leaves "( total: ₱10,525)". Order
+ * matters: empty parens are removed whole before the leading-whitespace/separator passes,
+ * so "(  )" collapses to nothing rather than to a lone "(".
+ */
+function cleanupStrippedPunctuation(text: string): string {
   return text
-    .replace(PROVISIONAL_RE, (match) => {
-      if (seen) return "";
-      seen = true;
-      return match;
-    })
+    .replace(/[ \t]*\(\s*[-—,;:]*\s*\)/g, "") // "()" / "( )" / "(-)" — fully empty parens, plus a leading space
+    .replace(/\(\s*[-—,;:]+\s*/g, "(") // stray leading separator right after "("
+    .replace(/\(\s+/g, "(") // "( " -> "("
+    .replace(/\s+\)/g, ")") // " )" -> ")"
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+([.,!?;:])/g, "$1");
 }
 
 // ── Batangueño marker check ──────────────────────────────────────────────────
 
-const BATANGUENO_MARKER = /ala eh|aba'y|\bga\b|\bnga\b|\bari\b|\bare\b/i;
+/**
+ * "ga"/"baga" are ONLY valid as the yes/no question particle ("Ilan ga kayo?", "Totoo
+ * baga?") — "Oo ga" ("yes ga") is a common misuse (a bare affirmation, not a question) and
+ * must NOT count as a genuine marker, hence the negative lookbehind on both.
+ */
+const BATANGUENO_MARKER = /ala eh|aba'y|\bire\b|\bnga\b|\bari\b|\bare\b|(?<!\boo\s)\bga\b|(?<!\boo\s)\bbaga\b/i;
 
 /**
  * A `btg`-mode reply should always carry at least one natural Batangueño marker (see
@@ -316,4 +353,32 @@ const BATANGUENO_MARKER = /ala eh|aba'y|\bga\b|\bnga\b|\bari\b|\bare\b/i;
 export function ensureBatanguenoMarker(text: string): string {
   if (BATANGUENO_MARKER.test(text)) return text;
   return `Ala eh, ${text}`;
+}
+
+// ── Terms-of-address guard ───────────────────────────────────────────────────
+
+const BANNED_ADDRESS_TERMS = ["partner", "pare", "bro", "sis", "dude"];
+
+function capitalizeLike(sample: string, replacement: string): string {
+  const firstChar = sample.charAt(0);
+  return firstChar !== firstChar.toLowerCase() && firstChar === firstChar.toUpperCase()
+    ? replacement.charAt(0).toUpperCase() + replacement.slice(1)
+    : replacement;
+}
+
+/**
+ * Bans "partner"/"pare"/"bro"/"sis"/"dude" as a term of address UNLESS the guest used that
+ * exact word themselves earlier in the conversation — the system prompt tells the model
+ * this, but this is the independent backstop. Replaces (never just deletes, so the sentence
+ * stays grammatical) with "kaibigan", or "friend" in English mode.
+ */
+export function enforceTermsOfAddress(text: string, guestMessages: string, lang: HavenLang): string {
+  const guestLower = guestMessages.toLowerCase();
+  const replacement = lang === "en" ? "friend" : "kaibigan";
+  let result = text;
+  for (const term of BANNED_ADDRESS_TERMS) {
+    if (new RegExp(`\\b${term}\\b`, "i").test(guestLower)) continue;
+    result = result.replace(new RegExp(`\\b${term}\\b`, "gi"), (match) => capitalizeLike(match, replacement));
+  }
+  return result;
 }

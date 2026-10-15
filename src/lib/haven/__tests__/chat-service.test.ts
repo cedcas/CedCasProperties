@@ -339,6 +339,38 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     expect(result.reply).toBe("Ay ga, meron pa kaming bakante!");
   });
 
+  it("replaces a banned term of address the guest never used", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure thing, bro — I'll get that sorted for you.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).not.toMatch(/\bbro\b/i);
+    expect(result.reply).toContain("friend");
+  });
+
+  it("keeps a banned term of address the guest used first", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure thing, bro!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "hey bro, got a 2BR free?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toContain("bro");
+  });
+
   it("masks PII before writing the transcript", async () => {
     providerChat.mockResolvedValue({
       text: "Noted, I'll follow up.",

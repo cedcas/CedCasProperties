@@ -10,6 +10,7 @@ import {
   ensureHandoffLink,
   limitToOneProvisional,
   ensureBatanguenoMarker,
+  enforceTermsOfAddress,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   MESSENGER_HREF,
@@ -279,20 +280,26 @@ describe("collectBookingLinks", () => {
     expect(collectBookingLinks(exchanges)).toEqual([]);
   });
 
-  it("never outputs the same property+guests link twice even if two options repeat it", () => {
-    const sameLink = { slug: "cozy-1-bedroom", name: "Cozy 1BR", guests: 5, bookingLink: "/properties/cozy-1-bedroom/book?g=5" };
+  it("de-dupes the same property+guests link WITHIN one option, but keeps it once per option across options", () => {
+    const sameLink = { slug: "spacious-2-bedroom", name: "Spacious 2BR", guests: 9, bookingLink: "/properties/spacious-2-bedroom/book?g=9" };
     const exchanges: ToolExchange[] = [
       {
         name: "find_stay",
-        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 5 },
-        result: { options: [{ properties: [sameLink] }, { properties: [sameLink] }] },
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 9 },
+        result: { options: [{ properties: [sameLink, sameLink] }, { properties: [sameLink] }] },
       },
     ];
-    expect(collectBookingLinks(exchanges)).toHaveLength(1);
+    const links = collectBookingLinks(exchanges);
+    // Option 1 repeats the link within itself (deduped to one); Option 2 repeats the same
+    // property+guests link under a different option (e.g. a different combo) and is kept.
+    expect(links.map((l) => l.label)).toEqual([
+      "Option 1: Spacious 2BR (9 guests)",
+      "Option 2: Spacious 2BR (9 guests)",
+    ]);
   });
 
-  it("caps the total number of booking links at 6", () => {
-    const properties = Array.from({ length: 8 }, (_, i) => ({
+  it("caps the total number of booking links at 8, in reply order", () => {
+    const properties = Array.from({ length: 10 }, (_, i) => ({
       slug: `p${i}`,
       name: `Property ${i}`,
       guests: 1,
@@ -305,7 +312,46 @@ describe("collectBookingLinks", () => {
         result: { options: [{ properties }] },
       },
     ];
-    expect(collectBookingLinks(exchanges)).toHaveLength(6);
+    const links = collectBookingLinks(exchanges);
+    expect(links).toHaveLength(8);
+    expect(links[0].label).toContain("Property 0");
+    expect(links[7].label).toContain("Property 7");
+  });
+
+  it("drops the 'Option N:' prefix when the reply offers a single property with no combos", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 12 },
+        result: {
+          options: [
+            { properties: [{ slug: "mickey-full", name: "Mickey in Lipa", guests: 12, bookingLink: "/properties/mickey-full/book?g=12" }] },
+          ],
+        },
+      },
+    ];
+    const links = collectBookingLinks(exchanges);
+    expect(links).toEqual([{ label: "Book Mickey in Lipa (12 guests)", href: "/properties/mickey-full/book?g=12" }]);
+  });
+
+  it("keeps the 'Option N:' prefix when there are multiple single-property options to choose between", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 2 },
+        result: {
+          options: [
+            { properties: [{ slug: "cozy-1-bedroom", name: "Cozy 1BR", guests: 2, bookingLink: "/properties/cozy-1-bedroom/book?g=2" }] },
+            { properties: [{ slug: "spacious-2-bedroom", name: "Spacious 2BR", guests: 2, bookingLink: "/properties/spacious-2-bedroom/book?g=2" }] },
+          ],
+        },
+      },
+    ];
+    const links = collectBookingLinks(exchanges);
+    expect(links.map((l) => l.label)).toEqual([
+      "Option 1: Cozy 1BR (2 guests)",
+      "Option 2: Spacious 2BR (2 guests)",
+    ]);
   });
 
   it("ignores tools that don't return booking links", () => {
@@ -375,6 +421,31 @@ describe("limitToOneProvisional", () => {
     const input = "The total is provisional. _provisional_ until checkout.";
     expect(limitToOneProvisional(input)).toBe("The total is provisional. until checkout.");
   });
+
+  it("cleans up a stray '( ' left behind by a removed word (the field-reported artifact)", () => {
+    const input = "**Option 2** ( total: ₱10,525)";
+    expect(limitToOneProvisional(input)).toBe("**Option 2** (total: ₱10,525)");
+  });
+
+  it("removes a fully empty '()' left behind by a removed parenthetical", () => {
+    const input = "This total is provisional. **Option 2** total ₱10,525 (provisional)";
+    expect(limitToOneProvisional(input)).toBe("This total is provisional. **Option 2** total ₱10,525");
+  });
+
+  it("removes a fully empty '( )' left behind by a removed parenthetical", () => {
+    const input = "This total is provisional. **Option 2** total ₱10,525 ( provisional )";
+    expect(limitToOneProvisional(input)).toBe("This total is provisional. **Option 2** total ₱10,525");
+  });
+
+  it("strips a stray leading separator left inside parens by a removed word", () => {
+    const input = "This total is provisional. **Option 2** (, total: ₱10,525)";
+    expect(limitToOneProvisional(input)).toBe("This total is provisional. **Option 2** (total: ₱10,525)");
+  });
+
+  it("collapses a double space left behind by a removal", () => {
+    const input = "This  is  fine.";
+    expect(limitToOneProvisional(input)).toBe("This is fine.");
+  });
 });
 
 describe("ensureBatanguenoMarker", () => {
@@ -383,8 +454,8 @@ describe("ensureBatanguenoMarker", () => {
     expect(ensureBatanguenoMarker(input)).toBe(input);
   });
 
-  it("recognizes each documented marker", () => {
-    for (const marker of ["ala eh", "aba'y", "ga", "nga", "ari", "are"]) {
+  it("recognizes each documented marker, including ire and baga", () => {
+    for (const marker of ["ala eh", "aba'y", "ga", "nga", "ari", "are", "ire", "baga"]) {
       expect(ensureBatanguenoMarker(`Teka lang, ${marker} titingnan ko.`)).toBe(`Teka lang, ${marker} titingnan ko.`);
     }
   });
@@ -392,5 +463,57 @@ describe("ensureBatanguenoMarker", () => {
   it("prepends a natural opener when the reply has no marker at all", () => {
     const input = "Meron pa kaming bakante sa petsang iyan para sa inyo.";
     expect(ensureBatanguenoMarker(input)).toBe(`Ala eh, ${input}`);
+  });
+
+  it("does not count a misused 'Oo ga' as a bare affirmation as a genuine marker", () => {
+    const input = "Oo ga, may bakante kami sa petsang 'yan.";
+    expect(ensureBatanguenoMarker(input)).toBe(`Ala eh, ${input}`);
+  });
+
+  it("does not count a misused 'Oo baga' as a bare affirmation as a genuine marker", () => {
+    const input = "Oo baga, may bakante kami sa petsang 'yan.";
+    expect(ensureBatanguenoMarker(input)).toBe(`Ala eh, ${input}`);
+  });
+
+  it("still counts 'ga' as a marker when used correctly as a question particle elsewhere in the same reply", () => {
+    const input = "Oo ga, may bakante kami — ilan ga kayo talaga?";
+    expect(ensureBatanguenoMarker(input)).toBe(input);
+  });
+
+  it("counts 'baga' used correctly as a question particle", () => {
+    const input = "Totoo baga, meron pa kaming bakante?";
+    expect(ensureBatanguenoMarker(input)).toBe(input);
+  });
+});
+
+describe("enforceTermsOfAddress", () => {
+  it("replaces a banned term in English mode with 'friend' when the guest never used it", () => {
+    const result = enforceTermsOfAddress("Sure thing, bro — I'll sort that out.", "Hi, got a 2BR free?", "en");
+    expect(result).toBe("Sure thing, friend — I'll sort that out.");
+  });
+
+  it("replaces a banned term in non-English mode with 'kaibigan' when the guest never used it", () => {
+    const result = enforceTermsOfAddress("Sige lang, pare, tingnan ko.", "May bakante ba kayo?", "tl");
+    expect(result).toBe("Sige lang, kaibigan, tingnan ko.");
+  });
+
+  it("keeps a banned term the guest used first, earlier in the conversation", () => {
+    const result = enforceTermsOfAddress("Sure thing, bro!", "hey bro, got a 2BR free?", "en");
+    expect(result).toBe("Sure thing, bro!");
+  });
+
+  it("preserves capitalization when substituting at the start of a sentence", () => {
+    const result = enforceTermsOfAddress("Bro, that's all set.", "May bakante ba?", "en");
+    expect(result).toBe("Friend, that's all set.");
+  });
+
+  it("replaces every banned term independently, each checked against the guest's own usage", () => {
+    const result = enforceTermsOfAddress("Hey partner, hey dude, hey sis!", "hey dude!", "en");
+    expect(result).toBe("Hey friend, hey dude, hey friend!");
+  });
+
+  it("leaves text with no banned term untouched", () => {
+    const result = enforceTermsOfAddress("Hello kabayan, how can I help?", "Hi there", "en");
+    expect(result).toBe("Hello kabayan, how can I help?");
   });
 });
