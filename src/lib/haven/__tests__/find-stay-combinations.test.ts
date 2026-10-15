@@ -51,6 +51,24 @@ describe("findStayCombinations", () => {
     expect(combos[0].guestSplit.reduce((a, b) => a + b, 0)).toBe(12);
   });
 
+  it("never assigns a property more guests than its own maxGuests, across every combo returned", () => {
+    // A group bigger than any single property (18) forces multi-property combos; each
+    // property's slice of the group must still respect that property's own capacity.
+    const available = [
+      prop(1, "cozy-1-bedroom", 5, "listing-cozy-1-bedroom"),
+      prop(2, "spacious-2-bedroom", 9, "listing-spacious-2-bedroom"),
+      prop(3, "sleeps-11", 11, "listing-sleeps-11"),
+    ];
+    const combos = findStayCombinations(available, 18);
+    expect(combos.length).toBeGreaterThan(0);
+    for (const combo of combos) {
+      combo.properties.forEach((p, i) => {
+        expect(combo.guestSplit[i]).toBeLessThanOrEqual(p.maxGuests);
+      });
+      expect(combo.guestSplit.reduce((a, b) => a + b, 0)).toBe(18);
+    }
+  });
+
   it("never combines two properties that share an inventory group (same physical house)", () => {
     // sleeps-7 and sleeps-11 are two configurations of the same house (same groupKey) and
     // can never both be booked — only sleeps-15 (a different house) may pair with either.

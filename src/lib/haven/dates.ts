@@ -18,38 +18,47 @@ export interface ResolvedDates {
   interpreted: string;
 }
 
+// Tagalog/Batangueño weekday and month names alongside the English ones, so the same
+// patterns below understand English, Tagalog, Batangueño, and Taglish phrasing without a
+// separate parse path per language.
 const WEEKDAYS: Record<string, number> = {
-  sun: 0, sunday: 0,
-  mon: 1, monday: 1,
-  tue: 2, tues: 2, tuesday: 2,
-  wed: 3, wednesday: 3,
-  thu: 4, thur: 4, thurs: 4, thursday: 4,
-  fri: 5, friday: 5,
-  sat: 6, saturday: 6,
+  sun: 0, sunday: 0, linggo: 0,
+  mon: 1, monday: 1, lunes: 1,
+  tue: 2, tues: 2, tuesday: 2, martes: 2,
+  wed: 3, wednesday: 3, miyerkules: 3, miyercoles: 3,
+  thu: 4, thur: 4, thurs: 4, thursday: 4, huwebes: 4,
+  fri: 5, friday: 5, biyernes: 5,
+  sat: 6, saturday: 6, sabado: 6,
 };
 
 const MONTHS: Record<string, number> = {
-  jan: 0, january: 0,
-  feb: 1, february: 1,
-  mar: 2, march: 2,
-  apr: 3, april: 3,
-  may: 4,
-  jun: 5, june: 5,
-  jul: 6, july: 6,
-  aug: 7, august: 7,
-  sep: 8, sept: 8, september: 8,
-  oct: 9, october: 9,
-  nov: 10, november: 10,
-  dec: 11, december: 11,
+  jan: 0, january: 0, enero: 0,
+  feb: 1, february: 1, pebrero: 1,
+  mar: 2, march: 2, marso: 2,
+  apr: 3, april: 3, abril: 3,
+  may: 4, mayo: 4,
+  jun: 5, june: 5, hunyo: 5,
+  jul: 6, july: 6, hulyo: 6,
+  aug: 7, august: 7, agosto: 7,
+  sep: 8, sept: 8, september: 8, setyembre: 8,
+  oct: 9, october: 9, oktubre: 9,
+  nov: 10, november: 10, nobyembre: 10, nobiembre: 10,
+  dec: 11, december: 11, disyembre: 11,
 };
 
 const ORDINALS: Record<string, number> = {
-  "1st": 1, first: 1,
-  "2nd": 2, second: 2,
-  "3rd": 3, third: 3,
-  "4th": 4, fourth: 4,
-  "5th": 5, fifth: 5,
+  "1st": 1, first: 1, una: 1, unang: 1,
+  "2nd": 2, second: 2, ikalawa: 2, ikalawang: 2, pangalawa: 2, pangalawang: 2,
+  "3rd": 3, third: 3, ikatlo: 3, ikatlong: 3, pangatlo: 3, pangatlong: 3,
+  "4th": 4, fourth: 4, ikaapat: 4, ikaapatna: 4,
+  "5th": 5, fifth: 5, ikalima: 5, ikalimang: 5,
 };
+
+/** Word-form ordinal keys only (the digit forms like "2nd" are matched by their own pattern). */
+const ORDINAL_WORD_PATTERN = Object.keys(ORDINALS)
+  .filter((k) => /^[a-z]+$/.test(k))
+  .sort((a, b) => b.length - a.length)
+  .join("|");
 
 /** Today's Manila calendar date, anchored at UTC midnight. */
 function todayManila(now: Date): Date {
@@ -132,9 +141,9 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
     if (!isNaN(checkIn.getTime())) return toResult(checkIn, addUtcDays(checkIn, 1));
   }
 
-  // "2nd Saturday of November" / "1st Friday in December"
+  // "2nd Saturday of November" / "1st Friday in December" / "ikalawang Sabado ng Nobyembre"
   m = expr.match(
-    new RegExp(`\\b(\\d(?:st|nd|rd|th)?|first|second|third|fourth|fifth)\\s+(${WEEKDAY_NAME_PATTERN})\\s+(?:of|in)\\s+(${MONTH_NAME_PATTERN})\\b`)
+    new RegExp(`\\b(\\d(?:st|nd|rd|th)?|${ORDINAL_WORD_PATTERN})\\s+(${WEEKDAY_NAME_PATTERN})\\s+(?:of|in|ng)\\s+(${MONTH_NAME_PATTERN})\\b`)
   );
   if (m) {
     const nth = ORDINALS[m[1]] ?? ORDINALS[`${m[1]}${m[1] === "1" ? "st" : m[1] === "2" ? "nd" : m[1] === "3" ? "rd" : "th"}`];
@@ -170,8 +179,8 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
     if (checkOut > checkIn) return toResult(checkIn, checkOut);
   }
 
-  // "next Friday" alone
-  m = expr.match(new RegExp(`\\bnext\\s+(${WEEKDAY_NAME_PATTERN})\\b`));
+  // "next Friday" alone / "susunod na Sabado" (also "sa susunod na Sabado")
+  m = expr.match(new RegExp(`\\b(?:next|susunod\\s+na)\\s+(${WEEKDAY_NAME_PATTERN})\\b`));
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], true);
     return toResult(checkIn, addUtcDays(checkIn, 1));
