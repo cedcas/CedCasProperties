@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   collectToolAmounts,
   enforcePriceClaims,
+  collectBasePrices,
+  collectDatedQuoteAmounts,
+  ensureFromPrefix,
   extractAllowedLinks,
   isAllowedHref,
   normalizeHref,
@@ -210,6 +213,69 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     const amounts = collectToolAmounts([{ perNight: [{ rate: 2800 }, { rate: 3500 }], total: 6300 }]);
     const text = "Thursday: ₱2,800, Friday: ₱3,500. Total: ₱6,300.";
     expect(enforcePriceClaims(text, amounts)).toBe(text);
+  });
+});
+
+describe("collectBasePrices", () => {
+  it("collects a pricePerNight value from a list_properties-shaped result", () => {
+    const amounts = collectBasePrices([[{ slug: "mickey-full", name: "Mickey in Lipa", pricePerNight: 6500 }]]);
+    expect(amounts.has(6500)).toBe(true);
+  });
+
+  it("ignores a same-valued number under a different key", () => {
+    const amounts = collectBasePrices([{ total: 6500 }]);
+    expect(amounts.has(6500)).toBe(false);
+  });
+});
+
+describe("collectDatedQuoteAmounts", () => {
+  it("collects a get_quote total/nightlyTotal but not a sibling pricePerNight", () => {
+    const amounts = collectDatedQuoteAmounts([{ pricePerNight: 6500, total: 13000, nightlyTotal: 13000 }]);
+    expect(amounts.has(13000)).toBe(true);
+    expect(amounts.has(6500)).toBe(false);
+  });
+
+  it("collects a perNight rate nested in a quote result", () => {
+    const amounts = collectDatedQuoteAmounts([{ perNight: [{ date: "2026-12-24", rate: 6500 }] }]);
+    expect(amounts.has(6500)).toBe(true);
+  });
+});
+
+describe("ensureFromPrefix — owner guardrail: base rates always read 'from ₱X' (Cedric, 2026-10-15)", () => {
+  it('prefixes a bare base rate with "from " in English', () => {
+    const basePrices = new Set([6500]);
+    const result = ensureFromPrefix("Mickey in Lipa — ₱6,500/night", basePrices, new Set(), true);
+    expect(result).toBe("Mickey in Lipa — from ₱6,500/night");
+  });
+
+  it('prefixes a bare base rate with "simula " outside English mode', () => {
+    const basePrices = new Set([6500]);
+    const result = ensureFromPrefix("Mickey in Lipa — ₱6,500/gabi", basePrices, new Set(), false);
+    expect(result).toBe("Mickey in Lipa — simula ₱6,500/gabi");
+  });
+
+  it("does not double up when the model already wrote \"from\"/\"simula\"", () => {
+    const basePrices = new Set([6500]);
+    expect(ensureFromPrefix("From ₱6,500/night.", basePrices, new Set(), true)).toBe("From ₱6,500/night.");
+    expect(ensureFromPrefix("Simula ₱6,500 kada gabi.", basePrices, new Set(), false)).toBe("Simula ₱6,500 kada gabi.");
+  });
+
+  it("leaves a dated quote line untouched even when its total equals a base rate", () => {
+    const basePrices = new Set([6500]);
+    const datedAmounts = new Set([6500]);
+    const result = ensureFromPrefix("Your total for that one night is ₱6,500.", basePrices, datedAmounts, true);
+    expect(result).toBe("Your total for that one night is ₱6,500.");
+  });
+
+  it("leaves text untouched when there are no base prices to check against", () => {
+    const text = "Your total is ₱6,500.";
+    expect(ensureFromPrefix(text, new Set(), new Set(), true)).toBe(text);
+  });
+
+  it("is a no-op when the amount in the text doesn't match any base price", () => {
+    const basePrices = new Set([6500]);
+    const text = "That fee is ₱200/hour.";
+    expect(ensureFromPrefix(text, basePrices, new Set(), true)).toBe(text);
   });
 });
 

@@ -48,6 +48,23 @@ describe("buildHavenSystemPrompt", () => {
     it("says the only total allowed is the one get_quote/find_stay returned this turn", () => {
       expect(prompt).toMatch(/get_quote or find_stay returned THIS turn/);
     });
+
+    it("requires a base/listing rate to always read 'from ₱X'/'simula ₱X', and exempts a dated quote line (Cedric, 2026-10-15)", () => {
+      expect(prompt).toMatch(/simula ₱X kada gabi/);
+      expect(prompt).toMatch(/rates\s*can change/i);
+      expect(prompt).toMatch(/does NOT apply to an exact dated quote line/i);
+    });
+  });
+
+  describe("local places / how things work (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("points to the printed Welcome Book, with Alfamart and minimarts as fixed facts", () => {
+      expect(prompt).toMatch(/Welcome Book/);
+      expect(prompt).toMatch(/Alfamart/);
+      expect(prompt).toMatch(/minimarts/);
+      expect(prompt).toMatch(/never look up or invent/i);
+    });
   });
 
   describe("early check-in/late checkout fee", () => {

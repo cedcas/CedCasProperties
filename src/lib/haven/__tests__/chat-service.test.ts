@@ -703,6 +703,62 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     expect(result.reply).toContain("group of 10");
   });
 
+  it("prefixes a bare listing base rate with 'from ₱X/night' (Cedric, 2026-10-15)", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check what we have.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Mickey in Lipa — ₱6,500/night",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue([
+      { slug: "mickey-full", name: "Mickey in Lipa", pricePerNight: 6500, maxGuests: 15 },
+    ]);
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe("Mickey in Lipa — from ₱6,500/night");
+  });
+
+  it("leaves a dated get_quote total untouched even when it equals a listing's base rate", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check that quote.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Let me get the exact quote for that date.",
+        toolCalls: [{ id: "2", name: "get_quote", input: { slug: "mickey-full", checkIn: "2026-12-24", checkOut: "2026-12-25", guests: 2 } }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Your total for that one night is ₱6,500.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock
+      .mockResolvedValueOnce([{ slug: "mickey-full", name: "Mickey in Lipa", pricePerNight: 6500, maxGuests: 15 }])
+      .mockResolvedValueOnce({ name: "Mickey in Lipa", total: 6500, nightlyTotal: 6500, bookingLink: "/properties/mickey-full/book" });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe(
+      "For Thursday, December 24 → Friday, December 25, 2026:\n\nYour total for that one night is ₱6,500."
+    );
+  });
+
   it("prepends the resolved date range to an English reply that omits it", async () => {
     providerChat
       .mockResolvedValueOnce({

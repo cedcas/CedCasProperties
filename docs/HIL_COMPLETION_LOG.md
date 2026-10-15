@@ -4,6 +4,60 @@
 
 ---
 
+## 2026-10-15 — Haven AI: base-rate "from"/"simula" prefix, local-places Welcome Book guardrail (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,405 tests).
+
+### Outcome
+Two new Owner guardrails (Cedric, 2026-10-15), each enforced in the system prompt AND
+independently in post-processing (the standing DEC-029 philosophy: a prompt instruction
+alone is guidance, not an enforcement boundary):
+
+1. **Base/listing rates always read "from ₱X/night".** Whenever Haven states a base or
+   listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+   quick property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X
+   kada gabi"), never a bare number, because rates can change. An exact dated
+   `get_quote`/`find_stay` quote line (a specific per-night breakdown or total for the
+   guest's own `checkIn`/`checkOut`) is unaffected — stated exactly as the tool returned
+   it, even if the number happens to equal the base rate (e.g. a single night with no
+   extra fees).
+2. **Local places / how things work point to the printed Welcome Book.** A restaurant/
+   food/groceries/nearby-place/appliance-or-house-thing question is answered by pointing
+   the guest to the printed "Welcome Book" in each house, never by looking up or inventing
+   a named place online or from general knowledge — a tool's own `neighborhoodPlaces` data
+   may still be used when present. Two fixed facts Haven may state directly: an Alfamart
+   right outside the subdivision, plus minimarts around the property.
+
+### Material Changes
+- **`post-process.ts`:** new `collectBasePrices()` (every `pricePerNight` value in this
+  turn's tool results) and `collectDatedQuoteAmounts()` (every other tool-result number)
+  let the new `ensureFromPrefix()` tell a bare base rate apart from an exact dated-quote
+  figure that happens to equal it. `ensureFromPrefix()` inserts "from "/"simula " directly
+  before a matching, unprefixed ₱ amount, skipping one already preceded by "from"/
+  "simula"/"starting at".
+- **`chat-service.ts`:** wires `collectBasePrices()`/`collectDatedQuoteAmounts()`/
+  `ensureFromPrefix()` into the existing post-processing pipeline, right after the
+  price-claims guard.
+- **`system-prompt.ts`:** a new hard rule spells out the "from ₱X/night"/"simula ₱X kada
+  gabi" requirement and the dated-quote-line exception.
+- **`owner-facts.ts`:** a new dated fact bullet (Cedric, 2026-10-15) covers local places —
+  the Welcome Book pointer, the never-invent-a-place rule, and the Alfamart/minimarts
+  facts.
+
+Tests: `post-process.test.ts` (`collectBasePrices`/`collectDatedQuoteAmounts`/
+`ensureFromPrefix`, incl. the dated-quote-line exception and the no-double-prefix case),
+`system-prompt.test.ts` and `owner-facts.test.ts` (both guardrails' prompt text),
+`chat-service.test.ts` (the "Mickey in Lipa — ₱6,500/night" → "from ₱6,500/night"
+end-to-end case, and a dated `get_quote` total left untouched even when it numerically
+equals the base rate).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
 ## 2026-10-15 — Haven AI: free-text reset-to-greeting fix, long-history validation, "malaking bahay" mapping (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

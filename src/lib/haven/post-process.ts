@@ -81,6 +81,62 @@ export function collectToolAmounts(toolResults: unknown[]): Set<number> {
   return amounts;
 }
 
+/**
+ * Every `pricePerNight` value in this turn's tool results — the base/listing nightly rate
+ * (list_properties, a property rundown), as distinct from a dated get_quote/find_stay
+ * total (see `collectDatedQuoteAmounts`). Used by `ensureFromPrefix` below (Owner guardrail,
+ * Cedric 2026-10-15): a base rate can change, so it must always read "from ₱X/night", never
+ * a bare number.
+ */
+export function collectBasePrices(toolResults: unknown[]): Set<number> {
+  const amounts = new Set<number>();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  function walk(value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        if (key === "pricePerNight" && typeof v === "number" && Number.isFinite(v)) amounts.add(round2(v));
+        else walk(v);
+      }
+    }
+  }
+  toolResults.forEach(walk);
+  return amounts;
+}
+
+/**
+ * Every numeric value in this turn's tool results that is NOT under a `pricePerNight` key
+ * — a dated quote's `total`/`nightlyTotal`/`perNight` rate, an `extraGuestFee`, etc. Lets
+ * `ensureFromPrefix` tell apart a bare base rate from an exact dated-quote figure that
+ * happens to equal it (e.g. a single night at the base rate with no extra fees) — the
+ * latter must stay exactly as the tool returned it, with no "from"/"simula" prefix.
+ */
+export function collectDatedQuoteAmounts(toolResults: unknown[]): Set<number> {
+  const amounts = new Set<number>();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  function walk(value: unknown): void {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      amounts.add(round2(value));
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        if (key === "pricePerNight") continue;
+        walk(v);
+      }
+    }
+  }
+  toolResults.forEach(walk);
+  return amounts;
+}
+
 // ── Price guard: whole-sentence / whole-bullet-line replacement ────────────────
 
 /**
@@ -184,6 +240,36 @@ export function enforcePriceClaims(text: string, allowedAmounts: Set<number>): s
     .split("\n")
     .map((line) => processLine(line, allowedAmounts))
     .join("\n");
+}
+
+/** A preceding "from"/"simula"/"starting at" right before the match — never double it up. */
+const FROM_OR_SIMULA_PRECEDING_RE = /\b(?:from|simula|starting at)\s*$/i;
+
+/**
+ * Owner guardrail (Cedric, 2026-10-15): whenever Haven states a base/listing nightly rate
+ * (a property's own `pricePerNight`, via `list_properties` or a property rundown) the peso
+ * amount must always read "from ₱X/night" (en) / "simula ₱X" (tl/btg) — never a bare
+ * number — because rates change. A dated get_quote/find_stay quote line (an exact total or
+ * per-night breakdown for the guest's own dates) is untouched even when the number happens
+ * to match a base rate (`datedAmounts` wins over `basePrices` — see `collectDatedQuoteAmounts`).
+ * Independent backstop for the same instruction in system-prompt.ts.
+ */
+export function ensureFromPrefix(
+  text: string,
+  basePrices: Set<number>,
+  datedAmounts: Set<number>,
+  isEnglish: boolean
+): string {
+  if (basePrices.size === 0) return text;
+  const lead = isEnglish ? "from " : "simula ";
+  return text.replace(pesoAmountRegex(), (match: string, offset: number, full: string) => {
+    const numeric = Number(match.replace(/[^\d.]/g, ""));
+    const rounded = Math.round(numeric * 100) / 100;
+    if (!basePrices.has(rounded) || datedAmounts.has(rounded)) return match;
+    const before = full.slice(Math.max(0, offset - 20), offset);
+    if (FROM_OR_SIMULA_PRECEDING_RE.test(before)) return match;
+    return lead + match;
+  });
 }
 
 /**

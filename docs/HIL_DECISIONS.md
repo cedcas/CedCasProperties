@@ -806,8 +806,30 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426` (same day, not a new decision — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, and again 2026-10-15 on `fix/haven-ai-freetext-reset-101526` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-15 owner-guardrails pass)
+Cedric (the Owner) approved two more guardrails, closed without changing the decision
+itself — same philosophy as the 2026-10-14 pass below: a prompt instruction alone is
+guidance, not an enforcement boundary, so each gets an independent post-processing check
+too:
+- **Base/listing rates always read "from ₱X/night."** Whenever Haven states a base or
+  listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+  property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X kada
+  gabi"), never a bare number, because rates can change. `system-prompt.ts` carries the
+  rule; `post-process.ts`'s new `ensureFromPrefix()` is the independent backstop, using
+  `collectBasePrices()` (every `pricePerNight` value in this turn's tool results) and
+  `collectDatedQuoteAmounts()` (every other tool-result number) to tell a bare base rate
+  apart from an exact `get_quote`/`find_stay` quote line that happens to equal it — the
+  latter is always left exactly as the tool returned it, never prefixed.
+- **Local places / how things work point to the printed Welcome Book.** For restaurants,
+  food, groceries, nearby places, or how an appliance/house thing works, Haven points the
+  guest to the printed "Welcome Book" in each house rather than answering from general
+  knowledge — she never looks up or invents a named place online, though a tool result's
+  own `neighborhoodPlaces` data may still be used when present. `owner-facts.ts` gained a
+  dated fact bullet (Cedric, 2026-10-15) with two fixed facts Haven may state directly: an
+  Alfamart right outside the subdivision, plus minimarts around the property.
 
 ### Implementation note (2026-10-14 owner-guardrails pass)
 Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and

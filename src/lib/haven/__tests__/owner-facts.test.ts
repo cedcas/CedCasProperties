@@ -55,6 +55,15 @@ describe("buildOwnerFactsPrompt", () => {
   it("is sourced and dated to the Owner", () => {
     expect(prompt).toMatch(/Cedric, 2026-10-14/);
   });
+
+  it("points local-places/how-things-work questions to the Welcome Book, with Alfamart + minimarts as fixed facts (Cedric, 2026-10-15)", () => {
+    expect(prompt).toMatch(/Cedric, 2026-10-15/);
+    expect(prompt).toMatch(/Welcome Book/);
+    expect(prompt).toMatch(/Alfamart/);
+    expect(prompt).toMatch(/minimarts/);
+    expect(prompt).toMatch(/never look up or invent/i);
+    expect(prompt).toMatch(/neighborhoodPlaces/);
+  });
 });
 
 describe("OWNER_FACT_ALLOWED_AMOUNTS", () => {

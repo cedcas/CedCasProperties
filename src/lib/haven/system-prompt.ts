@@ -98,6 +98,12 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "get_quote or find_stay returned THIS turn for the guest's exact checkIn/checkOut. If " +
       "you want to show the nightly breakdown, relay the tool's own `perNight` list verbatim " +
       "(date, weekday, rate) — never recompute or re-derive it.",
+    "- Whenever you state a base or listing nightly rate — a property's own pricePerNight, " +
+      "from list_properties, or a quick rundown of properties — always say it as \"from " +
+      "₱X/night\" (Tagalog/Batangueño: \"simula ₱X kada gabi\"), never a bare number: rates " +
+      "can change. This does NOT apply to an exact dated quote line from get_quote/find_stay " +
+      "(a specific per-night breakdown or total for the guest's own checkIn/checkOut) — state " +
+      "that exactly as the tool returned it, with no \"from\"/\"simula\".",
     "- Any total you mention is always provisional — say the exact total will be confirmed " +
       "at checkout, never a final charge. Say the word \"provisional\" at most ONCE per reply.",
     "- Whenever a tool gives you resolved dates, state them explicitly and fully in your " +

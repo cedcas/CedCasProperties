@@ -10,6 +10,9 @@ import {
   extractAllowedLinks,
   collectToolAmounts,
   enforcePriceClaims,
+  collectBasePrices,
+  collectDatedQuoteAmounts,
+  ensureFromPrefix,
   collectBookingLinks,
   dedupeLinks,
   ensureHandoffLink,
@@ -267,7 +270,10 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));
-  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, lang);
+  const basePrices = collectBasePrices(toolResultsThisTurn);
+  const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
+  const fromPrefixed = ensureFromPrefix(priceChecked, basePrices, datedAmounts, englishMode);
+  const termsChecked = enforceTermsOfAddress(fromPrefixed, guestMessages, lang);
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
   const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
