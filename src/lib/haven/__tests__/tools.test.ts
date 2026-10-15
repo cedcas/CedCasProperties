@@ -471,6 +471,97 @@ describe("get_property_details", () => {
   });
 });
 
+describe("get_property_details — welcomeBook field (DEC-029 addendum, 2026-10-15)", () => {
+  const baseProperty = {
+    description: "A cozy place.",
+    amenities: "[]",
+    amenityDetails: null,
+    propertyRules: null,
+    housePolicies: null,
+    pricingNotes: null,
+    propertyFaqs: null,
+    neighborhoodPlaces: null,
+    includedGuests: 3,
+    extraGuestFeePerNight: 300,
+  };
+
+  it("includes the B34 Welcome Book for cozy-1-bedroom", async () => {
+    db.property.findFirst.mockResolvedValue({ ...baseProperty, slug: "cozy-1-bedroom", name: "Cozy 1BR Haven", maxGuests: 5 });
+
+    const result = (await runHavenTool("get_property_details", { slug: "cozy-1-bedroom" })) as { welcomeBook: unknown };
+    expect(result.welcomeBook).not.toBeNull();
+    expect(JSON.stringify(result.welcomeBook)).toMatch(/Casa Marikit/);
+  });
+
+  it("includes the B34 Welcome Book for spacious-2-bedroom", async () => {
+    db.property.findFirst.mockResolvedValue({ ...baseProperty, slug: "spacious-2-bedroom", name: "Spacious 2BR Getaway", maxGuests: 9 });
+
+    const result = (await runHavenTool("get_property_details", { slug: "spacious-2-bedroom" })) as { welcomeBook: unknown };
+    expect(result.welcomeBook).not.toBeNull();
+  });
+
+  it("is null for a Mickey in Lipa (B38) listing — never generalized from B34", async () => {
+    db.property.findFirst.mockResolvedValue({
+      ...baseProperty,
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+      name: "Mickey in Lipa | Full Family House•Sleeps 15",
+      maxGuests: 15,
+    });
+
+    const result = (await runHavenTool("get_property_details", { slug: "mickey-in-lipa--full-family-house--sleeps-15" })) as {
+      welcomeBook: unknown;
+    };
+    expect(result.welcomeBook).toBeNull();
+  });
+});
+
+describe("get_local_guide (DEC-029 addendum, 2026-10-15)", () => {
+  it("returns the B34 Welcome Book for a resolved B34 slug", async () => {
+    const result = (await runHavenTool("get_local_guide", { slug: "cozy-1-bedroom" })) as {
+      welcomeBook: { restaurants: Array<{ name: string }> } | null;
+    };
+    expect(result.welcomeBook).not.toBeNull();
+    expect(result.welcomeBook!.restaurants.some((r) => r.name === "Casa Marikit")).toBe(true);
+  });
+
+  it("returns a Welcome-Book-pointer message with no slug given, never inventing a place", async () => {
+    const result = (await runHavenTool("get_local_guide", {})) as { welcomeBook: unknown; message: string };
+    expect(result.welcomeBook).toBeNull();
+    expect(result.message).toMatch(/printed Welcome Book/i);
+    expect(result.message).toMatch(/Alfamart/i);
+  });
+
+  it("returns the same non-B34 pointer message for a Mickey in Lipa (B38) slug", async () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, slug: "mickey-full", name: "Mickey Full House" });
+
+    const result = (await runHavenTool("get_local_guide", { slug: "mickey-in-lipa--full-family-house--sleeps-15" })) as {
+      welcomeBook: unknown;
+      message: string;
+    };
+    expect(result.welcomeBook).toBeNull();
+    expect(result.message).toMatch(/printed copy/i);
+    expect(result.message).not.toMatch(/Casa Marikit/);
+  });
+
+  it("resolves an informal B34 name via the fuzzy fallback (e.g. 'the cozy one')", async () => {
+    listingsApi.getPublicListings.mockResolvedValue([
+      { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven", maxGuests: 5 },
+      { slug: "spacious-2-bedroom", name: "Spacious 2BR Getaway", maxGuests: 9 },
+    ]);
+
+    const result = (await runHavenTool("get_local_guide", { slug: "cozy 1br" })) as { welcomeBook: unknown };
+    expect(result.welcomeBook).not.toBeNull();
+  });
+
+  it("falls back to the non-B34 pointer message for a genuinely unresolvable slug, without blocking", async () => {
+    listingsApi.getPublicListings.mockResolvedValue([{ slug: "cozy-1-bedroom", name: "Cozy 1BR Haven", maxGuests: 5 }]);
+
+    const result = (await runHavenTool("get_local_guide", { slug: "zzz nonsense zzz" })) as { welcomeBook: unknown; message: string };
+    expect(result.welcomeBook).toBeNull();
+    expect(result.message).toMatch(/printed copy/i);
+  });
+});
+
 describe("get_faq", () => {
   it("finds a relevant FAQ entry by keyword", async () => {
     const result = (await runHavenTool("get_faq", { query: "cancellation refund policy" })) as { results: Array<{ question: string }> };

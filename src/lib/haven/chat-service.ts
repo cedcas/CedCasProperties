@@ -37,6 +37,7 @@ import {
   OWNER_FACT_ALLOWED_AMOUNTS,
   stripBudgetQuestions,
   removeKidsFreeClaims,
+  replaceBannedAffordPhrasing,
   needsCapacityHandoff,
   ensureCapacityHandoffLink,
   buildCapacityContextNote,
@@ -45,6 +46,13 @@ import {
   buildLargeGroupHandoffReply,
   parseGuestCount,
 } from "./owner-facts";
+import {
+  isWifiOrAccessRequest,
+  buildAccessGuardReply,
+  containsAccessLeak,
+  scrubAccessLeak,
+  ensureAccessHandoffLink,
+} from "./access-guard";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
   havenAiActive,
@@ -221,6 +229,21 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     return largeGroupHandoffResult(lang, guestMessages, { toolNames: [], inputTokens: 0, outputTokens: 0, toolCalls: 0 });
   }
 
+  // Wi-Fi/access (door, gate, lock, keybox code) request: a fixed safe reply, not the
+  // model — see access-guard.ts. Same reasoning as the 24+ guest handoff above: Haven must
+  // never share these, so the guest's own message never even reaches the model for this.
+  if (isWifiOrAccessRequest(latestMessage)) {
+    return {
+      reply: buildAccessGuardReply(lang, guestMessages, latestMessage),
+      links: [MESSENGER_BUTTON],
+      outcome: "handoff",
+      toolNames: [],
+      inputTokens: 0,
+      outputTokens: 0,
+      toolCalls: 0,
+    };
+  }
+
   // Property-name pre-resolution (DEC-029, 2026-10-15 live-retest fix): same pattern as
   // the date/capacity context notes above — resolved BEFORE the model is called, so an
   // identity (or a clarifying question) is available even on a turn where the model
@@ -292,10 +315,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
 
   const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
   const propertyKnown = dropUnknownPropertyClaims(named, propertyResolution, lang, guestMessages);
-  const noBudgetAsk = stripBudgetQuestions(propertyKnown);
+  // Run before stripBudgetQuestions — "within your budget"/"kaya ba ng budget" would
+  // otherwise also match its broader "budget" regex and get silently dropped instead of
+  // replaced with the booking nudge (see owner-facts.ts).
+  const affordFixed = replaceBannedAffordPhrasing(propertyKnown, lang, guestMessages);
+  const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));
+  // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
+  // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
+  // the pre-scrub text so the Messenger button can still be forced on below.
+  const accessLeakDetected = containsAccessLeak(dadalawFixed);
+  const accessScrubbed = scrubAccessLeak(dadalawFixed, lang, guestMessages);
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
   const fromPrefixed = ensureFromPrefix(priceChecked, basePrices, datedAmounts, englishMode);
@@ -315,7 +347,7 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
   const forceHandoff =
     needsCapacityHandoff(latestMessage, toolExchangesThisTurn) || needsAmenityHandoff(toolExchangesThisTurn);
-  const links = ensureCapacityHandoffLink(handoffLinks, forceHandoff);
+  const links = ensureAccessHandoffLink(ensureCapacityHandoffLink(handoffLinks, forceHandoff), accessLeakDetected);
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls, outcome: "ai" };
 }

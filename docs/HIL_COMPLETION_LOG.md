@@ -4,6 +4,69 @@
 
 ---
 
+## 2026-10-15 — Haven AI: banned "afford" phrasing → booking nudge, B34 Welcome Book, Wi-Fi/access guard (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,654 tests).
+
+### Outcome
+Three more Owner-approved guardrails (Cedric, 2026-10-15), each with the same
+tool-only-facts enforcement philosophy as the rest of DEC-029 — a prompt instruction alone
+is guidance, not a boundary, so each also gets an independent server-side backstop:
+1. **Banned "can you afford it" phrasing.** Haven must never ask or imply anything that
+   reads as questioning whether a guest can afford a stay — "Kaya mo na ba?", "Kaya n'yo
+   ba?", "Can you afford it?", "within your budget", "kaya ba ng budget" are all banned.
+   After stating a quote, she now closes with a booking nudge instead ("Want me to help
+   you book it?"/"Gusto n'yo na bang i-book?"/"Gusto n'yo na ga i-book?").
+2. **B34 Welcome Book.** An owner-provided, already-sanitized excerpt of the B34 house
+   manual ("BV-B34L21 House Manual v020325") is now available to Haven, scoped ONLY to the
+   two B34 listings (Cozy 1BR Haven, Spacious 2BR Getaway) — never the Mickey in Lipa
+   (B38) listings. Owner decision the same day: Haven may recommend the Welcome Book's 10
+   restaurants and 13 attractions **by name** to B34 guests (a narrower exception to the
+   2026-10-14 "never invent a place" guardrail, not a repeal of it); the bars list, dialect
+   page, address, and staff contact details stay excluded exactly as the owner excerpt
+   excludes them.
+3. **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password or a
+   door/gate/lock/keybox code, under any circumstance — a direct ask is answered with a
+   fixed safe reply pointing to the printed in-house Wi-Fi details or Messenger, skipping
+   the model entirely; an independent post-generation scrub catches any such detail that
+   somehow appears in the model's own reply.
+
+### Material Changes
+- **`owner-facts.ts`:** new `replaceBannedAffordPhrasing()`, run in `chat-service.ts`
+  BEFORE `stripBudgetQuestions()` so "within your budget"/"kaya ba ng budget" is replaced
+  with the booking nudge rather than silently dropped by that guard's broader `budget`
+  regex; new owner-facts prompt bullets for the Welcome Book scoping and the Wi-Fi/access
+  rule.
+- **`welcome-book.ts`** (new): typed server-only module, `getWelcomeBook(slug)` /
+  `isWelcomeBookSlug(slug)`, returning restaurants/things-to-do/house-rules/how-tos/
+  check-out-steps ONLY for `cozy-1-bedroom`/`spacious-2-bedroom`, `null` otherwise.
+- **`access-guard.ts`** (new): `isWifiOrAccessRequest()` + `buildAccessGuardReply()` (the
+  model-skipping direct-ask path) and `containsAccessLeak()`/`scrubAccessLeak()`/
+  `ensureAccessHandoffLink()` (the post-generation backstop), in English/Tagalog/
+  Batangueño.
+- **`tools.ts`:** `get_property_details` gained a `welcomeBook` field; new
+  `get_local_guide(slug?)` tool returns the B34 Welcome Book directly (resolving an
+  informal name through the existing fuzzy fallback) or a non-B34/no-property pointer
+  message.
+- **`chat-service.ts`:** `runToolLoop()` checks `isWifiOrAccessRequest()` right after the
+  24+ guest handoff check, before property-name pre-resolution; the post-process pipeline
+  runs `replaceBannedAffordPhrasing()` and `scrubAccessLeak()`/`ensureAccessHandoffLink()`
+  on every model reply.
+- **`system-prompt.ts`:** hard rules for both the banned-phrasing/booking-nudge rule and
+  the Wi-Fi/access rule.
+
+Tests: `owner-facts.test.ts`, `system-prompt.test.ts`, `welcome-book.test.ts` (new),
+`access-guard.test.ts` (new) — including assertions that the Welcome Book content and
+every guarded tool output stay free of "wifi", "password", phone numbers, and emails —
+plus `chat-service.test.ts`/`tools.test.ts` integration cases.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
 ## 2026-10-15 — Haven AI: server-side property-name pre-resolution, shortName on every property tool result (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

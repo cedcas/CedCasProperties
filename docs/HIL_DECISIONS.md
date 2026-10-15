@@ -831,6 +831,51 @@ too:
   dated fact bullet (Cedric, 2026-10-15) with two fixed facts Haven may state directly: an
   Alfamart right outside the subdivision, plus minimarts around the property.
 
+### Implementation note (2026-10-15 owner-guardrails pass, part 2)
+Cedric (the Owner) approved three more guardrails on the same `fix/haven-ai-freetext-reset-101526`
+branch, closed without changing the decision itself:
+- **Banned "can you afford it" phrasing → booking nudge.** Haven must never ask or imply
+  anything that reads as questioning whether a guest can afford a stay — "Kaya mo na ba?",
+  "Kaya n'yo ba?", "Can you afford it?", "within your budget", "kaya ba ng budget", and
+  reorderings of the same Tagalog idiom are banned. `system-prompt.ts` carries the rule and
+  names the required close after a quote: "Want me to help you book it?" (Tagalog: "Gusto
+  n'yo na bang i-book?"; Batangueño: "Gusto n'yo na ga i-book?"). `owner-facts.ts`'s new
+  `replaceBannedAffordPhrasing()` is the independent backstop, replacing a whole matching
+  sentence/bullet with the booking nudge in the active language rather than leaving it in
+  or silently dropping it — it runs in `chat-service.ts` BEFORE `stripBudgetQuestions()`,
+  since "within your budget"/"kaya ba ng budget" would otherwise also match that guard's
+  broader `budget` regex and get dropped instead of replaced.
+- **B34 Welcome Book, scoped per property.** An owner-provided, already-sanitized excerpt
+  of the B34 house manual ("BV-B34L21 House Manual v020325") is now a typed server-only
+  module, `src/lib/haven/welcome-book.ts`, keyed by slug and returning content ONLY for the
+  two B34 listings — Cozy 1BR Haven (`cozy-1-bedroom`) and Spacious 2BR Getaway
+  (`spacious-2-bedroom`) — never the Mickey in Lipa (B38) listings. It's exposed read-only
+  via `get_property_details`'s new `welcomeBook` field and a new `get_local_guide(slug?)`
+  tool (`tools.ts`); both resolve an informal property name through the existing fuzzy
+  fallback and never block the conversation on an unresolved slug. **Owner decision,
+  2026-10-15:** Haven may recommend the Welcome Book's 10 restaurants and 13 attractions by
+  name to B34 guests — a narrower exception to the 2026-10-14 "never invent a place" rule
+  above, not a repeal of it; Haven still never looks up or invents a place beyond this
+  fixed list, and the excerpt's own exclusions stay out of what Haven can ever say: no
+  address, staff phone numbers/emails, the host family bio, the dialect page, or the bars
+  list. For a B38 listing, or when no property is known yet, Haven still only points to the
+  printed Welcome Book in each house plus the Alfamart/minimart owner facts, and must never
+  generalize the B34 list to B38.
+- **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password, or a
+  door/gate/lock/keybox code or other access detail, under any circumstance — even asked
+  directly, even if one somehow appeared in a tool result or the model's own text.
+  `src/lib/haven/access-guard.ts` is two independent layers, same tool-only-facts
+  philosophy as the rest of this decision: (1) `isWifiOrAccessRequest` detects a direct
+  ask in the guest's latest message (English, Tagalog, and Batangueño wording, e.g. "susi"
+  for key) and `chat-service.ts` returns a deterministic safe reply with a Messenger button
+  — the same skip-the-model pattern as the 24+ guest handoff — without ever calling the
+  model; (2) `scrubAccessLeak` is a post-generation backstop that replaces any whole
+  sentence reading like a leaked SSID/password/door-code with the same safe sentence,
+  regardless of how it got into the model's reply, and forces the Messenger button on when
+  it fires. `system-prompt.ts` and `owner-facts.ts` both carry the prompt-level rule too.
+  `welcome-book.test.ts` and `access-guard.test.ts` assert the welcome-book content and
+  every guarded tool output stay free of "wifi", "password", phone numbers, and emails.
+
 ### Implementation note (2026-10-14 owner-guardrails pass)
 Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and
 guardrails, closed without changing the decision itself — see `src/lib/haven/owner-facts.ts`

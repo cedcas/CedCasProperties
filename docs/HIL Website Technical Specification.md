@@ -1,6 +1,33 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-15 (Haven AI: server-side property-name pre-resolution +
+> **Last updated:** 2026-10-15 (Haven AI: banned "can you afford it" phrasing + booking
+> nudge, the B34 Welcome Book (restaurants/attractions by name, Owner decision), and a
+> Wi-Fi/physical-access guard, same branch `fix/haven-ai-freetext-reset-101526`:
+> [Haven AI Chat](#haven-ai-chat) — three more owner-approved guardrails (Cedric,
+> 2026-10-15), each with an independent post-processing backstop per DEC-029's usual
+> philosophy: (1) banned phrasing that reads as questioning whether a guest can afford a
+> stay ("Kaya mo na ba?", "Kaya n'yo ba?", "Can you afford it?", "within your budget",
+> "kaya ba ng budget") is now replaced with a booking nudge in the active language ("Want
+> me to help you book it?"/"Gusto n'yo na bang i-book?"/"Gusto n'yo na ga i-book?") by
+> `owner-facts.ts`'s new `replaceBannedAffordPhrasing()`, run in `chat-service.ts` BEFORE
+> `stripBudgetQuestions()` so it isn't silently dropped by that guard's broader `budget`
+> regex first; (2) a new typed server-only module, `src/lib/haven/welcome-book.ts`, holds
+> an owner-sanitized excerpt of the B34 house manual, scoped ONLY to the two B34 listings
+> (`cozy-1-bedroom`, `spacious-2-bedroom`) and exposed via `get_property_details`'s new
+> `welcomeBook` field and a new `get_local_guide(slug?)` tool — the Owner additionally
+> decided Haven may recommend its 10 restaurants and 13 attractions **by name** to B34
+> guests (a narrower exception to the 2026-10-14 "never invent a place" rule, not a repeal
+> of it), while a B38/Mickey listing or no known property still only gets a pointer to the
+> printed Welcome Book in each house; the excerpt's own exclusions (no address, phone
+> numbers, emails, host bio, dialect page, bars list) are preserved; (3) a new
+> `src/lib/haven/access-guard.ts` ensures Haven never shares a Wi-Fi name/password or a
+> door/gate/lock/keybox code under any circumstance — a direct ask skips the model entirely
+> for a fixed safe reply (same pattern as the 24+ guest handoff), and an independent
+> post-generation scrub replaces any leaked SSID/password/door-code-like text in the
+> model's own reply, forcing the Messenger button on either way. All three are covered by
+> new unit tests (`owner-facts.test.ts`, `system-prompt.test.ts`, `welcome-book.test.ts`,
+> `access-guard.test.ts`, plus `chat-service.test.ts`/`tools.test.ts` integration cases)).
+> Prior, same day (Haven AI: server-side property-name pre-resolution +
 > `shortName` on every property tool result, same branch `fix/haven-ai-freetext-reset-101526`:
 > [Haven AI Chat](#haven-ai-chat) — two more live-retest failures, both because
 > `property-resolver.ts`'s fuzzy resolver only ever ran *after* a model tool call already
@@ -1821,6 +1848,28 @@ buttons and "Talk to a Human" link are unaffected either way.
 - `provider.ts` — `ChatProvider` adapter (`chat({system, messages, tools, maxTokens})`),
   raw `fetch` against Anthropic's Messages API or OpenAI's Chat Completions API (no vendor
   SDK dependency) behind `HAVEN_AI_PROVIDER`.
+- `welcome-book.ts` *(added 2026-10-15, Cedric)* — a typed server-only module holding an
+  owner-sanitized excerpt of the B34 house manual ("BV-B34L21 House Manual v020325"),
+  keyed by slug: `getWelcomeBook(slug)` returns restaurants (10), things to do (13), house
+  rules, how-tos, and check-out steps ONLY for `cozy-1-bedroom`/`spacious-2-bedroom`, `null`
+  for any other slug (the Mickey in Lipa/B38 listings included) — callers must never fall
+  back to this content for a non-B34 slug. Deliberately excludes what the source excerpt
+  excludes: Wi-Fi (QR-code only in the manual), door/gate/lock/keybox codes, the street/lot
+  address, staff phone numbers/emails, the host family bio, the dialect page, and the bars
+  list — `welcome-book.test.ts` asserts none of these ever appear in the module's content.
+- `access-guard.ts` *(added 2026-10-15, Cedric)* — Wi-Fi/physical-access guard, two
+  independent layers mirroring the rest of DEC-029's tool-only-facts philosophy:
+  `isWifiOrAccessRequest(message)` detects a direct Wi-Fi/password/door/gate/lock/keybox/
+  susi question in English, Tagalog, or Batangueño; `buildAccessGuardReply(lang,
+  guestMessages, latestMessage)` returns a fixed safe sentence (Wi-Fi: "posted inside the
+  property"; access: "the team sends check-in instructions... message us on Messenger")
+  with the Messenger button, used by `chat-service.ts` to skip the model entirely for a
+  direct ask — same pattern as the 24+ guest handoff. `containsAccessLeak(text)` /
+  `scrubAccessLeak(text, lang, guestMessages)` are the post-generation backstop: whatever
+  the model wrote, a sentence matching a labeled credential ("password:", "SSID", "wifi
+  name", "code is 1234") or a 4–8 digit run next to a door/gate/lock/keybox/susi word is
+  replaced whole with the safe access sentence, and `ensureAccessHandoffLink()` forces the
+  Messenger button on whenever the scrub fires.
 - `dates.ts` — `resolveDates(expression, now?)`: pure natural-language date resolution
   ("this weekend", "next Friday to Sunday", "2nd Saturday of November", "Dec 24-26") into
   exact ISO `checkIn`/`checkOut` in Asia/Manila, built on the existing UTC-anchored
@@ -1847,14 +1896,28 @@ buttons and "Talk to a Human" link are unaffected either way.
   no-pets/no-smoking-inside/no-parties-without-approval house rules that are the same at
   every listing, and the karaoke/amenities caution (answer only from `amenities`/
   `amenityDetails`, never infer equipment from marketing copy like "a karaoke-and-lechon
-  dinner"). A dated bullet *(added 2026-10-15, Cedric)* covers local places / how things
-  work: a restaurant/food/groceries/nearby-place/appliance-or-house-thing question is
-  answered by pointing the guest to the printed "Welcome Book" in each house — never by
-  looking up or inventing a named restaurant/place online or from general knowledge, though
-  a tool result's own `neighborhoodPlaces` data may still be used when present for that
-  property — with two fixed facts Haven may state directly: an Alfamart right outside the
+  dinner"). A dated bullet *(added 2026-10-15, Cedric, amended same day)* covers local
+  places / how things work: for the two B34 listings (Cozy 1BR Haven `cozy-1-bedroom`,
+  Spacious 2BR Getaway `spacious-2-bedroom`) a restaurant/things-to-do/how-to/check-out
+  question is answered from the B34 Welcome Book — `src/lib/haven/welcome-book.ts` — and
+  Haven may recommend its 10 restaurants and 13 attractions **by name** (Owner decision,
+  2026-10-15), saying they're "listed in the B34 Welcome Book"; for any other listing (the
+  Mickey in Lipa/B38 houses) or when no property is known yet, Haven still only points to
+  the printed "Welcome Book" in each house — never generalizing the B34 list to B38, and
+  never looking up or inventing a place beyond the fixed B34 list, though a tool result's
+  own `neighborhoodPlaces` data may still be used when present for that property. Two fixed
+  facts Haven may state directly for any property: an Alfamart right outside the
   subdivision, plus minimarts around the property; anything the Welcome Book doesn't cover
-  still gets the Messenger handoff. `OWNER_FACT_ALLOWED_AMOUNTS` (currently `{200}`) is merged into the price
+  still gets the Messenger handoff. Two more dated bullets *(added 2026-10-15, Cedric)*:
+  (1) banned "can you afford it" phrasing — "Kaya mo na ba?", "Kaya n'yo ba?", "Can you
+  afford it?", "within your budget", "kaya ba ng budget" — must never appear; after a
+  quote, Haven closes with a booking nudge ("Want me to help you book it?" / "Gusto n'yo na
+  bang i-book?" / "Gusto n'yo na ga i-book?") instead, enforced independently by
+  `replaceBannedAffordPhrasing()`, which runs **before** `stripBudgetQuestions()` below so
+  "within your budget"/"kaya ba ng budget" is replaced with the nudge rather than silently
+  dropped by the broader budget-question regex; (2) Haven must never share a Wi-Fi name/
+  password or a door/gate/lock/keybox code — see `src/lib/haven/access-guard.ts` below.
+  `OWNER_FACT_ALLOWED_AMOUNTS` (currently `{200}`) is merged into the price
   guard's allowlist in `chat-service.ts` so the ₱200/hour fact can be stated even when no
   tool call happened to return it this turn. Independent, testable enforcement lives
   alongside the facts: `stripBudgetQuestions()` drops any sentence asking the guest's
@@ -1930,7 +1993,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   `{found: false, properties: []}` if none do — so an amenity question never has to ask
   "which house?" first (the old path required `get_property_details` for one property at a
   time). `needsAmenityHandoff()` (post-process.ts) independently forces the Messenger
-  button on whenever `find_amenity` comes back empty.
+  button on whenever `find_amenity` comes back empty. `get_property_details` also returns
+  a `welcomeBook` field *(added 2026-10-15, Cedric)* — non-null only for the two B34 slugs,
+  see `welcome-book.ts` above — and a new `get_local_guide(slug?)` tool *(same pass)*
+  returns the same B34 Welcome Book content directly (resolving an informal name through
+  `resolveSlugFallback`'s existing fuzzy fallback, never blocking on an unresolved slug),
+  or a message pointing to the printed Welcome Book in each house for any non-B34 property
+  or when no slug is given yet.
 - `property-resolver.ts` *(added 2026-10-14, live bug-fix pass)* — pure, DB-free fuzzy
   property-name resolution: `resolvePropertyMatch(query, listings)` fixes a live bug where
   an informal/partial property name (e.g. "the Mickey Full Family House") got "isn't
@@ -2198,6 +2267,14 @@ buttons and "Talk to a Human" link are unaffected either way.
   drifting ("exactly max"/"might fit" hedging, follow-up questions) even with the Messenger
   link forced on independently. Logged as `outcome: "handoff"` — a new value in the existing
   `HavenChatUsage.outcome` free-text column, no schema change.
+  *(Added 2026-10-15, Cedric):* same model-skip pattern for a direct Wi-Fi/access
+  question — `runToolLoop()` checks `isWifiOrAccessRequest()` on the guest's latest message
+  right after the 24+ guest check and before property-name pre-resolution, returning
+  `access-guard.ts`'s fixed safe reply plus the Messenger button, zero tokens. On every
+  other turn, the post-process pipeline now also runs `replaceBannedAffordPhrasing()`
+  (before `stripBudgetQuestions()` — ordering matters, see `owner-facts.ts` above) and
+  `scrubAccessLeak()`/`ensureAccessHandoffLink()` (detected on the pre-scrub text so the
+  Messenger button can still be forced on after the scrub runs) on the model's reply.
 - `retention.ts` — `purgeExpiredHavenData()`, driven by the daily cron (see Cron Jobs
   above): deletes `HavenChatTranscript` rows older than 90 days and `HavenChatUsage` rows
   older than 13 months.

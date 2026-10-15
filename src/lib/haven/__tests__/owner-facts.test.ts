@@ -5,6 +5,7 @@ import {
   buildOwnerFactsPrompt,
   stripBudgetQuestions,
   removeKidsFreeClaims,
+  replaceBannedAffordPhrasing,
   needsCapacityHandoff,
   ensureCapacityHandoffLink,
   parseGuestCount,
@@ -64,6 +65,29 @@ describe("buildOwnerFactsPrompt", () => {
     expect(prompt).toMatch(/never look up or invent/i);
     expect(prompt).toMatch(/neighborhoodPlaces/);
   });
+
+  it("scopes the B34 Welcome Book to the two B34 slugs and never generalizes it to a B38/Mickey listing", () => {
+    expect(prompt).toMatch(/B34 Welcome Book/);
+    expect(prompt).toMatch(/cozy-1-bedroom/);
+    expect(prompt).toMatch(/spacious-2-bedroom/);
+    expect(prompt).toMatch(/NEVER apply the B34 Welcome Book list to a Mickey in Lipa \(B38\) listing/i);
+    expect(prompt).toMatch(/get_local_guide/);
+  });
+
+  it("bans 'can you afford it' phrasing and instructs a booking nudge after a quote", () => {
+    expect(prompt).toMatch(/Kaya mo na ba\?/);
+    expect(prompt).toMatch(/Kaya n['’]yo ba\?/);
+    expect(prompt).toMatch(/Can you afford it\?/);
+    expect(prompt).toMatch(/within your budget/i);
+    expect(prompt).toMatch(/kaya ba ng budget/i);
+    expect(prompt).toMatch(/Want me to help you book it\?/);
+  });
+
+  it("bans sharing Wi-Fi or access codes, pointing to Messenger instead", () => {
+    expect(prompt).toMatch(/Never share a Wi-Fi name\/password/i);
+    expect(prompt).toMatch(/door\/gate\/lock\/keybox code/i);
+    expect(prompt).toContain(MESSENGER_HREF);
+  });
 });
 
 describe("OWNER_FACT_ALLOWED_AMOUNTS", () => {
@@ -92,6 +116,48 @@ describe("stripBudgetQuestions", () => {
   it("leaves a reply with no budget question untouched", () => {
     const input = "We have a 2BR available for those dates.";
     expect(stripBudgetQuestions(input)).toBe(input);
+  });
+});
+
+describe("replaceBannedAffordPhrasing", () => {
+  it("replaces 'Kaya mo na ba?' with the English booking nudge", () => {
+    const result = replaceBannedAffordPhrasing("That'll be ₱5,600 total. Kaya mo na ba?", "en", "How much for two nights?");
+    expect(result).not.toMatch(/kaya mo na ba/i);
+    expect(result).toContain("Want me to help you book it?");
+  });
+
+  it("replaces \"Kaya n'yo ba?\" with the Tagalog booking nudge", () => {
+    const result = replaceBannedAffordPhrasing("₱5,600 po lahat. Kaya n'yo ba?", "tl", "Magkano po?");
+    expect(result).not.toMatch(/kaya n['’]yo ba/i);
+    expect(result).toContain("Gusto n'yo na bang i-book?");
+  });
+
+  it("replaces 'Can you afford it?' with the booking nudge", () => {
+    const result = replaceBannedAffordPhrasing("The total is ₱5,600. Can you afford it?", "en", "quote please");
+    expect(result).not.toMatch(/afford/i);
+    expect(result).toContain("Want me to help you book it?");
+  });
+
+  it("replaces 'within your budget' with the booking nudge instead of silently dropping it", () => {
+    const result = replaceBannedAffordPhrasing("Is ₱5,600 within your budget?", "en", "quote please");
+    expect(result).not.toMatch(/budget/i);
+    expect(result).toContain("Want me to help you book it?");
+  });
+
+  it("replaces 'kaya ba ng budget n'yo' with the Tagalog booking nudge", () => {
+    const result = replaceBannedAffordPhrasing("Kaya ba ng budget n'yo ang ₱5,600?", "tl", "magkano po");
+    expect(result).not.toMatch(/budget/i);
+    expect(result).toContain("Gusto n'yo na bang i-book?");
+  });
+
+  it("returns the fixed Batangueño nudge for lang 'btg' regardless of guest wording", () => {
+    const result = replaceBannedAffordPhrasing("Kaya mo na ba?", "btg", "magkano po");
+    expect(result).toBe("Gusto n'yo na ga i-book?");
+  });
+
+  it("leaves a reply with no banned phrasing untouched", () => {
+    const input = "The total is ₱5,600 for two nights.";
+    expect(replaceBannedAffordPhrasing(input, "en", "")).toBe(input);
   });
 });
 

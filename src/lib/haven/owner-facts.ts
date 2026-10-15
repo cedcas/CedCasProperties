@@ -33,8 +33,47 @@ export function buildOwnerFactsPrompt(): string {
     `- Early check-in / late checkout: ₱${HOURLY_FEE_RATE} per hour, the same rate for every listing, always subject to availability and confirmation with the team (never a guaranteed yes). Use the property's own standard check-in/check-out time when you have it from a tool result.`,
     "- Quiet hours are 10:00 PM to 8:00 AM at every listing — the same house rule everywhere, so answer it directly without asking which house. Other rules that are the same everywhere: no pets, no smoking inside, no parties/events without host approval. When a rule genuinely differs by house (e.g. check-in time), say so and name the difference instead of asking which house first.",
     "- Karaoke/videoke/pool/grill and other specific equipment: call find_amenity with the item — it searches every property's amenities/amenityDetails for you, so never ask the guest which house first. Marketing phrases like \"a karaoke-and-lechon dinner\" describe an experience, not confirmed equipment — never infer equipment from that kind of copy, even when find_amenity comes up empty. If find_amenity finds it, say which propert(y/ies) have it. If it finds nothing anywhere, say it's not listed in our amenities and the team will confirm via Messenger, and remind the guest quiet hours still apply.",
-    `- (Cedric, 2026-10-15) For restaurants, food, groceries, nearby places, or how an appliance/house thing works, point the guest to the printed "Welcome Book" in each house — it lists nearby restaurants and property instructions. Never look up or invent a named restaurant/place online or from general knowledge; a tool result's own \`neighborhoodPlaces\` data may still be used when present for that property. Fixed facts you may state directly: there's an Alfamart right outside the subdivision, plus minimarts around the property. For anything the Welcome Book doesn't cover, offer the Messenger handoff (${MESSENGER_HREF}).`,
+    `- (Cedric, 2026-10-15) Restaurants, things to do, house how-tos, and check-out steps for the B34 houses (Cozy 1BR Haven \`cozy-1-bedroom\`, Spacious 2BR Getaway \`spacious-2-bedroom\`) are in the B34 Welcome Book — use \`get_property_details\`'s \`welcomeBook\` field or call \`get_local_guide\` for that property, and say these are "listed in the B34 Welcome Book". NEVER apply the B34 Welcome Book list to a Mickey in Lipa (B38) listing, and never look up or invent a named restaurant/place online or from general knowledge for ANY property — a tool result's own \`neighborhoodPlaces\` data may still be used when present. For a B38 listing, or when no property is known yet, point the guest to the printed "Welcome Book" in each house instead. Fixed facts you may state directly for any property: there's an Alfamart right outside the subdivision, plus minimarts around the property. For anything the Welcome Book doesn't cover, offer the Messenger handoff (${MESSENGER_HREF}).`,
+    `- (Cedric, 2026-10-15) Never ask or say anything that reads as questioning whether the guest can afford a stay — banned phrasing includes "Kaya mo na ba?", "Kaya n'yo ba?", "Can you afford it?", "within your budget", and "kaya ba ng budget". After stating a quote, close with a booking nudge instead: "Want me to help you book it?" (Tagalog: "Gusto n'yo na bang i-book?"; Batangueño: "Gusto n'yo na ga i-book?").`,
+    `- (Cedric, 2026-10-15) Never share a Wi-Fi name/password, or any door/gate/lock/keybox code or other access detail, under any circumstance. For a Wi-Fi question, say the details are posted inside the property. For an access/code question, say the team sends check-in instructions closer to the stay, and point to Messenger (${MESSENGER_HREF}).`,
   ].join("\n");
+}
+
+// ── Banned "can you afford it" phrasing → booking nudge guard ───────────────
+
+/**
+ * Banned closing phrasing (Cedric, 2026-10-15): never a question or statement that reads
+ * as "can you afford it" — "Kaya mo na ba?", "Kaya n'yo ba?", "Can you afford it?", "within
+ * your budget", "kaya ba ng budget" and reorderings of the same Tagalog idiom. Run BEFORE
+ * `stripBudgetQuestions` in the post-process pipeline (chat-service.ts) — "within your
+ * budget"/"kaya ba ng budget" would otherwise also match `BUDGET_QUESTION_RE` below and get
+ * dropped silently instead of replaced with the booking nudge.
+ */
+const BANNED_AFFORD_RE =
+  /\bafford\b|\bwithin\s+your\s+budget\b|\bkaya\s+(?:mo|n['’]?yo|ninyo|niyo)\s+(?:na\s+)?ba\b|\bkaya\s+ba\s+(?:mo|n['’]?yo|ninyo|niyo|ng\s+budget)\b/i;
+
+type SafeLangKey = "en" | "tl" | "btg";
+
+const BOOKING_NUDGE: Record<SafeLangKey, string> = {
+  en: "Want me to help you book it?",
+  tl: "Gusto n'yo na bang i-book?",
+  btg: "Gusto n'yo na ga i-book?",
+};
+
+/** Mirrors `buildLargeGroupHandoffReply`'s language selection — `btg` is always explicit;
+ * everything else follows `isEnglishContext` for `"auto"`. */
+function pickBookingNudge(lang: HavenLang, guestMessages: string): string {
+  if (lang === "btg") return BOOKING_NUDGE.btg;
+  return isEnglishContext(lang, guestMessages) ? BOOKING_NUDGE.en : BOOKING_NUDGE.tl;
+}
+
+/**
+ * Replaces any sentence/bullet line reading as "can you afford it" (or the banned Tagalog/
+ * Batangueño "kaya ...ba" idiom, or "within your budget") with a booking nudge in the
+ * active language, instead of leaving it in or silently dropping it.
+ */
+export function replaceBannedAffordPhrasing(text: string, lang: HavenLang, guestMessages: string): string {
+  return replaceMatchingSentences(text, BANNED_AFFORD_RE, pickBookingNudge(lang, guestMessages));
 }
 
 // ── Budget question guard ───────────────────────────────────────────────────

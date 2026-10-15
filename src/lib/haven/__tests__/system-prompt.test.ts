@@ -67,6 +67,33 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  describe("banned 'can you afford it' phrasing and booking nudge (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("bans the literal phrases and names the booking nudge in each language", () => {
+      expect(prompt).toContain("Kaya mo na ba?");
+      expect(prompt).toContain("Kaya n'yo ba?");
+      expect(prompt).toContain("Can you afford it?");
+      expect(prompt).toMatch(/within your budget/i);
+      expect(prompt).toMatch(/kaya ba ng budget/i);
+      expect(prompt).toContain("Want me to help you book it?");
+      expect(prompt).toContain("Gusto n'yo na bang i-book?");
+      expect(prompt).toContain("Gusto n'yo na ga i-book?");
+    });
+  });
+
+  describe("Wi-Fi and physical-access guard (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("bans sharing Wi-Fi/password and door/gate/lock/keybox codes, pointing to Messenger", () => {
+      expect(prompt).toMatch(/Never share a Wi-Fi name\/password/i);
+      expect(prompt).toMatch(/door\/gate\/lock\/keybox code/i);
+      expect(prompt).toMatch(/posted inside the property/i);
+      expect(prompt).toMatch(/check-in instructions/i);
+      expect(prompt).toContain("https://m.me/haveninlipa");
+    });
+  });
+
   describe("early check-in/late checkout fee", () => {
     const prompt = buildHavenSystemPrompt("en");
 

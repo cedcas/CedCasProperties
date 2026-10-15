@@ -390,7 +390,7 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     });
 
     const { handleHavenChat } = await freshChatService();
-    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have WiFi?" }] }), "1.2.3.4");
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have a swimming pool?" }] }), "1.2.3.4");
 
     const system = providerChat.mock.calls[0][0].system as string;
     expect(system).not.toContain("checkIn=");
@@ -1000,5 +1000,72 @@ describe("handleHavenChat — 24+ guests: deterministic handoff, no model call",
       "What a big group! For 24 or more guests, our team will plan it with you personally — tap below to message us on Messenger."
     );
     expect(result.reply).not.toContain("Let me check");
+  });
+});
+
+describe("handleHavenChat — Wi-Fi/access guard (Cedric, 2026-10-15)", () => {
+  it("skips the model entirely for a direct wifi-password question, returning the safe sentence + Messenger button", async () => {
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "What's the wifi password?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).not.toHaveBeenCalled();
+    expect(result.reply).toMatch(/posted inside the property/i);
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+  });
+
+  it("skips the model for a direct gate-code question, in Tagalog", async () => {
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ano po ang gate code?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).not.toHaveBeenCalled();
+    expect(result.reply).toMatch(/check-in instructions/i);
+  });
+
+  it("does not trigger for an unrelated question", async () => {
+    providerChat.mockResolvedValue({ text: "Check-in is at 2 PM.", toolCalls: [], usage: { inputTokens: 5, outputTokens: 5 }, stopReason: "end_turn" });
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "What time is check-in?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).toHaveBeenCalled();
+    expect(result.reply).toBe("Check-in is at 2 PM.");
+  });
+
+  it("scrubs a leaked password the model volunteers unprompted, and forces the Messenger button on", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure thing! password: HavenGuest123. Enjoy your stay!",
+      toolCalls: [],
+      usage: { inputTokens: 10, outputTokens: 10 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "Tell me about the property." }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toContain("HavenGuest123");
+    expect(result.reply).toMatch(/check-in instructions/i);
+    expect(result.links).toEqual(expect.arrayContaining([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]));
+  });
+
+  it("logs usage with outcome 'handoff' and zero cost for the deterministic guard reply", async () => {
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ lang: "en", messages: [{ role: "user", content: "What's the wifi password?" }] }), "1.2.3.4");
+
+    expect(db.havenChatUsage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ outcome: "handoff", inputTokens: 0, outputTokens: 0, toolCalls: 0 }),
+      })
+    );
   });
 });
