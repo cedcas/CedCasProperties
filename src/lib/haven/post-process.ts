@@ -81,6 +81,62 @@ export function collectToolAmounts(toolResults: unknown[]): Set<number> {
   return amounts;
 }
 
+/**
+ * Every `pricePerNight` value in this turn's tool results — the base/listing nightly rate
+ * (list_properties, a property rundown), as distinct from a dated get_quote/find_stay
+ * total (see `collectDatedQuoteAmounts`). Used by `ensureFromPrefix` below (Owner guardrail,
+ * Cedric 2026-10-15): a base rate can change, so it must always read "from ₱X/night", never
+ * a bare number.
+ */
+export function collectBasePrices(toolResults: unknown[]): Set<number> {
+  const amounts = new Set<number>();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  function walk(value: unknown): void {
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        if (key === "pricePerNight" && typeof v === "number" && Number.isFinite(v)) amounts.add(round2(v));
+        else walk(v);
+      }
+    }
+  }
+  toolResults.forEach(walk);
+  return amounts;
+}
+
+/**
+ * Every numeric value in this turn's tool results that is NOT under a `pricePerNight` key
+ * — a dated quote's `total`/`nightlyTotal`/`perNight` rate, an `extraGuestFee`, etc. Lets
+ * `ensureFromPrefix` tell apart a bare base rate from an exact dated-quote figure that
+ * happens to equal it (e.g. a single night at the base rate with no extra fees) — the
+ * latter must stay exactly as the tool returned it, with no "from"/"simula" prefix.
+ */
+export function collectDatedQuoteAmounts(toolResults: unknown[]): Set<number> {
+  const amounts = new Set<number>();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  function walk(value: unknown): void {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      amounts.add(round2(value));
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (value && typeof value === "object") {
+      for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
+        if (key === "pricePerNight") continue;
+        walk(v);
+      }
+    }
+  }
+  toolResults.forEach(walk);
+  return amounts;
+}
+
 // ── Price guard: whole-sentence / whole-bullet-line replacement ────────────────
 
 /**
@@ -186,6 +242,36 @@ export function enforcePriceClaims(text: string, allowedAmounts: Set<number>): s
     .join("\n");
 }
 
+/** A preceding "from"/"simula"/"starting at" right before the match — never double it up. */
+const FROM_OR_SIMULA_PRECEDING_RE = /\b(?:from|simula|starting at)\s*$/i;
+
+/**
+ * Owner guardrail (Cedric, 2026-10-15): whenever Haven states a base/listing nightly rate
+ * (a property's own `pricePerNight`, via `list_properties` or a property rundown) the peso
+ * amount must always read "from ₱X/night" (en) / "simula ₱X" (tl/btg) — never a bare
+ * number — because rates change. A dated get_quote/find_stay quote line (an exact total or
+ * per-night breakdown for the guest's own dates) is untouched even when the number happens
+ * to match a base rate (`datedAmounts` wins over `basePrices` — see `collectDatedQuoteAmounts`).
+ * Independent backstop for the same instruction in system-prompt.ts.
+ */
+export function ensureFromPrefix(
+  text: string,
+  basePrices: Set<number>,
+  datedAmounts: Set<number>,
+  isEnglish: boolean
+): string {
+  if (basePrices.size === 0) return text;
+  const lead = isEnglish ? "from " : "simula ";
+  return text.replace(pesoAmountRegex(), (match: string, offset: number, full: string) => {
+    const numeric = Number(match.replace(/[^\d.]/g, ""));
+    const rounded = Math.round(numeric * 100) / 100;
+    if (!basePrices.has(rounded) || datedAmounts.has(rounded)) return match;
+    const before = full.slice(Math.max(0, offset - 20), offset);
+    if (FROM_OR_SIMULA_PRECEDING_RE.test(before)) return match;
+    return lead + match;
+  });
+}
+
 /**
  * Generic version of the sentence/bullet-line replacement `enforcePriceClaims` uses,
  * for any other owner-guardrail that must swap out a WHOLE matching sentence or bullet
@@ -267,12 +353,27 @@ export function stripToBaseName(name: string): string {
  * results — reuses buildShortNames' "same base name → keep the distinguishing second
  * segment" disambiguation (e.g. the three "Mickey in Lipa" configurations), but first
  * strips a dev-DB bracket tag and cuts at a bare "•" for names with no "|" segment at all.
+ *
+ * A pair may carry its own `shortName` (e.g. `list_properties`/`get_property_details`
+ * results — tools.ts computes those against the FULL public-listing set, so they're
+ * already correctly disambiguated even when only one of several same-base-name listings
+ * is mentioned this turn, which the turn-scoped computation below can't guarantee) — an
+ * explicit `shortName` always wins over the computed fallback.
  */
-function shortPropertyLabels(pairs: { slug: string; name: string }[]): Map<string, string> {
-  const uniqueBySlug = new Map(pairs.map((p) => [p.slug, p.name]));
-  const prepped = [...uniqueBySlug].map(([slug, name]) => ({ slug, name: stripBracketPrefix(name) }));
-  const short = buildShortNames(prepped);
-  return new Map([...short].map(([slug, label]) => [slug, stripToBaseName(label)]));
+export function shortPropertyLabels(pairs: { slug: string; name: string; shortName?: string }[]): Map<string, string> {
+  const uniqueBySlug = new Map(pairs.map((p) => [p.slug, p]));
+  const explicit = new Map<string, string>();
+  const needsComputed: { slug: string; name: string }[] = [];
+  for (const [slug, p] of uniqueBySlug) {
+    if (typeof p.shortName === "string" && p.shortName.length > 0) explicit.set(slug, p.shortName);
+    else needsComputed.push({ slug, name: stripBracketPrefix(p.name) });
+  }
+  const computed = buildShortNames(needsComputed);
+  const result = new Map<string, string>();
+  for (const [slug] of uniqueBySlug) {
+    result.set(slug, explicit.get(slug) ?? stripToBaseName(computed.get(slug) ?? ""));
+  }
+  return result;
 }
 
 /**
@@ -345,18 +446,20 @@ export function collectBookingLinks(exchanges: ToolExchange[], max = 8): LinkBut
  * mention a property name — not just the booking-link-producing ones `collectBookingLinks`
  * covers, so a plain `list_properties`/`get_property_details` answer also gets shortened.
  */
-export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string }[] {
-  const pairs: { slug: string; name: string }[] = [];
+export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string; shortName?: string }[] {
+  const pairs: { slug: string; name: string; shortName?: string }[] = [];
   for (const { name: toolName, input, result } of exchanges) {
     const i = asRecord(input);
     const r = asRecord(result);
     if (toolName === "list_properties" && Array.isArray(result)) {
       for (const item of result) {
         const p = asRecord(item);
-        if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+        if (typeof p.slug === "string" && typeof p.name === "string") {
+          pairs.push({ slug: p.slug, name: p.name, shortName: typeof p.shortName === "string" ? p.shortName : undefined });
+        }
       }
     } else if (toolName === "get_property_details" && typeof r.slug === "string" && typeof r.name === "string") {
-      pairs.push({ slug: r.slug, name: r.name });
+      pairs.push({ slug: r.slug, name: r.name, shortName: typeof r.shortName === "string" ? r.shortName : undefined });
     } else if (toolName === "get_quote" && typeof i.slug === "string" && typeof r.name === "string") {
       pairs.push({ slug: i.slug, name: r.name });
     } else if (toolName === "find_stay" && Array.isArray(r.options)) {

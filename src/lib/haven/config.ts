@@ -65,6 +65,10 @@ export const HAVEN_AI_ADMIN_ALERT_TO = "customerservice@haveninlipa.com";
 // ── Request-shape limits (HIL_DECISIONS.md / this PR's own hard rules) ─────
 export const MAX_MESSAGES = 12;
 export const MAX_MESSAGE_CHARS = 600;
+/** Assistant (Haven's own) history turns run long — a 4-option list easily clears 600
+ * chars. Validation truncates to this many chars (keeping the tail) instead of rejecting
+ * the whole request; the 600-char cap above still applies to the guest's own messages. */
+export const MAX_ASSISTANT_MESSAGE_CHARS = 1500;
 export const MAX_TOOL_ROUNDS = 5;
 export const MAX_OUTPUT_TOKENS = 500;
 export const REQUEST_TIMEOUT_MS = 20_000;

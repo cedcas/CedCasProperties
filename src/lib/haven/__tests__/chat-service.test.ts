@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MAX_TOOL_ROUNDS } from "../config";
 
-const { db, sendMail, providerChat, runHavenToolMock } = vi.hoisted(() => ({
+const { db, sendMail, providerChat, runHavenToolMock, listingsApi } = vi.hoisted(() => ({
   db: {
     havenChatUsage: { count: vi.fn(), aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     havenChatTranscript: { createMany: vi.fn() },
@@ -16,6 +16,7 @@ const { db, sendMail, providerChat, runHavenToolMock } = vi.hoisted(() => ({
   sendMail: vi.fn(),
   providerChat: vi.fn(),
   runHavenToolMock: vi.fn(),
+  listingsApi: { getPublicListings: vi.fn() },
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
@@ -27,6 +28,22 @@ vi.mock("../tools", () => ({
   getToolDefinitions: () => [],
   runHavenTool: runHavenToolMock,
 }));
+// `buildShortNames`/`shortPropertyLabels` stay real — the property pre-resolution path
+// (property-resolver.ts) goes through them, same as production, so a test exercising it
+// is meaningful. Only `getPublicListings` is stubbed (no DB in this test file).
+vi.mock("@/lib/listings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/listings")>("@/lib/listings");
+  return { ...actual, getPublicListings: listingsApi.getPublicListings };
+});
+
+/** The two houses' five live listings, as `property-resolver.ts` expects them. */
+const PUBLIC_LISTINGS = [
+  { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax", maxGuests: 5 },
+  { slug: "spacious-2-bedroom", name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax", maxGuests: 9 },
+  { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7 },
+  { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11 },
+  { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15 },
+];
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -49,6 +66,7 @@ beforeEach(() => {
   db.havenChatUsage.count.mockResolvedValue(0);
   db.havenChatUsage.aggregate.mockResolvedValue({ _sum: { costUsd: 0 } });
   db.havenChatUsage.findFirst.mockResolvedValue(null);
+  listingsApi.getPublicListings.mockResolvedValue(PUBLIC_LISTINGS);
 });
 
 afterEach(() => {
@@ -78,16 +96,83 @@ describe("handleHavenChat — request validation", () => {
     expect(await handleHavenChat({ nonsense: true }, "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
   });
 
-  it("rejects more than 12 messages", async () => {
+  it("trims history over 12 messages to the most recent, instead of rejecting", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure, happy to help!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
     const { handleHavenChat } = await freshChatService();
-    const messages = Array.from({ length: 13 }, () => ({ role: "user" as const, content: "hi" }));
-    expect(await handleHavenChat(validBody({ messages }), "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
+    // 15 alternating turns, each distinct so the trimmed set is identifiable.
+    const messages = Array.from({ length: 15 }, (_, i) => ({
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `turn ${i}`,
+    }));
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    const sentMessages = providerChat.mock.calls[0][0].messages as { role: string; content: string }[];
+    expect(sentMessages).toHaveLength(12);
+    expect(sentMessages[0].content).toBe("turn 3"); // the oldest 3 turns were dropped
+    expect(sentMessages[sentMessages.length - 1].content).toBe("turn 14");
   });
 
-  it("rejects a message longer than 600 characters", async () => {
+  it("accepts a long assistant history turn (Haven's own multi-option reply) and truncates it instead of rejecting", async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what I can tell you about that.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    const longAssistantReply = "y".repeat(2000);
+    const messages = [
+      { role: "user" as const, content: "What properties do you have?" },
+      { role: "assistant" as const, content: longAssistantReply },
+      { role: "user" as const, content: "Mickey in lipa" },
+    ];
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    const sentMessages = providerChat.mock.calls[0][0].messages as { role: string; content: string }[];
+    const assistantTurn = sentMessages.find((m) => m.role === "assistant")!;
+    expect(assistantTurn.content.length).toBe(1500);
+    expect(assistantTurn.content).toBe(longAssistantReply.slice(-1500));
+  });
+
+  it("reproduces the live bug sequence (long Haven reply, then free text) and stays in AI mode", async () => {
+    providerChat.mockResolvedValue({
+      text: "Which of the three Mickey listings do you mean?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    const messages = [
+      { role: "user" as const, content: "Do you have anything for a big group?" },
+      { role: "assistant" as const, content: "o".repeat(870) }, // Haven's own 4-option reply
+      { role: "user" as const, content: "Mickey in lipa" },
+    ];
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    expect(result.reason).toBeUndefined();
+  });
+
+  it("returns a friendly AI-mode reply (not static fallback) when the latest user message exceeds 600 characters", async () => {
     const { handleHavenChat } = await freshChatService();
     const messages = [{ role: "user" as const, content: "x".repeat(601) }];
-    expect(await handleHavenChat(validBody({ messages }), "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).toMatch(/shorten|paikliin/i);
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+    expect(providerChat).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid lang value", async () => {
@@ -305,10 +390,113 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     });
 
     const { handleHavenChat } = await freshChatService();
-    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have WiFi?" }] }), "1.2.3.4");
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have a swimming pool?" }] }), "1.2.3.4");
 
     const system = providerChat.mock.calls[0][0].system as string;
     expect(system).not.toContain("checkIn=");
+  });
+
+  // DEC-029, 2026-10-15 live-retest fix: the resolver in tools.ts only ever ran AFTER a
+  // model tool call already missed, so it never helped on a turn where Haiku answered
+  // free-text with no tool call at all — the two exact live failures below.
+  describe("property-name pre-resolution (live-retest fix)", () => {
+    it('live failure #1 — Batangueño, history then "Mickey in lipa": injects an ambiguous context note naming all three Mickey listings, and the post-process backstop drops a wrongful "I don\'t know that property" claim', async () => {
+      providerChat.mockResolvedValue({
+        text: "Hindi ko alam ang property na 'yan.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const result = await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [
+            { role: "user", content: "Pwede ba kami mag-book para sa barkada namin?" },
+            { role: "assistant", content: "Ay ga, pwede namán! Ilan po kayo at anong petsa?" },
+            { role: "user", content: "Mickey in lipa" },
+          ],
+        }),
+        "1.2.3.4"
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toContain("Mickey in Lipa — Family Staycation");
+      expect(system).toContain("Mickey in Lipa — Family House");
+      expect(system).toContain("Mickey in Lipa — Full Family House");
+      expect(system).toMatch(/never say the property is unknown/i);
+
+      expect(result.reply).not.toMatch(/hindi ko alam/i);
+      expect(result.reply).toContain("Mickey in Lipa — Family Staycation");
+      expect(result.reply).toContain("Mickey in Lipa — Family House");
+      expect(result.reply).toContain("Mickey in Lipa — Full Family House");
+    });
+
+    it('live failure #2 — "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?": resolves uniquely to the full family house instead of asking for the exact name', async () => {
+      providerChat.mockResolvedValue({
+        text: "Sige po, tatawag ako ng quote para sa inyo.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [{ role: "user", content: "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" }],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toContain('refers to "Mickey in Lipa — Full Family House"');
+      expect(system).toContain("slug mickey-in-lipa--full-family-house--sleeps-15");
+      expect(system).toMatch(/do not ask the guest to name or confirm/i);
+    });
+
+    it("tells the model to call get_quote immediately when a unique property, resolved dates, AND a guest count are all already known", async () => {
+      providerChat.mockResolvedValue({
+        text: "Let me get that quote for you.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          messages: [{ role: "user", content: "How much is the Mickey full family house on Nov 14 for 10 guests?" }],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toMatch(/call get_quote now/i);
+      expect(system).toContain("slug=mickey-in-lipa--full-family-house--sleeps-15");
+      expect(system).toContain("checkIn=2026-11-14");
+      expect(system).toContain("checkOut=2026-11-15");
+      expect(system).toContain("guests=10");
+    });
+
+    it("never says a property is unknown when the resolver found no match either (leaves an unrelated reply untouched)", async () => {
+      providerChat.mockResolvedValue({
+        text: "Sure, happy to help with that!",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const result = await handleHavenChat(validBody({ messages: [{ role: "user", content: "What time is checkout?" }] }), "1.2.3.4");
+
+      expect(result.reply).toBe("Sure, happy to help with that!");
+    });
   });
 
   it("prepends a natural Batangueño opener when a btg reply carries no marker", async () => {
@@ -636,6 +824,62 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     expect(result.reply).toContain("group of 10");
   });
 
+  it("prefixes a bare listing base rate with 'from ₱X/night' (Cedric, 2026-10-15)", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check what we have.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Mickey in Lipa — ₱6,500/night",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue([
+      { slug: "mickey-full", name: "Mickey in Lipa", pricePerNight: 6500, maxGuests: 15 },
+    ]);
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe("Mickey in Lipa — from ₱6,500/night");
+  });
+
+  it("leaves a dated get_quote total untouched even when it equals a listing's base rate", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check that quote.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Let me get the exact quote for that date.",
+        toolCalls: [{ id: "2", name: "get_quote", input: { slug: "mickey-full", checkIn: "2026-12-24", checkOut: "2026-12-25", guests: 2 } }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Your total for that one night is ₱6,500.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock
+      .mockResolvedValueOnce([{ slug: "mickey-full", name: "Mickey in Lipa", pricePerNight: 6500, maxGuests: 15 }])
+      .mockResolvedValueOnce({ name: "Mickey in Lipa", total: 6500, nightlyTotal: 6500, bookingLink: "/properties/mickey-full/book" });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe(
+      "For Thursday, December 24 → Friday, December 25, 2026:\n\nYour total for that one night is ₱6,500."
+    );
+  });
+
   it("prepends the resolved date range to an English reply that omits it", async () => {
     providerChat
       .mockResolvedValueOnce({
@@ -756,5 +1000,72 @@ describe("handleHavenChat — 24+ guests: deterministic handoff, no model call",
       "What a big group! For 24 or more guests, our team will plan it with you personally — tap below to message us on Messenger."
     );
     expect(result.reply).not.toContain("Let me check");
+  });
+});
+
+describe("handleHavenChat — Wi-Fi/access guard (Cedric, 2026-10-15)", () => {
+  it("skips the model entirely for a direct wifi-password question, returning the safe sentence + Messenger button", async () => {
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "What's the wifi password?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).not.toHaveBeenCalled();
+    expect(result.reply).toMatch(/posted inside the property/i);
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+  });
+
+  it("skips the model for a direct gate-code question, in Tagalog", async () => {
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ano po ang gate code?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).not.toHaveBeenCalled();
+    expect(result.reply).toMatch(/check-in instructions/i);
+  });
+
+  it("does not trigger for an unrelated question", async () => {
+    providerChat.mockResolvedValue({ text: "Check-in is at 2 PM.", toolCalls: [], usage: { inputTokens: 5, outputTokens: 5 }, stopReason: "end_turn" });
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "What time is check-in?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat).toHaveBeenCalled();
+    expect(result.reply).toBe("Check-in is at 2 PM.");
+  });
+
+  it("scrubs a leaked password the model volunteers unprompted, and forces the Messenger button on", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure thing! password: HavenGuest123. Enjoy your stay!",
+      toolCalls: [],
+      usage: { inputTokens: 10, outputTokens: 10 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "Tell me about the property." }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toContain("HavenGuest123");
+    expect(result.reply).toMatch(/check-in instructions/i);
+    expect(result.links).toEqual(expect.arrayContaining([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]));
+  });
+
+  it("logs usage with outcome 'handoff' and zero cost for the deterministic guard reply", async () => {
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ lang: "en", messages: [{ role: "user", content: "What's the wifi password?" }] }), "1.2.3.4");
+
+    expect(db.havenChatUsage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ outcome: "handoff", inputTokens: 0, outputTokens: 0, toolCalls: 0 }),
+      })
+    );
   });
 });

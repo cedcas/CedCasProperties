@@ -10,6 +10,8 @@ import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
+import { shortPropertyLabels } from "./post-process";
+import { getWelcomeBook, isWelcomeBookSlug } from "./welcome-book";
 import type { ToolDefinition } from "./provider";
 
 /**
@@ -73,6 +75,28 @@ async function resolveSlugFallback(
 }
 
 /**
+ * Guest-facing short name for a single resolved property (DEC-029, 2026-10-15 — guests
+ * saw a raw SEO-suffixed name like "Mickey in Lipa | Full Family House•Sleeps 15" echoed
+ * into a reply). Disambiguates against the FULL public-listing set, not just this one
+ * result, so the three Mickey configurations always come back distinguishable
+ * ("Mickey in Lipa — Full Family House") even when only one of them is being looked up —
+ * `shortPropertyLabels` run over a single-entry list can't tell it apart from its
+ * siblings. Never throws: an empty/failed listing fetch just falls back to this property's
+ * own name alone (still correct, just not disambiguated).
+ */
+async function shortNameFor(slug: string, name: string): Promise<string> {
+  let listings: Awaited<ReturnType<typeof getPublicListings>>;
+  try {
+    listings = await getPublicListings();
+  } catch {
+    listings = [];
+  }
+  const pairs = Array.isArray(listings) ? listings.map((l) => ({ slug: l.slug, name: l.name })) : [];
+  if (!pairs.some((p) => p.slug === slug)) pairs.push({ slug, name });
+  return shortPropertyLabels(pairs).get(slug) ?? name;
+}
+
+/**
  * Per-night (date, weekday, rate) rows from a quote's own `dailyRates` — so Haven can
  * optionally show a stay's nightly breakdown (e.g. a weekday vs. weekend rate) without
  * ever having to add the nights up itself (DEC-029 — see system-prompt.ts's ban on the
@@ -129,9 +153,14 @@ const listPropertiesTool: HavenToolSpec<z.infer<typeof listPropertiesSchema>> = 
   schema: listPropertiesSchema,
   handler: async () => {
     const properties = await getPublicListings();
+    const shortNames = shortPropertyLabels(properties.map((p) => ({ slug: p.slug, name: p.name })));
     return properties.map((p) => ({
       slug: p.slug,
       name: p.name,
+      // Always use this in guest-facing replies, never the raw `name` above, which can
+      // carry an SEO suffix ("Mickey in Lipa | Full Family House•Sleeps 15") — see
+      // system-prompt.ts.
+      shortName: shortNames.get(p.slug) ?? p.name,
       type: p.type,
       location: p.location,
       pricePerNight: Number(p.pricePerNight),
@@ -152,7 +181,9 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
     name: "get_property_details",
     description:
       "Full details for one property by slug: description, amenities, house rules, " +
-      "policies, pricing notes, FAQs, and nearby places.",
+      "policies, pricing notes, FAQs, nearby places, and a welcomeBook field — our " +
+      "Welcome Book's restaurants and things-to-do apply to every listing; its " +
+      "houseRules/howTos/checkOutSteps are only non-null for the two B34 listings.",
     inputSchema: {
       type: "object",
       properties: { slug: { type: "string" } },
@@ -194,6 +225,9 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
     return {
       slug: p.slug,
       name: p.name,
+      // Always use this in guest-facing replies, never the raw `name` above — see
+      // list_properties and system-prompt.ts.
+      shortName: await shortNameFor(p.slug, p.name),
       description: p.description,
       amenities: safeJsonParse<string[]>(p.amenities, []),
       amenityDetails: safeJsonParse(p.amenityDetails, []),
@@ -202,6 +236,10 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
       pricingNotes: safeJsonParse(p.pricingNotes, null),
       propertyFaqs: safeJsonParse(p.propertyFaqs, []),
       neighborhoodPlaces: safeJsonParse(p.neighborhoodPlaces, []),
+      // restaurants/thingsToDo are global (every listing, owner update 2026-10-15);
+      // houseRules/howTos/checkOutSteps stay `null` outside the two B34 listings
+      // (cozy-1-bedroom, spacious-2-bedroom) — see welcome-book.ts.
+      welcomeBook: getWelcomeBook(p.slug),
       // Structured, numeric fee fields — so a guest question about a specific fee (early
       // check-in/late checkout, extra guest) can be answered with a real traceable number
       // instead of the model guessing one. Mirrors the same published figures used in
@@ -712,6 +750,72 @@ const findAmenityTool: HavenToolSpec<z.infer<typeof findAmenitySchema>> = {
   },
 };
 
+// ── get_local_guide ───────────────────────────────────────────────────────────
+
+const getLocalGuideSchema = z.object({ slug: z.string().min(1).max(200).optional() });
+
+const GLOBAL_WELCOME_BOOK_NOTE =
+  "Say the restaurants/things-to-do are from our Welcome Book — true for any listing — and " +
+  "combine them with this property's own neighborhoodPlaces tool data when present. Never " +
+  "look up or invent a restaurant/place online or from general knowledge.";
+
+const NO_PROPERTY_LOCAL_GUIDE_MESSAGE =
+  `${GLOBAL_WELCOME_BOOK_NOTE} No specific property is known yet, so house-specific ` +
+  "how-tos/check-out steps aren't available here. Fixed facts you may state directly: " +
+  "there's an Alfamart right outside the subdivision, plus minimarts around the property.";
+
+const NON_B34_LOCAL_GUIDE_MESSAGE =
+  `${GLOBAL_WELCOME_BOOK_NOTE} This property has no house-specific Welcome Book data here ` +
+  "(house rules/how-tos/check-out steps are B34-only) — only a printed copy inside the " +
+  "house covers those. Fixed facts you may state directly: there's an Alfamart right " +
+  "outside the subdivision, plus minimarts around the property.";
+
+const B34_LOCAL_GUIDE_MESSAGE =
+  `${GLOBAL_WELCOME_BOOK_NOTE} This listing's house rules/how-tos/check-out steps are also ` +
+  "from the Welcome Book.";
+
+/**
+ * Local-area guide from the Welcome Book (welcome-book.ts). Restaurants and things-to-do
+ * are GLOBAL — returned for every property, including an unresolved one (owner update,
+ * Cedric 2026-10-15). House rules, how-tos, and check-out steps stay B34-only (Cozy 1BR
+ * Haven / Spacious 2BR Getaway) — `null` for every other listing. This tool never invents
+ * content it has no data for, and never blocks on a slug it can't resolve.
+ */
+const getLocalGuideTool: HavenToolSpec<z.infer<typeof getLocalGuideSchema>> = {
+  definition: {
+    name: "get_local_guide",
+    description:
+      "Local-area guide from our Welcome Book. Restaurants and things-to-do are returned " +
+      "for every public listing (combine with a listing's own neighborhoodPlaces data); " +
+      "house how-tos/check-out steps/house-rules are only returned for the B34 listings " +
+      "(Cozy 1BR Haven, Spacious 2BR Getaway). Call with the resolved property slug when " +
+      "known; omit slug for a question with no property context yet.",
+    inputSchema: {
+      type: "object",
+      properties: { slug: { type: "string", description: "The resolved property slug, if known." } },
+      additionalProperties: false,
+    },
+  },
+  schema: getLocalGuideSchema,
+  handler: async ({ slug }) => {
+    if (!slug) return { welcomeBook: getWelcomeBook(""), message: NO_PROPERTY_LOCAL_GUIDE_MESSAGE };
+
+    let resolvedSlug = slug;
+    if (!isWelcomeBookSlug(slug)) {
+      const fallback = await resolveSlugFallback(slug);
+      if (fallback.ok) resolvedSlug = fallback.slug;
+      else if ("ambiguous" in fallback.result) return fallback.result;
+      // A genuine "Property not found." miss falls through below with the raw slug —
+      // this tool's job is never to block the conversation on an unresolved slug, and the
+      // global restaurants/things-to-do lists don't depend on the property resolving.
+    }
+
+    const welcomeBook = getWelcomeBook(resolvedSlug);
+    const message = isWelcomeBookSlug(resolvedSlug) ? B34_LOCAL_GUIDE_MESSAGE : NON_B34_LOCAL_GUIDE_MESSAGE;
+    return { welcomeBook, message };
+  },
+};
+
 // ── Registry ───────────────────────────────────────────────────────────────
 
 /** Type-erased storage shape — every tool's handler is called only after its own `schema`
@@ -740,6 +844,7 @@ export const HAVEN_TOOLS: HavenToolEntry[] = [
   defineTool(checkEarlyLateTool),
   defineTool(getFaqTool),
   defineTool(findAmenityTool),
+  defineTool(getLocalGuideTool),
 ];
 
 export function getToolDefinitions(): ToolDefinition[] {

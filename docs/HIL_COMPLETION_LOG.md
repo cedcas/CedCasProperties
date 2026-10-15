@@ -4,6 +4,289 @@
 
 ---
 
+## 2026-10-15 — Haven AI: Welcome Book restaurants/things-to-do widened to global (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,660 tests).
+
+### Outcome
+Same day as the B34 Welcome Book entry below, Cedric amended that decision's scoping:
+the Welcome Book's 10 restaurants and 13 things-to-do now apply to EVERY public listing,
+including the Mickey in Lipa (B38) houses — Haven says they're "from our Welcome Book" and
+may combine them with a listing's own `neighborhoodPlaces` tool data when present. House
+rules, how-tos, and check-out steps are unchanged — still scoped ONLY to the two B34
+listings (`cozy-1-bedroom`, `spacious-2-bedroom`), never generalized to a B38/Mickey
+listing or any other property. The excerpt's own exclusions (no address, phone numbers,
+emails, bars list, dialect page) are unchanged.
+
+### Material Changes
+- **`welcome-book.ts`:** `getWelcomeBook(slug)` now always returns `restaurants`/
+  `thingsToDo` (non-null for any slug, including one that doesn't resolve); `houseRules`/
+  `howTos`/`checkOutSteps` remain `null` outside the two B34 slugs.
+- **`tools.ts`:** `get_property_details`'s `welcomeBook` field is now non-null for every
+  property; `get_local_guide` returns the global lists even with no slug or an unresolved
+  one, and only attaches house-specific fields for a resolved B34 slug. Messaging updated
+  to say "from our Welcome Book" instead of "listed in the B34 Welcome Book."
+- **`owner-facts.ts`:** the dated Welcome Book prompt bullet rewritten to state the
+  lists-are-global / house-info-is-B34-only split explicitly.
+
+Tests: `welcome-book.test.ts`, `tools.test.ts`, `owner-facts.test.ts` updated — new cases
+assert a Mickey (B38) slug gets the global restaurants/things-to-do but `null`
+houseRules/howTos/checkOutSteps.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`). Amends the entry below.
+
+---
+
+## 2026-10-15 — Haven AI: banned "afford" phrasing → booking nudge, B34 Welcome Book, Wi-Fi/access guard (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,654 tests).
+
+### Outcome
+Three more Owner-approved guardrails (Cedric, 2026-10-15), each with the same
+tool-only-facts enforcement philosophy as the rest of DEC-029 — a prompt instruction alone
+is guidance, not a boundary, so each also gets an independent server-side backstop:
+1. **Banned "can you afford it" phrasing.** Haven must never ask or imply anything that
+   reads as questioning whether a guest can afford a stay — "Kaya mo na ba?", "Kaya n'yo
+   ba?", "Can you afford it?", "within your budget", "kaya ba ng budget" are all banned.
+   After stating a quote, she now closes with a booking nudge instead ("Want me to help
+   you book it?"/"Gusto n'yo na bang i-book?"/"Gusto n'yo na ga i-book?").
+2. **B34 Welcome Book.** An owner-provided, already-sanitized excerpt of the B34 house
+   manual ("BV-B34L21 House Manual v020325") is now available to Haven, scoped ONLY to the
+   two B34 listings (Cozy 1BR Haven, Spacious 2BR Getaway) — never the Mickey in Lipa
+   (B38) listings. Owner decision the same day: Haven may recommend the Welcome Book's 10
+   restaurants and 13 attractions **by name** to B34 guests (a narrower exception to the
+   2026-10-14 "never invent a place" guardrail, not a repeal of it); the bars list, dialect
+   page, address, and staff contact details stay excluded exactly as the owner excerpt
+   excludes them.
+3. **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password or a
+   door/gate/lock/keybox code, under any circumstance — a direct ask is answered with a
+   fixed safe reply pointing to the printed in-house Wi-Fi details or Messenger, skipping
+   the model entirely; an independent post-generation scrub catches any such detail that
+   somehow appears in the model's own reply.
+
+### Material Changes
+- **`owner-facts.ts`:** new `replaceBannedAffordPhrasing()`, run in `chat-service.ts`
+  BEFORE `stripBudgetQuestions()` so "within your budget"/"kaya ba ng budget" is replaced
+  with the booking nudge rather than silently dropped by that guard's broader `budget`
+  regex; new owner-facts prompt bullets for the Welcome Book scoping and the Wi-Fi/access
+  rule.
+- **`welcome-book.ts`** (new): typed server-only module, `getWelcomeBook(slug)` /
+  `isWelcomeBookSlug(slug)`, returning restaurants/things-to-do/house-rules/how-tos/
+  check-out-steps ONLY for `cozy-1-bedroom`/`spacious-2-bedroom`, `null` otherwise.
+- **`access-guard.ts`** (new): `isWifiOrAccessRequest()` + `buildAccessGuardReply()` (the
+  model-skipping direct-ask path) and `containsAccessLeak()`/`scrubAccessLeak()`/
+  `ensureAccessHandoffLink()` (the post-generation backstop), in English/Tagalog/
+  Batangueño.
+- **`tools.ts`:** `get_property_details` gained a `welcomeBook` field; new
+  `get_local_guide(slug?)` tool returns the B34 Welcome Book directly (resolving an
+  informal name through the existing fuzzy fallback) or a non-B34/no-property pointer
+  message.
+- **`chat-service.ts`:** `runToolLoop()` checks `isWifiOrAccessRequest()` right after the
+  24+ guest handoff check, before property-name pre-resolution; the post-process pipeline
+  runs `replaceBannedAffordPhrasing()` and `scrubAccessLeak()`/`ensureAccessHandoffLink()`
+  on every model reply.
+- **`system-prompt.ts`:** hard rules for both the banned-phrasing/booking-nudge rule and
+  the Wi-Fi/access rule.
+
+Tests: `owner-facts.test.ts`, `system-prompt.test.ts`, `welcome-book.test.ts` (new),
+`access-guard.test.ts` (new) — including assertions that the Welcome Book content and
+every guarded tool output stay free of "wifi", "password", phone numbers, and emails —
+plus `chat-service.test.ts`/`tools.test.ts` integration cases.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: server-side property-name pre-resolution, shortName on every property tool result (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,468 tests).
+
+### Outcome
+Live retest on the preview surfaced two failures the existing fuzzy property-name
+resolver (`property-resolver.ts`, `resolveSlugFallback` in `tools.ts`) never caught,
+because that resolver only ever runs AFTER a model tool call already missed a slug — on a
+turn where Haiku answers free-text with no tool call at all, nothing resolved the guest's
+wording:
+1. Batangueño, after some history, "Mickey in lipa" → Haven replied "hindi ko alam ang
+   property na 'yan" (claimed the property didn't exist).
+2. "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" → Haven
+   asked for the exact property name instead of recognizing "malaking bahay" ("the big
+   house") as the full-family-house listing.
+
+Both are fixed by pre-resolving the guest's latest message server-side, BEFORE the model
+is called — the same pattern `chat-service.ts` already used for dates
+(`dateContextNote`) and the 24+ guest capacity note (`buildCapacityContextNote`). A
+second, independent gap: a property's `shortName` (e.g. "Mickey in Lipa — Full Family
+House", not the raw "Mickey in Lipa | Full Family House•Sleeps 15") was only ever computed
+from whatever was mentioned in a single turn's tool exchanges — looking up ONE Mickey
+configuration alone couldn't tell it apart from its siblings, since there was nothing else
+in the turn to disambiguate against.
+
+### Material Changes
+- **`property-resolver.ts`:** three new pure functions reusing the existing
+  `resolvePropertyMatch`/`shortPropertyLabels`: `resolveGuestPropertyMention()` (resolves
+  the guest's latest message against the full public-listing set — unique, ambiguous, or
+  none), `buildPropertyContextNote()` (the system-prompt note: a unique match names the
+  slug and short name and forbids asking for the name again, additionally instructing an
+  immediate `get_quote` call when dates and a guest count are ALSO already known this
+  turn; an ambiguous match lists every candidate's short name and capacity and tells the
+  model to ask which one), and `dropUnknownPropertyClaims()` (the independent
+  post-process backstop — replaces any "hindi ko alam ang property"/"not in our
+  system"/"isn't coming up"/"don't recognize" sentence with a "did you mean ...?"
+  question whenever the server itself already found a match or ambiguity list).
+- **`chat-service.ts`:** `runToolLoop` now fetches the public listings once per turn,
+  resolves the guest's property mention, appends `buildPropertyContextNote()` to the
+  system prompt alongside the existing date/capacity notes, and runs
+  `dropUnknownPropertyClaims()` right after the existing `shortenPropertyNamesInText()`
+  step in the post-process pipeline.
+- **`tools.ts`:** `list_properties` and `get_property_details` now both return a
+  `shortName` field, computed against the FULL public-listing set (a new `shortNameFor()`
+  helper re-fetches listings for `get_property_details`'s single-property case) — always
+  correctly disambiguated even when only one of several same-base-name listings is being
+  looked up.
+- **`post-process.ts`:** `shortPropertyLabels()` is now exported and accepts an optional
+  per-pair `shortName`, which always wins over the turn-scoped computed fallback;
+  `collectPropertyNamePairs()` carries a tool result's own `shortName` through (for
+  `list_properties`/`get_property_details`) so `shortenPropertyNamesInText()` picks it up
+  automatically.
+- **`system-prompt.ts`:** two new hard rules — always use a property's `shortName`, never
+  its raw `name`; and trust a "Context (already resolved/detected by the system...)"
+  property note when present, never claiming a property is unknown while one exists.
+
+Tests: `property-resolver.test.ts` (both exact live-failure messages, plus
+`buildPropertyContextNote`'s get_quote-trigger and no-get_quote-without-a-guest-count
+cases, plus `dropUnknownPropertyClaims`), `tools.test.ts` (`shortName` on both tools,
+including the single-Mickey-configuration disambiguation case), `post-process.test.ts`
+(an explicit tool-provided `shortName` winning over the computed fallback), `system-prompt.test.ts`,
+and `chat-service.test.ts` (both exact live messages end-to-end, plus the get_quote-trigger
+and no-match-found-is-a-no-op cases).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: base-rate "from"/"simula" prefix, local-places Welcome Book guardrail (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,405 tests).
+
+### Outcome
+Two new Owner guardrails (Cedric, 2026-10-15), each enforced in the system prompt AND
+independently in post-processing (the standing DEC-029 philosophy: a prompt instruction
+alone is guidance, not an enforcement boundary):
+
+1. **Base/listing rates always read "from ₱X/night".** Whenever Haven states a base or
+   listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+   quick property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X
+   kada gabi"), never a bare number, because rates can change. An exact dated
+   `get_quote`/`find_stay` quote line (a specific per-night breakdown or total for the
+   guest's own `checkIn`/`checkOut`) is unaffected — stated exactly as the tool returned
+   it, even if the number happens to equal the base rate (e.g. a single night with no
+   extra fees).
+2. **Local places / how things work point to the printed Welcome Book.** A restaurant/
+   food/groceries/nearby-place/appliance-or-house-thing question is answered by pointing
+   the guest to the printed "Welcome Book" in each house, never by looking up or inventing
+   a named place online or from general knowledge — a tool's own `neighborhoodPlaces` data
+   may still be used when present. Two fixed facts Haven may state directly: an Alfamart
+   right outside the subdivision, plus minimarts around the property.
+
+### Material Changes
+- **`post-process.ts`:** new `collectBasePrices()` (every `pricePerNight` value in this
+  turn's tool results) and `collectDatedQuoteAmounts()` (every other tool-result number)
+  let the new `ensureFromPrefix()` tell a bare base rate apart from an exact dated-quote
+  figure that happens to equal it. `ensureFromPrefix()` inserts "from "/"simula " directly
+  before a matching, unprefixed ₱ amount, skipping one already preceded by "from"/
+  "simula"/"starting at".
+- **`chat-service.ts`:** wires `collectBasePrices()`/`collectDatedQuoteAmounts()`/
+  `ensureFromPrefix()` into the existing post-processing pipeline, right after the
+  price-claims guard.
+- **`system-prompt.ts`:** a new hard rule spells out the "from ₱X/night"/"simula ₱X kada
+  gabi" requirement and the dated-quote-line exception.
+- **`owner-facts.ts`:** a new dated fact bullet (Cedric, 2026-10-15) covers local places —
+  the Welcome Book pointer, the never-invent-a-place rule, and the Alfamart/minimarts
+  facts.
+
+Tests: `post-process.test.ts` (`collectBasePrices`/`collectDatedQuoteAmounts`/
+`ensureFromPrefix`, incl. the dated-quote-line exception and the no-double-prefix case),
+`system-prompt.test.ts` and `owner-facts.test.ts` (both guardrails' prompt text),
+`chat-service.test.ts` (the "Mickey in Lipa — ₱6,500/night" → "from ₱6,500/night"
+end-to-end case, and a dated `get_quote` total left untouched even when it numerically
+equals the base rate).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: free-text reset-to-greeting fix, long-history validation, "malaking bahay" mapping (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,360 tests).
+
+### Outcome
+Owner-reported live bug: in Batangueño mode, right after Haven replied with a 4-option
+list, the guest typed "Mickey in lipa" and the widget reset to the static English root
+greeting — mid-conversation, in a non-English chat.
+
+**Root cause:** `ChatWidget.tsx` sends the last 12 messages as history, including Haven's
+own previous replies (`assistant` role). `chatRequestSchema` in `chat-service.ts` capped
+*every* message, regardless of role, at `MAX_MESSAGE_CHARS` (600) — Haven's multi-option
+replies routinely exceed that. The oversized `assistant` history turn failed validation,
+so the **entire request** was rejected (`{mode: "static", reason: "error"}`), and the
+client's `fallbackToTree()` unconditionally appended `tree.root.message` — the English
+welcome text — wiping the guest's language and conversation context.
+
+### Material Changes
+- **Server (`chat-service.ts`):** `chatRequestSchema`'s message schema is now a zod
+  discriminated union on `role` — `user` content still caps at 600 chars, `assistant`
+  history caps at a new `MAX_ASSISTANT_MESSAGE_CHARS` (1500, `config.ts`).
+  `normalizeIncomingMessages()` runs before validation: trims history to the most recent
+  `MAX_MESSAGES` (12) turns and truncates an over-long `assistant` message to its last
+  1500 characters, instead of rejecting the whole request. A genuinely oversized
+  **latest guest** message (>600 chars) no longer falls back to static either — it gets a
+  deterministic, localized (en/tl/btg) "please shorten that" `{mode: "ai"}` reply with the
+  Messenger button, skipping the model (`outcome: "handoff"`, `reason:
+  "oversized_message"`, reusing the existing free-text columns — no schema change).
+- **Client (`ChatWidget.tsx`):** `fallbackToTree()` no longer injects the static tree's
+  root greeting on a mid-conversation static/cap/kill/error response. It now appends a
+  short, localized apology (`buildAiFallbackMessage()`, en/tl/btg) with a "Message us on
+  Messenger" link button, leaving `messages`/`lang`/`currentNodeId`/`lastMode` and the
+  free-text input untouched. The root greeting is now shown only on first load or an
+  explicit Reset. Outgoing `assistant`-role history is also clamped client-side to 1500
+  chars (`CLIENT_MAX_ASSISTANT_MESSAGE_CHARS`) as defense in depth.
+- **`property-resolver.ts`:** the largest-capacity listing's (Mickey Full Family House,
+  sleeps 15) alias table gained "biggest"/"largest"/"big" (English — "house" is itself a
+  filler token, so "big house" already reduces to "big") and "pinakamalaking" (Tagalog),
+  alongside the existing "pinakamalaki"/"malaki"/"malaking". Confirmed (no code change
+  needed): a bare "Mickey"/"Mickey in Lipa" with no size/capacity detail already resolved
+  `ambiguous` — every Mickey slug contains "mickey"/"in"/"lipa" — which `tools.ts`/
+  `system-prompt.ts` already turn into a short clarifying question naming the three
+  Mickey listings, never "isn't in our system".
+
+Tests: `chat-service.test.ts` (long `assistant` history accepted and truncated; >12-turn
+history trimmed to the most recent 12 instead of rejected; an oversized latest `user`
+message gets the friendly AI reply with no provider call; the exact repro sequence
+stays in AI mode), `property-resolver.test.ts` (the new English/Tagalog size aliases;
+"Mickey in Lipa" ambiguous), `ChatWidget.test.ts` (a mid-conversation static fallback
+does not duplicate the root greeting, keeps the selected language pill active, and
+leaves the input enabled).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR pending.
+
+---
+
 ## 2026-10-14 — Haven AI live bug fixes: fuzzy property-name resolution, deterministic 24+ guest handoff (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
 
 Area: Website

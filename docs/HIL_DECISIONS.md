@@ -806,8 +806,91 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426` (same day, not a new decision — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, and again 2026-10-15 on `fix/haven-ai-freetext-reset-101526` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-15 owner-guardrails pass)
+Cedric (the Owner) approved two more guardrails, closed without changing the decision
+itself — same philosophy as the 2026-10-14 pass below: a prompt instruction alone is
+guidance, not an enforcement boundary, so each gets an independent post-processing check
+too:
+- **Base/listing rates always read "from ₱X/night."** Whenever Haven states a base or
+  listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+  property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X kada
+  gabi"), never a bare number, because rates can change. `system-prompt.ts` carries the
+  rule; `post-process.ts`'s new `ensureFromPrefix()` is the independent backstop, using
+  `collectBasePrices()` (every `pricePerNight` value in this turn's tool results) and
+  `collectDatedQuoteAmounts()` (every other tool-result number) to tell a bare base rate
+  apart from an exact `get_quote`/`find_stay` quote line that happens to equal it — the
+  latter is always left exactly as the tool returned it, never prefixed.
+- **Local places / how things work point to the printed Welcome Book.** For restaurants,
+  food, groceries, nearby places, or how an appliance/house thing works, Haven points the
+  guest to the printed "Welcome Book" in each house rather than answering from general
+  knowledge — she never looks up or invents a named place online, though a tool result's
+  own `neighborhoodPlaces` data may still be used when present. `owner-facts.ts` gained a
+  dated fact bullet (Cedric, 2026-10-15) with two fixed facts Haven may state directly: an
+  Alfamart right outside the subdivision, plus minimarts around the property.
+
+### Implementation note (2026-10-15 owner-guardrails pass, part 2)
+Cedric (the Owner) approved three more guardrails on the same `fix/haven-ai-freetext-reset-101526`
+branch, closed without changing the decision itself:
+- **Banned "can you afford it" phrasing → booking nudge.** Haven must never ask or imply
+  anything that reads as questioning whether a guest can afford a stay — "Kaya mo na ba?",
+  "Kaya n'yo ba?", "Can you afford it?", "within your budget", "kaya ba ng budget", and
+  reorderings of the same Tagalog idiom are banned. `system-prompt.ts` carries the rule and
+  names the required close after a quote: "Want me to help you book it?" (Tagalog: "Gusto
+  n'yo na bang i-book?"; Batangueño: "Gusto n'yo na ga i-book?"). `owner-facts.ts`'s new
+  `replaceBannedAffordPhrasing()` is the independent backstop, replacing a whole matching
+  sentence/bullet with the booking nudge in the active language rather than leaving it in
+  or silently dropping it — it runs in `chat-service.ts` BEFORE `stripBudgetQuestions()`,
+  since "within your budget"/"kaya ba ng budget" would otherwise also match that guard's
+  broader `budget` regex and get dropped instead of replaced.
+- **B34 Welcome Book, scoped per property.** An owner-provided, already-sanitized excerpt
+  of the B34 house manual ("BV-B34L21 House Manual v020325") is now a typed server-only
+  module, `src/lib/haven/welcome-book.ts`, keyed by slug and returning content ONLY for the
+  two B34 listings — Cozy 1BR Haven (`cozy-1-bedroom`) and Spacious 2BR Getaway
+  (`spacious-2-bedroom`) — never the Mickey in Lipa (B38) listings. It's exposed read-only
+  via `get_property_details`'s new `welcomeBook` field and a new `get_local_guide(slug?)`
+  tool (`tools.ts`); both resolve an informal property name through the existing fuzzy
+  fallback and never block the conversation on an unresolved slug. **Owner decision,
+  2026-10-15:** Haven may recommend the Welcome Book's 10 restaurants and 13 attractions by
+  name to B34 guests — a narrower exception to the 2026-10-14 "never invent a place" rule
+  above, not a repeal of it; Haven still never looks up or invents a place beyond this
+  fixed list, and the excerpt's own exclusions stay out of what Haven can ever say: no
+  address, staff phone numbers/emails, the host family bio, the dialect page, or the bars
+  list. For a B38 listing, or when no property is known yet, Haven still only points to the
+  printed Welcome Book in each house plus the Alfamart/minimart owner facts, and must never
+  generalize the B34 list to B38.
+- **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password, or a
+  door/gate/lock/keybox code or other access detail, under any circumstance — even asked
+  directly, even if one somehow appeared in a tool result or the model's own text.
+  `src/lib/haven/access-guard.ts` is two independent layers, same tool-only-facts
+  philosophy as the rest of this decision: (1) `isWifiOrAccessRequest` detects a direct
+  ask in the guest's latest message (English, Tagalog, and Batangueño wording, e.g. "susi"
+  for key) and `chat-service.ts` returns a deterministic safe reply with a Messenger button
+  — the same skip-the-model pattern as the 24+ guest handoff — without ever calling the
+  model; (2) `scrubAccessLeak` is a post-generation backstop that replaces any whole
+  sentence reading like a leaked SSID/password/door-code with the same safe sentence,
+  regardless of how it got into the model's reply, and forces the Messenger button on when
+  it fires. `system-prompt.ts` and `owner-facts.ts` both carry the prompt-level rule too.
+  `welcome-book.test.ts` and `access-guard.test.ts` assert the welcome-book content and
+  every guarded tool output stay free of "wifi", "password", phone numbers, and emails.
+
+### Implementation note (2026-10-15 owner-guardrails pass, part 3 — amends part 2's Welcome Book scoping)
+Later the same day, Cedric (the Owner) overrode the Welcome Book scoping decided in part 2
+above — same day, same branch, closed without changing the decision itself:
+- **Restaurants and things-to-do are now global, not B34-only.** The Welcome Book's 10
+  restaurants and 13 attractions apply to EVERY public listing, including the Mickey in
+  Lipa (B38) houses — Haven says these are "from our Welcome Book" and may combine them
+  with a listing's own `neighborhoodPlaces` tool data when present. `welcome-book.ts`'s
+  `getWelcomeBook(slug)` now always returns these two lists, for any slug (even one that
+  doesn't resolve), instead of returning `null` outside the B34 pair.
+- **House rules, how-tos, and check-out steps stay B34-only.** These three fields remain
+  `null` for every listing except the two B34 slugs (`cozy-1-bedroom`, `spacious-2-bedroom`)
+  — never generalized to a B38/Mickey listing or any other property, per the excerpt's own
+  scope. `get_local_guide`'s messaging and `owner-facts.ts`'s prompt bullet were both
+  updated to state the lists/house-info split explicitly; the excerpt's exclusions (no
+  address, phone numbers, emails, bars list, dialect page) are unchanged.
 
 ### Implementation note (2026-10-14 owner-guardrails pass)
 Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and

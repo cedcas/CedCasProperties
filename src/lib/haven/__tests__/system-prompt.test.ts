@@ -48,6 +48,50 @@ describe("buildHavenSystemPrompt", () => {
     it("says the only total allowed is the one get_quote/find_stay returned this turn", () => {
       expect(prompt).toMatch(/get_quote or find_stay returned THIS turn/);
     });
+
+    it("requires a base/listing rate to always read 'from ₱X'/'simula ₱X', and exempts a dated quote line (Cedric, 2026-10-15)", () => {
+      expect(prompt).toMatch(/simula ₱X kada gabi/);
+      expect(prompt).toMatch(/rates\s*can change/i);
+      expect(prompt).toMatch(/does NOT apply to an exact dated quote line/i);
+    });
+  });
+
+  describe("local places / how things work (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("points to the printed Welcome Book, with Alfamart and minimarts as fixed facts", () => {
+      expect(prompt).toMatch(/Welcome Book/);
+      expect(prompt).toMatch(/Alfamart/);
+      expect(prompt).toMatch(/minimarts/);
+      expect(prompt).toMatch(/never look up or invent/i);
+    });
+  });
+
+  describe("banned 'can you afford it' phrasing and booking nudge (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("bans the literal phrases and names the booking nudge in each language", () => {
+      expect(prompt).toContain("Kaya mo na ba?");
+      expect(prompt).toContain("Kaya n'yo ba?");
+      expect(prompt).toContain("Can you afford it?");
+      expect(prompt).toMatch(/within your budget/i);
+      expect(prompt).toMatch(/kaya ba ng budget/i);
+      expect(prompt).toContain("Want me to help you book it?");
+      expect(prompt).toContain("Gusto n'yo na bang i-book?");
+      expect(prompt).toContain("Gusto n'yo na ga i-book?");
+    });
+  });
+
+  describe("Wi-Fi and physical-access guard (Cedric, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("bans sharing Wi-Fi/password and door/gate/lock/keybox codes, pointing to Messenger", () => {
+      expect(prompt).toMatch(/Never share a Wi-Fi name\/password/i);
+      expect(prompt).toMatch(/door\/gate\/lock\/keybox code/i);
+      expect(prompt).toMatch(/posted inside the property/i);
+      expect(prompt).toMatch(/check-in instructions/i);
+      expect(prompt).toContain("https://m.me/haveninlipa");
+    });
   });
 
   describe("early check-in/late checkout fee", () => {
@@ -56,6 +100,20 @@ describe("buildHavenSystemPrompt", () => {
     it("forbids computing a total for a specific number of hours, stating only the flat rate", () => {
       expect(prompt).toMatch(/never compute a total peso amount for a specific number of hours/i);
       expect(prompt).toMatch(/always state the flat ₱200\/hour rate/i);
+    });
+  });
+
+  describe("shortName + pre-resolved property context (DEC-029, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("instructs the model to always use shortName over the raw name", () => {
+      expect(prompt).toMatch(/shortName/);
+      expect(prompt).toMatch(/never the raw `name` field/i);
+    });
+
+    it("instructs the model to trust a pre-resolved property context note and never claim a property is unknown", () => {
+      expect(prompt).toMatch(/Context \(already resolved\/detected by the/i);
+      expect(prompt).toMatch(/never say a property is unknown, not in our system, or unrecognized/i);
     });
   });
 

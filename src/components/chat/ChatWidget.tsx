@@ -40,6 +40,26 @@ const LANG_OPTIONS: { value: HavenLang; label: string }[] = [
   { value: "btg", label: "Batangueño" },
 ];
 
+/** Mirrors MAX_ASSISTANT_MESSAGE_CHARS in src/lib/haven/config.ts — that file is
+ * server-only and can't be imported here, so the limit is duplicated as a literal.
+ * Clamping client-side too is defense in depth; the server truncates independently. */
+const CLIENT_MAX_ASSISTANT_MESSAGE_CHARS = 1500;
+
+/** Short, localized "couldn't answer" message shown when the server falls back to static
+ * mid-conversation (cap/kill/error) — the English root greeting must never be injected
+ * here, since that reset the guest's language and conversation context (the reported bug). */
+const AI_FALLBACK_MESSAGE: Record<"en" | "tl" | "btg", string> = {
+  en: "Sorry, I couldn't answer that just now — you can try again or tap Talk to a Human.",
+  tl: "Paumanhin, hindi ko muna nasagot iyan — subukan ulit o i-tap ang Talk to a Human.",
+  btg: "Ala eh, hindi ko muna nasagot iyan — subukan ulit o i-tap ang Talk to a Human.",
+};
+
+function buildAiFallbackMessage(lang: HavenLang): string {
+  if (lang === "tl") return AI_FALLBACK_MESSAGE.tl;
+  if (lang === "btg") return AI_FALLBACK_MESSAGE.btg;
+  return AI_FALLBACK_MESSAGE.en; // "en" and "auto" both default to English client-side
+}
+
 function newSessionId(): string {
   try {
     return crypto.randomUUID();
@@ -203,11 +223,24 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       setTopicsOpen(false);
       track("haven_ai_message", { lang });
 
+      // A static/cap/kill/error fallback mid-conversation must NOT inject the static tree's
+      // English root greeting — that used to reset the guest's language and wipe the AI
+      // conversation's context (the reported bug: a long Haven reply failed server
+      // validation, and this function dropped the guest straight back to the English
+      // welcome message). Keep history, keep lang, keep the input enabled; just show a
+      // short apology in the active language with a Messenger link. The root tree is only
+      // ever shown on first load or an explicit Reset (handleReset), never from here.
       const fallbackToTree = (reason: string) => {
         track("haven_ai_fallback", { reason });
-        setMessages((prev) => [...prev, { id: `h-${Date.now()}`, role: "haven", text: tree.root.message }]);
-        setCurrentNodeId("root");
-        setLastMode("tree");
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `h-${Date.now()}`,
+            role: "haven",
+            text: buildAiFallbackMessage(lang),
+            links: [{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }],
+          },
+        ]);
       };
 
       try {
@@ -216,7 +249,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
           lang,
           messages: historySource.slice(-12).map((m) => ({
             role: m.role === "haven" ? ("assistant" as const) : ("user" as const),
-            content: m.text,
+            content: m.role === "haven" ? m.text.slice(-CLIENT_MAX_ASSISTANT_MESSAGE_CHARS) : m.text,
           })),
         };
         const res = await fetch("/api/haven/chat", {
@@ -246,7 +279,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
         setAiLoading(false);
       }
     },
-    [freeText, aiLoading, messages, lang, sessionId, tree]
+    [freeText, aiLoading, messages, lang, sessionId]
   );
 
   const handleLinkClick = useCallback((href: string) => {

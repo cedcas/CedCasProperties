@@ -1,15 +1,20 @@
 import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getPublicListings } from "@/lib/listings";
 import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
 import { resolveDates } from "./dates";
+import { buildPropertyContextNote, dropUnknownPropertyClaims, resolveGuestPropertyMention } from "./property-resolver";
 import {
   extractAllowedLinks,
   collectToolAmounts,
   enforcePriceClaims,
+  collectBasePrices,
+  collectDatedQuoteAmounts,
+  ensureFromPrefix,
   collectBookingLinks,
   dedupeLinks,
   ensureHandoffLink,
@@ -32,40 +37,113 @@ import {
   OWNER_FACT_ALLOWED_AMOUNTS,
   stripBudgetQuestions,
   removeKidsFreeClaims,
+  replaceBannedAffordPhrasing,
   needsCapacityHandoff,
   ensureCapacityHandoffLink,
   buildCapacityContextNote,
   isLargeGroupMessage,
   isLargeGroupToolCall,
   buildLargeGroupHandoffReply,
+  parseGuestCount,
 } from "./owner-facts";
+import {
+  isWifiOrAccessRequest,
+  buildAccessGuardReply,
+  containsAccessLeak,
+  scrubAccessLeak,
+  ensureAccessHandoffLink,
+} from "./access-guard";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
   havenAiActive,
   costUsd as priceOf,
   HAVEN_AI_MODEL,
   HAVEN_AI_PROVIDER,
+  MAX_ASSISTANT_MESSAGE_CHARS,
   MAX_MESSAGE_CHARS,
   MAX_MESSAGES,
   MAX_OUTPUT_TOKENS,
   MAX_TOOL_ROUNDS,
 } from "./config";
 
+// `user` messages keep the hard 600-char cap (the guest's own typing); `assistant` history
+// (Haven's own prior replies, echoed back by the client) gets a much longer allowance since
+// a multi-option list easily clears 600 chars — see normalizeIncomingMessages below, which
+// truncates rather than lets a long turn reject the whole request.
+const messageSchema = z.discriminatedUnion("role", [
+  z.object({ role: z.literal("user"), content: z.string().min(1).max(MAX_MESSAGE_CHARS) }),
+  z.object({ role: z.literal("assistant"), content: z.string().min(1).max(MAX_ASSISTANT_MESSAGE_CHARS) }),
+]);
+
 export const chatRequestSchema = z.object({
   sessionId: z.string().min(8).max(100),
   lang: z.enum(["en", "tl", "btg", "auto"]),
-  messages: z
-    .array(
-      z.object({
-        role: z.enum(["user", "assistant"]),
-        content: z.string().min(1).max(MAX_MESSAGE_CHARS),
-      })
-    )
-    .min(1)
-    .max(MAX_MESSAGES),
+  messages: z.array(messageSchema).min(1).max(MAX_MESSAGES),
 });
 
 export type ChatRequestBody = z.infer<typeof chatRequestSchema>;
+
+interface RawMessageLike {
+  role?: unknown;
+  content?: unknown;
+}
+
+/**
+ * Runs BEFORE zod validation so an oversized/over-long request degrades gracefully instead
+ * of being rejected outright (the live bug: a long assistant turn in history, or more than
+ * 12 turns of back-and-forth, used to fail validation -> static fallback -> the client
+ * injecting the English root greeting mid-conversation). Trims history to the most recent
+ * MAX_MESSAGES turns and truncates any `assistant` message down to its last
+ * MAX_ASSISTANT_MESSAGE_CHARS characters (keeping the tail — the end of a message is more
+ * often the actionable part, e.g. the actual list of options). Never touches `user` content;
+ * that's handled separately by `clampLastUserMessage` so an oversized latest user message
+ * can get its own friendly reply instead of silently losing content.
+ */
+function normalizeIncomingMessages(rawBody: unknown): unknown {
+  if (!rawBody || typeof rawBody !== "object") return rawBody;
+  const body = rawBody as { messages?: unknown };
+  if (!Array.isArray(body.messages)) return rawBody;
+
+  const trimmed = body.messages.slice(-MAX_MESSAGES);
+  const normalized = trimmed.map((m) => {
+    const msg = m as RawMessageLike;
+    if (msg.role === "assistant" && typeof msg.content === "string" && msg.content.length > MAX_ASSISTANT_MESSAGE_CHARS) {
+      return { ...msg, content: msg.content.slice(-MAX_ASSISTANT_MESSAGE_CHARS) };
+    }
+    return m;
+  });
+  return { ...body, messages: normalized };
+}
+
+/** True when the LAST message is from the guest and exceeds the user-message cap — the one
+ * case that gets a friendly AI-mode reply (see `handleHavenChat`) rather than the normal
+ * static/error fallback, since it's guest-triggered and easy to recover from in-conversation. */
+function lastMessageIsOversizedUser(messages: unknown[]): boolean {
+  const last = messages[messages.length - 1] as RawMessageLike | undefined;
+  return !!last && last.role === "user" && typeof last.content === "string" && last.content.length > MAX_MESSAGE_CHARS;
+}
+
+/** Clamps only the last message's content so the rest of the body can still be validated
+ * normally (sessionId/lang/history shape) while we build the oversized-message reply. */
+function withClampedLastUserMessage(messages: RawMessageLike[]): RawMessageLike[] {
+  if (messages.length === 0) return messages;
+  const lastIdx = messages.length - 1;
+  const last = messages[lastIdx];
+  return [...messages.slice(0, lastIdx), { ...last, content: String(last.content).slice(0, MAX_MESSAGE_CHARS) }];
+}
+
+const OVERSIZED_USER_MESSAGE_REPLY = {
+  en: `That message was a bit long for me to read in one go — could you shorten it to a sentence or two? You can also message us directly on Messenger: ${MESSENGER_HREF}.`,
+  tl: `Mahaba masyado yung message mo para mabasa ko agad — pwede mo bang paikliin sa isa o dalawang sentence? Pwede mo rin kaming i-message diretso sa Messenger: ${MESSENGER_HREF}.`,
+  btg: `Ala eh, mahaba masyado yung message mo — pwede paikliin sa isa o dalawang sentence? Pwede mo rin kaming i-message diretso sa Messenger: ${MESSENGER_HREF}.`,
+} as const;
+
+/** Mirrors `buildLargeGroupHandoffReply`'s language selection (owner-facts.ts) — `btg` is
+ * always explicit, everything else follows the guest's own words for `auto`. */
+function buildOversizedUserMessageReply(lang: HavenLang, guestMessages: string): string {
+  if (lang === "btg") return OVERSIZED_USER_MESSAGE_REPLY.btg;
+  return isEnglishContext(lang, guestMessages) ? OVERSIZED_USER_MESSAGE_REPLY.en : OVERSIZED_USER_MESSAGE_REPLY.tl;
+}
 
 export interface HavenChatResponse {
   mode: "ai" | "static";
@@ -151,10 +229,47 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     return largeGroupHandoffResult(lang, guestMessages, { toolNames: [], inputTokens: 0, outputTokens: 0, toolCalls: 0 });
   }
 
+  // Wi-Fi/access (door, gate, lock, keybox code) request: a fixed safe reply, not the
+  // model — see access-guard.ts. Same reasoning as the 24+ guest handoff above: Haven must
+  // never share these, so the guest's own message never even reaches the model for this.
+  if (isWifiOrAccessRequest(latestMessage)) {
+    return {
+      reply: buildAccessGuardReply(lang, guestMessages, latestMessage),
+      links: [MESSENGER_BUTTON],
+      outcome: "handoff",
+      toolNames: [],
+      inputTokens: 0,
+      outputTokens: 0,
+      toolCalls: 0,
+    };
+  }
+
+  // Property-name pre-resolution (DEC-029, 2026-10-15 live-retest fix): same pattern as
+  // the date/capacity context notes above — resolved BEFORE the model is called, so an
+  // identity (or a clarifying question) is available even on a turn where the model
+  // answers free-text without calling a tool. See property-resolver.ts.
+  let publicListings: Awaited<ReturnType<typeof getPublicListings>> = [];
+  try {
+    publicListings = await getPublicListings();
+  } catch {
+    publicListings = [];
+  }
+  const propertyResolution = resolveGuestPropertyMention(
+    latestMessage,
+    Array.isArray(publicListings) ? publicListings : []
+  );
+  const resolvedDates = resolveDates(latestMessage, now);
+  const guestCount = parseGuestCount(latestMessage);
+
   const system =
     buildHavenSystemPrompt(lang) +
     dateContextNote(latestMessage, now) +
-    buildCapacityContextNote(latestMessage);
+    buildCapacityContextNote(latestMessage) +
+    buildPropertyContextNote(propertyResolution, {
+      checkIn: resolvedDates?.checkIn,
+      checkOut: resolvedDates?.checkOut,
+      guests: guestCount,
+    });
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -199,11 +314,24 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   OWNER_FACT_ALLOWED_AMOUNTS.forEach((amount) => allowedAmounts.add(amount));
 
   const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
-  const noBudgetAsk = stripBudgetQuestions(named);
+  const propertyKnown = dropUnknownPropertyClaims(named, propertyResolution, lang, guestMessages);
+  // Run before stripBudgetQuestions — "within your budget"/"kaya ba ng budget" would
+  // otherwise also match its broader "budget" regex and get silently dropped instead of
+  // replaced with the booking nudge (see owner-facts.ts).
+  const affordFixed = replaceBannedAffordPhrasing(propertyKnown, lang, guestMessages);
+  const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));
-  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, lang);
+  // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
+  // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
+  // the pre-scrub text so the Messenger button can still be forced on below.
+  const accessLeakDetected = containsAccessLeak(dadalawFixed);
+  const accessScrubbed = scrubAccessLeak(dadalawFixed, lang, guestMessages);
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
+  const basePrices = collectBasePrices(toolResultsThisTurn);
+  const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
+  const fromPrefixed = ensureFromPrefix(priceChecked, basePrices, datedAmounts, englishMode);
+  const termsChecked = enforceTermsOfAddress(fromPrefixed, guestMessages, lang);
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
   const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
@@ -219,7 +347,7 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
   const forceHandoff =
     needsCapacityHandoff(latestMessage, toolExchangesThisTurn) || needsAmenityHandoff(toolExchangesThisTurn);
-  const links = ensureCapacityHandoffLink(handoffLinks, forceHandoff);
+  const links = ensureAccessHandoffLink(ensureCapacityHandoffLink(handoffLinks, forceHandoff), accessLeakDetected);
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls, outcome: "ai" };
 }
@@ -294,7 +422,20 @@ async function persistTranscript(opts: {
 export async function handleHavenChat(rawBody: unknown, ip: string, now: Date = new Date()): Promise<HavenChatResponse> {
   if (!havenAiActive()) return { mode: "static" };
 
-  const parsed = chatRequestSchema.safeParse(rawBody);
+  const normalized = normalizeIncomingMessages(rawBody);
+  const rawMessages = Array.isArray((normalized as { messages?: unknown })?.messages)
+    ? ((normalized as { messages: RawMessageLike[] }).messages)
+    : [];
+  const oversizedUserMessage = lastMessageIsOversizedUser(rawMessages);
+
+  // Validate against the clamped-last-message shape when the latest guest message is
+  // oversized, so the rest of the body (sessionId/lang/history) still gets validated
+  // normally — the oversized case gets its own friendly reply below instead of rejection.
+  const validationBody = oversizedUserMessage
+    ? { ...(normalized as object), messages: withClampedLastUserMessage(rawMessages) }
+    : normalized;
+
+  const parsed = chatRequestSchema.safeParse(validationBody);
   if (!parsed.success) return { mode: "static", reason: "error" };
   const body = parsed.data;
 
@@ -309,6 +450,14 @@ export async function handleHavenChat(rawBody: unknown, ip: string, now: Date = 
   } catch (err) {
     console.error("[haven] pre-flight check failed:", err);
     return { mode: "static", reason: "error" };
+  }
+
+  if (oversizedUserMessage) {
+    const guestMessages = body.messages.filter((m) => m.role === "user").map((m) => m.content).join(" ");
+    const reply = buildOversizedUserMessageReply(body.lang as HavenLang, guestMessages);
+    await logUsage({ sessionId: body.sessionId, ipHash, inputTokens: 0, outputTokens: 0, toolCalls: 0, outcome: "handoff", reason: "oversized_message" });
+    await persistTranscript({ sessionId: body.sessionId, lang: body.lang, userText: lastUserMessage(body.messages), assistantText: reply });
+    return { mode: "ai", reply, links: [MESSENGER_BUTTON] };
   }
 
   try {

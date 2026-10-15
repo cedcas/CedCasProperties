@@ -163,4 +163,39 @@ describe("ChatWidget — AI mode", () => {
     );
     expect(talkLink).toBeTruthy();
   });
+
+  it("a static fallback mid-conversation never injects the English root greeting, keeps history, lang, and an enabled input", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        ({ json: async () => ({ mode: "ai", reply: "Sige, ano pong katanungan niyo?" }) }) as Response
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const host = mount(true);
+    openChat(host);
+
+    // Switch to Tagalog, then have a normal successful AI turn first.
+    const tlButton = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Tagalog")!;
+    act(() => tlButton.click());
+    await sendFreeText(host, "Mayroon po kayong bakante?");
+
+    // Now the server degrades to static mid-conversation (cap/kill/error).
+    fetchMock.mockImplementation(
+      async () => ({ json: async () => ({ mode: "static", reason: "error" }) }) as Response
+    );
+    await sendFreeText(host, "Mickey in lipa");
+
+    const bodyText = host.textContent ?? "";
+    // The English root greeting is only the initial welcome message (shown once, on first
+    // load) — the fallback must not append a second copy of it mid-conversation.
+    expect(bodyText.split("virtual assistant for Haven in Lipa")).toHaveLength(2);
+    expect(bodyText).toContain("hindi ko muna nasagot"); // Tagalog fallback message
+
+    // lang selection persists — the Tagalog pill is still the active one.
+    const tlButtonAfter = [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === "Tagalog")!;
+    expect(tlButtonAfter.className).toContain("bg-forest");
+
+    const input = host.querySelector('input[aria-label="Message Haven"]') as HTMLInputElement;
+    expect(input.disabled).toBe(false);
+  });
 });
