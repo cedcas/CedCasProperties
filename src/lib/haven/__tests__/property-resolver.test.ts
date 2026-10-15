@@ -30,6 +30,37 @@ describe("resolvePropertyMatch", () => {
     expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
   });
 
+  it('resolves "pinakamalaking bahay" ("the biggest house") to the largest-capacity listing', () => {
+    const result = resolvePropertyMatch("pinakamalaking bahay", LISTINGS);
+    expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it('resolves "biggest house" to the largest-capacity listing', () => {
+    const result = resolvePropertyMatch("biggest house", LISTINGS);
+    expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it('resolves "largest" alone to the largest-capacity listing', () => {
+    const result = resolvePropertyMatch("largest", LISTINGS);
+    expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it('resolves "big house" (no "Mickey" mentioned) to the largest-capacity listing', () => {
+    const result = resolvePropertyMatch("big house", LISTINGS);
+    expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it('resolves "malaki" alone to the largest-capacity listing', () => {
+    const result = resolvePropertyMatch("malaki", LISTINGS);
+    expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it('is ambiguous for "Mickey in Lipa" with no distinguishing size/capacity detail, listing all three', () => {
+    const result = resolvePropertyMatch("Mickey in Lipa", LISTINGS);
+    expect(result.status).toBe("ambiguous");
+    if (result.status === "ambiguous") expect(result.candidates).toHaveLength(3);
+  });
+
   it('resolves "spacious 2 bedroom" to the Spacious 2BR, not the Cozy 1BR', () => {
     const result = resolvePropertyMatch("spacious 2 bedroom", LISTINGS);
     expect(result).toEqual({ status: "unique", slug: "spacious-2-bedroom", name: LISTINGS[1].name });

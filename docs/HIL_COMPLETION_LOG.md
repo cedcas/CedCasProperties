@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-10-15 — Haven AI: free-text reset-to-greeting fix, long-history validation, "malaking bahay" mapping (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,360 tests).
+
+### Outcome
+Owner-reported live bug: in Batangueño mode, right after Haven replied with a 4-option
+list, the guest typed "Mickey in lipa" and the widget reset to the static English root
+greeting — mid-conversation, in a non-English chat.
+
+**Root cause:** `ChatWidget.tsx` sends the last 12 messages as history, including Haven's
+own previous replies (`assistant` role). `chatRequestSchema` in `chat-service.ts` capped
+*every* message, regardless of role, at `MAX_MESSAGE_CHARS` (600) — Haven's multi-option
+replies routinely exceed that. The oversized `assistant` history turn failed validation,
+so the **entire request** was rejected (`{mode: "static", reason: "error"}`), and the
+client's `fallbackToTree()` unconditionally appended `tree.root.message` — the English
+welcome text — wiping the guest's language and conversation context.
+
+### Material Changes
+- **Server (`chat-service.ts`):** `chatRequestSchema`'s message schema is now a zod
+  discriminated union on `role` — `user` content still caps at 600 chars, `assistant`
+  history caps at a new `MAX_ASSISTANT_MESSAGE_CHARS` (1500, `config.ts`).
+  `normalizeIncomingMessages()` runs before validation: trims history to the most recent
+  `MAX_MESSAGES` (12) turns and truncates an over-long `assistant` message to its last
+  1500 characters, instead of rejecting the whole request. A genuinely oversized
+  **latest guest** message (>600 chars) no longer falls back to static either — it gets a
+  deterministic, localized (en/tl/btg) "please shorten that" `{mode: "ai"}` reply with the
+  Messenger button, skipping the model (`outcome: "handoff"`, `reason:
+  "oversized_message"`, reusing the existing free-text columns — no schema change).
+- **Client (`ChatWidget.tsx`):** `fallbackToTree()` no longer injects the static tree's
+  root greeting on a mid-conversation static/cap/kill/error response. It now appends a
+  short, localized apology (`buildAiFallbackMessage()`, en/tl/btg) with a "Message us on
+  Messenger" link button, leaving `messages`/`lang`/`currentNodeId`/`lastMode` and the
+  free-text input untouched. The root greeting is now shown only on first load or an
+  explicit Reset. Outgoing `assistant`-role history is also clamped client-side to 1500
+  chars (`CLIENT_MAX_ASSISTANT_MESSAGE_CHARS`) as defense in depth.
+- **`property-resolver.ts`:** the largest-capacity listing's (Mickey Full Family House,
+  sleeps 15) alias table gained "biggest"/"largest"/"big" (English — "house" is itself a
+  filler token, so "big house" already reduces to "big") and "pinakamalaking" (Tagalog),
+  alongside the existing "pinakamalaki"/"malaki"/"malaking". Confirmed (no code change
+  needed): a bare "Mickey"/"Mickey in Lipa" with no size/capacity detail already resolved
+  `ambiguous` — every Mickey slug contains "mickey"/"in"/"lipa" — which `tools.ts`/
+  `system-prompt.ts` already turn into a short clarifying question naming the three
+  Mickey listings, never "isn't in our system".
+
+Tests: `chat-service.test.ts` (long `assistant` history accepted and truncated; >12-turn
+history trimmed to the most recent 12 instead of rejected; an oversized latest `user`
+message gets the friendly AI reply with no provider call; the exact repro sequence
+stays in AI mode), `property-resolver.test.ts` (the new English/Tagalog size aliases;
+"Mickey in Lipa" ambiguous), `ChatWidget.test.ts` (a mid-conversation static fallback
+does not duplicate the root greeting, keeps the selected language pill active, and
+leaves the input enabled).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR pending.
+
+---
+
 ## 2026-10-14 — Haven AI live bug fixes: fuzzy property-name resolution, deterministic 24+ guest handoff (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
 
 Area: Website

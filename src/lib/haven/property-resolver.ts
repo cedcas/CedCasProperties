@@ -58,8 +58,12 @@ const PROPERTY_ALIASES: Record<string, string[]> = {
     "sleeps 15",
     "15 pax",
     "pinakamalaki",
+    "pinakamalaking",
     "malaki",
     "malaking",
+    "biggest",
+    "largest",
+    "big",
   ],
 };
 

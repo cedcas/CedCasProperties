@@ -78,16 +78,83 @@ describe("handleHavenChat — request validation", () => {
     expect(await handleHavenChat({ nonsense: true }, "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
   });
 
-  it("rejects more than 12 messages", async () => {
+  it("trims history over 12 messages to the most recent, instead of rejecting", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure, happy to help!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
     const { handleHavenChat } = await freshChatService();
-    const messages = Array.from({ length: 13 }, () => ({ role: "user" as const, content: "hi" }));
-    expect(await handleHavenChat(validBody({ messages }), "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
+    // 15 alternating turns, each distinct so the trimmed set is identifiable.
+    const messages = Array.from({ length: 15 }, (_, i) => ({
+      role: i % 2 === 0 ? ("user" as const) : ("assistant" as const),
+      content: `turn ${i}`,
+    }));
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    const sentMessages = providerChat.mock.calls[0][0].messages as { role: string; content: string }[];
+    expect(sentMessages).toHaveLength(12);
+    expect(sentMessages[0].content).toBe("turn 3"); // the oldest 3 turns were dropped
+    expect(sentMessages[sentMessages.length - 1].content).toBe("turn 14");
   });
 
-  it("rejects a message longer than 600 characters", async () => {
+  it("accepts a long assistant history turn (Haven's own multi-option reply) and truncates it instead of rejecting", async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what I can tell you about that.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    const longAssistantReply = "y".repeat(2000);
+    const messages = [
+      { role: "user" as const, content: "What properties do you have?" },
+      { role: "assistant" as const, content: longAssistantReply },
+      { role: "user" as const, content: "Mickey in lipa" },
+    ];
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    const sentMessages = providerChat.mock.calls[0][0].messages as { role: string; content: string }[];
+    const assistantTurn = sentMessages.find((m) => m.role === "assistant")!;
+    expect(assistantTurn.content.length).toBe(1500);
+    expect(assistantTurn.content).toBe(longAssistantReply.slice(-1500));
+  });
+
+  it("reproduces the live bug sequence (long Haven reply, then free text) and stays in AI mode", async () => {
+    providerChat.mockResolvedValue({
+      text: "Which of the three Mickey listings do you mean?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    const messages = [
+      { role: "user" as const, content: "Do you have anything for a big group?" },
+      { role: "assistant" as const, content: "o".repeat(870) }, // Haven's own 4-option reply
+      { role: "user" as const, content: "Mickey in lipa" },
+    ];
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    expect(result.reason).toBeUndefined();
+  });
+
+  it("returns a friendly AI-mode reply (not static fallback) when the latest user message exceeds 600 characters", async () => {
     const { handleHavenChat } = await freshChatService();
     const messages = [{ role: "user" as const, content: "x".repeat(601) }];
-    expect(await handleHavenChat(validBody({ messages }), "1.2.3.4")).toEqual({ mode: "static", reason: "error" });
+
+    const result = await handleHavenChat(validBody({ messages }), "1.2.3.4");
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).toMatch(/shorten|paikliin/i);
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+    expect(providerChat).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid lang value", async () => {
