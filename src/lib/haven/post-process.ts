@@ -1,5 +1,5 @@
 import "server-only";
-import { formatStayRangeShort } from "@/lib/dates";
+import { formatStayRangeShort, toUtcMidnight } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
 import type { HavenLang } from "./system-prompt";
 
@@ -157,6 +157,32 @@ export function enforcePriceClaims(text: string, allowedAmounts: Set<number>): s
     .join("\n");
 }
 
+/**
+ * Generic version of the sentence/bullet-line replacement `enforcePriceClaims` uses,
+ * for any other owner-guardrail that must swap out a WHOLE matching sentence or bullet
+ * line rather than a substring (e.g. `owner-facts.ts`'s budget-question and kids/babies
+ * "don't count" guards). `replacement` of `""` drops the sentence entirely — the caller
+ * is responsible for tidying up any resulting blank lines.
+ */
+export function replaceMatchingSentences(text: string, test: RegExp, replacement: string): string {
+  function processPiece(piece: string): string {
+    const trailingWs = piece.match(/\s+$/)?.[0] ?? "";
+    const core = trailingWs ? piece.slice(0, -trailingWs.length) : piece;
+    test.lastIndex = 0;
+    return test.test(core) ? replacement + trailingWs : piece;
+  }
+  function processGenericLine(line: string): string {
+    const bulletMatch = line.match(BULLET_LINE);
+    if (bulletMatch) {
+      const [, marker, rest] = bulletMatch;
+      test.lastIndex = 0;
+      return test.test(rest) ? marker + replacement : line;
+    }
+    return splitSentences(line).map(processPiece).join("");
+  }
+  return text.split("\n").map(processGenericLine).join("\n");
+}
+
 // ── Booking-link collection ─────────────────────────────────────────────────
 
 export interface ToolExchange {
@@ -283,6 +309,62 @@ export function collectBookingLinks(exchanges: ToolExchange[], max = 8): LinkBut
   return links.filter((l) => isAllowedHref(l.href)).slice(0, max);
 }
 
+// ── Short property names in reply TEXT (not just link labels) ──────────────
+
+/**
+ * Every {slug, name} pair a tool returned this turn, across every tool shape that can
+ * mention a property name — not just the booking-link-producing ones `collectBookingLinks`
+ * covers, so a plain `list_properties`/`get_property_details` answer also gets shortened.
+ */
+export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string }[] {
+  const pairs: { slug: string; name: string }[] = [];
+  for (const { name: toolName, input, result } of exchanges) {
+    const i = asRecord(input);
+    const r = asRecord(result);
+    if (toolName === "list_properties" && Array.isArray(result)) {
+      for (const item of result) {
+        const p = asRecord(item);
+        if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+      }
+    } else if (toolName === "get_property_details" && typeof r.slug === "string" && typeof r.name === "string") {
+      pairs.push({ slug: r.slug, name: r.name });
+    } else if (toolName === "get_quote" && typeof i.slug === "string" && typeof r.name === "string") {
+      pairs.push({ slug: i.slug, name: r.name });
+    } else if (toolName === "find_stay" && Array.isArray(r.options)) {
+      for (const option of r.options) {
+        const properties = asRecord(option).properties;
+        if (!Array.isArray(properties)) continue;
+        for (const property of properties) {
+          const p = asRecord(property);
+          if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+        }
+      }
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Replaces every raw DB property name (dev-DB bracket tag, SEO `|`/`•` suffix and all)
+ * that appears verbatim in the reply text with its short guest-facing form — the same
+ * shortener `collectBookingLinks` already applies to link labels. The model reads the raw
+ * name straight from a tool result and often echoes it into prose verbatim, so this is a
+ * literal substring swap, not a regex guess.
+ */
+export function shortenPropertyNamesInText(text: string, exchanges: ToolExchange[]): string {
+  const pairs = collectPropertyNamePairs(exchanges);
+  if (pairs.length === 0) return text;
+  const shortNames = shortPropertyLabels(pairs);
+  const rawNameBySlug = new Map(pairs.map((p) => [p.slug, p.name]));
+  let out = text;
+  for (const [slug, rawName] of rawNameBySlug) {
+    const short = shortNames.get(slug);
+    if (!short || rawName === short || !out.includes(rawName)) continue;
+    out = out.split(rawName).join(short);
+  }
+  return out;
+}
+
 // ── Messenger handoff safety net ────────────────────────────────────────────
 
 const MESSENGER_MENTION = /m\.me\/haveninlipa/i;
@@ -381,4 +463,108 @@ export function enforceTermsOfAddress(text: string, guestMessages: string, lang:
     result = result.replace(new RegExp(`\\b${term}\\b`, "gi"), (match) => capitalizeLike(match, replacement));
   }
   return result;
+}
+
+// ── "Dadalaw" phrasing guard (Tagalog/Batangueño) ───────────────────────────
+
+/**
+ * "Dadalaw" means to visit — asking "ilang guests ang dadalaw" reads as "how many guests
+ * will visit", which is confusing for a STAYING guest count. The correct ask is "Ilang tao
+ * kayo?" / "Ilang guests kayo?" (btg: "Ilan ga kayo?").
+ */
+const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?dadalaw)[^?]*\?/gi;
+
+export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
+  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang guests kayo?";
+  return text.replace(DADALAW_RE, replacement);
+}
+
+// ── English-mode guard: no stray Tagalog words ──────────────────────────────
+
+/** Common Tagalog function words — their presence in the guest's own message means the
+ * conversation isn't really in English, even under `lang: "auto"`. */
+const TAGALOG_MARKER_WORDS =
+  /\b(?:ba|po|ng|mga|ang|ko|sa|ito|hindi|oo|salamat|kayo|tayo|natin|kami|siya|paano|magkano|pwede|gusto|opo|kumusta)\b/i;
+
+/** True when Haven should reply English-only this turn: explicit `en`, or `auto` with an
+ * English-looking guest message (no detectable Tagalog marker word). */
+export function isEnglishContext(lang: HavenLang, guestMessages: string): boolean {
+  if (lang === "en") return true;
+  if (lang !== "auto") return false;
+  return guestMessages.trim().length > 0 && !TAGALOG_MARKER_WORDS.test(guestMessages);
+}
+
+/** word -> English replacement, or "" to drop the word entirely (e.g. "po"). */
+const TAGALOG_WORDS_IN_ENGLISH: Record<string, string> = {
+  grupo: "group",
+  kabayan: "friend",
+  kaibigan: "friend",
+  po: "",
+};
+
+/**
+ * Backstop for English mode: strips a small set of Tagalog words the model sometimes
+ * leaks into an otherwise-English reply (see `isEnglishContext`), independent of the
+ * system prompt's own "reply in English" instruction.
+ */
+export function stripTagalogWordsInEnglish(text: string): string {
+  let out = text;
+  for (const [word, replacement] of Object.entries(TAGALOG_WORDS_IN_ENGLISH)) {
+    out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => (replacement ? capitalizeLike(match, replacement) : ""));
+  }
+  return cleanupStrippedPunctuation(out);
+}
+
+// ── Resolved-dates-stated guard ──────────────────────────────────────────────
+
+/**
+ * The first checkIn/checkOut pair this turn's tools resolved or were called with —
+ * `resolve_dates`' own result, or any other tool's input (check_availability, get_quote,
+ * find_stay, check_early_late all take explicit YYYY-MM-DD dates).
+ */
+export function firstResolvedDateRange(exchanges: ToolExchange[]): { checkIn: string; checkOut: string } | null {
+  for (const { result } of exchanges) {
+    const r = asRecord(result);
+    if (typeof r.checkIn === "string" && typeof r.checkOut === "string") return { checkIn: r.checkIn, checkOut: r.checkOut };
+  }
+  for (const { input } of exchanges) {
+    const i = asRecord(input);
+    if (typeof i.checkIn === "string" && typeof i.checkOut === "string") return { checkIn: i.checkIn, checkOut: i.checkOut };
+  }
+  return null;
+}
+
+function weekdayMonthDay(d: Date): string {
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
+}
+
+function monthDay(d: Date): string {
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "long", day: "numeric" });
+}
+
+/** "Saturday, November 14 → Sunday, November 15, 2026" — the explicit date line English
+ * replies must carry whenever dates were resolved this turn (see `ensureDatesStated`). */
+export function formatDateRangeArrow(checkIn: string, checkOut: string): string {
+  const ci = toUtcMidnight(checkIn);
+  const co = toUtcMidnight(checkOut);
+  return `${weekdayMonthDay(ci)} → ${weekdayMonthDay(co)}, ${co.getUTCFullYear()}`;
+}
+
+/**
+ * English replies must always state the resolved dates explicitly (system-prompt.ts
+ * already instructs this; this is the independent backstop). If this turn resolved a
+ * date range and the reply doesn't already mention the check-in month/day, prepend a
+ * "For <range>:" line rather than leaving the dates implicit. `isEnglish` is the same
+ * English-context test `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) —
+ * explicit `en`, or `auto` with an English-looking guest message.
+ */
+export function ensureDatesStated(
+  text: string,
+  resolved: { checkIn: string; checkOut: string } | null,
+  isEnglish: boolean
+): string {
+  if (!resolved || !isEnglish) return text;
+  const ci = toUtcMidnight(resolved.checkIn);
+  if (isNaN(ci.getTime()) || text.toLowerCase().includes(monthDay(ci).toLowerCase())) return text;
+  return `For ${formatDateRangeArrow(resolved.checkIn, resolved.checkOut)}:\n\n${text}`;
 }

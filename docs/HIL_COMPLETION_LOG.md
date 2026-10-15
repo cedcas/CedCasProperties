@@ -4,6 +4,56 @@
 
 ---
 
+## 2026-10-14 — Haven AI owner guardrails and facts: capacity, payment, early-check-in/late-checkout fee, quiet hours, karaoke, plus dadalaw/English/name/date-statement fixes (fix/haven-ai-guardrails-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-guardrails-101426`, PR open against `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+Cedric (the Owner) reviewed H1's live behavior and approved a batch of additional facts and
+guardrails, all sourced in a new single-source-of-truth module, `src/lib/haven/owner-facts.ts`
+(dated "Cedric, 2026-10-14"):
+- **Never ask the guest's budget** — prompt rule plus `stripBudgetQuestions()` drops the
+  sentence regardless of what the model says.
+- **Capacity is 24 guests combined, across both houses, and counts adults** — there is no
+  documented age policy for kids/babies, so Haven must never claim they're free or
+  uncounted, and must never promise flexibility for a 24+ guest group, squeezing in extra
+  people, or an extra bed/mattress. `needsCapacityHandoff()`/`ensureCapacityHandoffLink()`
+  force the Messenger button on for any of those triggers independent of the model's own
+  wording; `removeKidsFreeClaims()` replaces a wrongful "kids are free/uncounted" claim
+  with a Messenger-confirmation sentence.
+- **Full payment is due at booking** — no half payment, no deposit-to-reserve — stated
+  directly from the owner-facts prompt block.
+- **Early check-in/late checkout is ₱200/hour, every listing, subject to availability** —
+  `OWNER_FACT_ALLOWED_AMOUNTS` (`{200}`) is merged into the price guard's allowlist so this
+  fact can be stated without a tool call. A new read-only tool, `check_early_late(slug,
+  date, kind)`, answers a date-specific question from `getInventoryScopeConflicts()` (the
+  same commit-time check the booking flow uses, covering bookings, manual blocks, iCal
+  events, and shared-inventory siblings), returning `likely_possible`/`not_possible`/
+  `unknown` — never a promise.
+- **Quiet hours (10 PM–8 AM) and the other identical-everywhere house rules** (no pets, no
+  smoking inside, no parties/events without approval) get a direct general answer instead
+  of "which house?" — only a genuinely differing rule (e.g. check-in time) still names the
+  difference.
+- **Karaoke/equipment answers only from `amenities`/`amenityDetails`** — marketing copy
+  (e.g. "a karaoke-and-lechon dinner") is never read as a confirmed-equipment claim.
+- **Leftover fixes bundled into the same PR**: `shortenPropertyNamesInText()` applies the
+  existing bracket/pipe name shortener to reply text, not just link labels;
+  `ensureDatesStated()`/`firstResolvedDateRange()` make an English reply state its resolved
+  dates explicitly even when the model's prose omits them; `isEnglishContext()`/
+  `stripTagalogWordsInEnglish()` strip a stray Tagalog word from an English reply;
+  `fixDadalawPhrasing()` rewrites "ilang guests ang dadalaw" (confusing — "dadalaw" means
+  "to visit") to "Ilang guests kayo?"/"Ilan ga kayo?".
+
+New/updated tests: `owner-facts.test.ts` (new), `tools.test.ts` (`check_early_late`'s three
+outcomes, a shared-inventory-sibling conflict, an imported-iCal-event conflict),
+`post-process.test.ts` (the six new text-level guardrails), `system-prompt.test.ts` (scoped
+the few-shot-only price-free assertion now that the owner-facts block legitimately states
+₱200), and nine new `chat-service.test.ts` end-to-end cases.
+
+---
+
 ## 2026-10-14 — Haven AI terms-of-address pass: provisional-dedupe punctuation cleanup, per-option booking-link dedup, single-offer labels, gendered/neutral address terms, "ga"/"baga" question-only guidance (fix/haven-ai-polish-101426, DEC-029)
 
 Area: Website

@@ -391,3 +391,171 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     expect(userRow.content).not.toContain("guest@example.com");
   });
 });
+
+describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026-10-14)", () => {
+  it("drops a sentence asking the guest's budget", async () => {
+    providerChat.mockResolvedValue({
+      text: "Happy to help! What's your budget for this trip?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).not.toMatch(/budget/i);
+  });
+
+  it("forces the Messenger button when find_stay is called for 24+ guests", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check what fits a group that size.",
+        toolCalls: [{ id: "1", name: "find_stay", input: { checkIn: "2026-12-24", checkOut: "2026-12-26", guests: 24 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Here's what we found for your group.",
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue({ options: [] });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Can you fit our group of 24?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.links).toEqual(expect.arrayContaining([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]));
+  });
+
+  it("forces the Messenger button when the guest asks whether kids count toward capacity", async () => {
+    providerChat.mockResolvedValue({
+      text: "Let's check the group size and dates first.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Do kids count toward the guest capacity?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.links).toEqual([{ label: "Message us on Messenger", href: "https://m.me/haveninlipa" }]);
+  });
+
+  it("replaces a claim that babies stay free of charge with the Messenger confirmation sentence", async () => {
+    providerChat.mockResolvedValue({
+      text: "No worries — babies stay free of charge with us.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).not.toMatch(/free of charge/i);
+    expect(result.reply).toContain("m.me/haveninlipa");
+  });
+
+  it("allows the ₱200/hour early check-in fee through the price guard without a tool call", async () => {
+    providerChat.mockResolvedValue({
+      text: "Early check-in is ₱200 per hour, subject to availability.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Can I check in early at 9am?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toContain("₱200 per hour");
+  });
+
+  it("fixes 'ilang guests ang dadalaw' phrasing in a Tagalog reply", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sige lang, ilang guests ang dadalaw sa inyo?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang: "tl" }), "1.2.3.4");
+
+    expect(result.reply).not.toMatch(/dadalaw/i);
+    expect(result.reply).toContain("Ilang guests kayo?");
+  });
+
+  it("shortens a raw DB property name in the reply text, not just link labels", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check what we have.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "[DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax is free that weekend.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue([
+      { slug: "cozy-1-bedroom", name: "[DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax" },
+    ]);
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe("Cozy 1BR Haven is free that weekend.");
+  });
+
+  it("strips a stray Tagalog word from an English reply", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure thing po, your grupo of 10 is welcome.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toMatch(/\bpo\b/);
+    expect(result.reply).toContain("group of 10");
+  });
+
+  it("prepends the resolved date range to an English reply that omits it", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check availability.",
+        toolCalls: [{ id: "1", name: "check_availability", input: { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-15" } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "We have availability for that stay.",
+        toolCalls: [],
+        usage: { inputTokens: 10, outputTokens: 10 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue({ available: true, conflicts: [] });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4");
+
+    expect(result.reply).toBe(
+      "For Saturday, November 14 → Sunday, November 15, 2026:\n\nWe have availability for that stay."
+    );
+  });
+});

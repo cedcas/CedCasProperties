@@ -16,9 +16,22 @@ import {
   limitToOneProvisional,
   ensureBatanguenoMarker,
   enforceTermsOfAddress,
+  shortenPropertyNamesInText,
+  fixDadalawPhrasing,
+  isEnglishContext,
+  stripTagalogWordsInEnglish,
+  firstResolvedDateRange,
+  ensureDatesStated,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
+import {
+  OWNER_FACT_ALLOWED_AMOUNTS,
+  stripBudgetQuestions,
+  removeKidsFreeClaims,
+  needsCapacityHandoff,
+  ensureCapacityHandoffLink,
+} from "./owner-facts";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
   havenAiActive,
@@ -134,22 +147,36 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
 
   if (!text.trim()) text = NO_ANSWER_FALLBACK;
 
-  const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
+  const lang = body.lang as HavenLang;
   const guestMessages = body.messages
     .filter((m) => m.role === "user")
     .map((m) => m.content)
     .join(" ");
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(text, allowedAmounts));
-  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, body.lang as HavenLang);
+  const latestGuestMessage = lastUserMessage(body.messages);
+  const englishMode = isEnglishContext(lang, guestMessages);
+
+  const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
+  OWNER_FACT_ALLOWED_AMOUNTS.forEach((amount) => allowedAmounts.add(amount));
+
+  const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
+  const noBudgetAsk = stripBudgetQuestions(named);
+  const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
+  const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));
+  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, lang);
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
-  const reply = body.lang === "btg" ? ensureBatanguenoMarker(strippedReply) : strippedReply;
+  const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
+  const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
+  const reply = lang === "btg" ? ensureBatanguenoMarker(datesStated) : datesStated;
+
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
   // bookingLinks may legitimately repeat the same href across different find_stay options —
   // only dedupe the model's own prose links against each other and against bookingLinks,
   // never bookingLinks against itself.
   const bookingHrefs = new Set(bookingLinks.map((l) => l.href));
   const dedupedModelLinks = dedupeLinks(modelLinks).filter((l) => !bookingHrefs.has(l.href));
-  const links = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const links = ensureCapacityHandoffLink(handoffLinks, needsCapacityHandoff(latestGuestMessage, toolExchangesThisTurn));
 
   return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls };
 }

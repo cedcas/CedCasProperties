@@ -806,8 +806,47 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` (same day, not a new decision — see note below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426` (same day, not a new decision — see notes below).
 Area: Website
+
+### Implementation note (2026-10-14 owner-guardrails pass)
+Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and
+guardrails, closed without changing the decision itself — see `src/lib/haven/owner-facts.ts`
+for the single server-side source of these facts, sourced and dated "Cedric, 2026-10-14":
+- **Never ask the guest's budget.** Prompt rule plus `stripBudgetQuestions()` drops any
+  sentence asking it regardless.
+- **Capacity is 24 guests combined, across both houses, and counts adults.** There is no
+  documented age policy for kids/babies — Haven must never claim they're free or don't
+  count, and must never promise flexibility for a 24+ guest group, squeezing in extra
+  people, or an extra bed/mattress. `needsCapacityHandoff()`/`ensureCapacityHandoffLink()`
+  force the Messenger button on for any of those triggers, independent of the model's own
+  wording; `removeKidsFreeClaims()` replaces a wrongful "kids are free/uncounted" claim
+  with a Messenger-confirmation sentence.
+- **Full payment is due at booking** — no half payment, no deposit-to-reserve. Stated
+  directly from the owner-facts prompt block, the same tool-only-facts exception the price
+  guard now carries for exactly one other number (below).
+- **Early check-in/late checkout is ₱200/hour, every listing, subject to availability.**
+  `OWNER_FACT_ALLOWED_AMOUNTS` (`{200}`) is merged into the price guard's allowlist in
+  `chat-service.ts` so this fact can be stated even without a tool call this turn. A new
+  read-only tool, `check_early_late(slug, date, kind)`, answers a date-specific question
+  from `getInventoryScopeConflicts()` — the same commit-time availability check the
+  booking flow uses — returning `likely_possible`/`not_possible`/`unknown`; Haven is
+  instructed to never treat `likely_possible` as a promise.
+- **Quiet hours (10 PM–8 AM) and the other house rules that are identical everywhere** (no
+  pets, no smoking inside, no parties/events without approval) get a direct general answer
+  instead of "which house?" — only a genuinely differing rule (e.g. check-in time) still
+  names the difference per listing.
+- **Karaoke/equipment questions answer only from `amenities`/`amenityDetails`** — marketing
+  copy (e.g. "a karaoke-and-lechon dinner" in `bestForSegments`, which `get_property_details`
+  never exposes to the model) must never be read as a confirmed-equipment claim.
+- Two Tagalog/Batangueño language fixes: never ask "ilang guests ang dadalaw" (dadalaw =
+  "to visit", confusing for a staying headcount) — `fixDadalawPhrasing()` rewrites it to
+  "Ilang guests kayo?"/"Ilan ga kayo?" — and an English reply must never mix in a stray
+  Tagalog word (`isEnglishContext()`/`stripTagalogWordsInEnglish()`).
+- Two reply-quality fixes carried over from the same review: `shortenPropertyNamesInText()`
+  applies the existing link-label name shortener to reply **text**, not just link labels;
+  `firstResolvedDateRange()`/`ensureDatesStated()` make an English reply state its resolved
+  dates explicitly even when the model's own prose omits them.
 
 ### Implementation note (2026-10-14 polish pass)
 Live dev testing of H0+H1 surfaced three implementation gaps in the guardrails this decision

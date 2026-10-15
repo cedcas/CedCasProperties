@@ -11,6 +11,13 @@ import {
   limitToOneProvisional,
   ensureBatanguenoMarker,
   enforceTermsOfAddress,
+  shortenPropertyNamesInText,
+  fixDadalawPhrasing,
+  isEnglishContext,
+  stripTagalogWordsInEnglish,
+  firstResolvedDateRange,
+  formatDateRangeArrow,
+  ensureDatesStated,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   MESSENGER_HREF,
@@ -515,5 +522,162 @@ describe("enforceTermsOfAddress", () => {
   it("leaves text with no banned term untouched", () => {
     const result = enforceTermsOfAddress("Hello kabayan, how can I help?", "Hi there", "en");
     expect(result).toBe("Hello kabayan, how can I help?");
+  });
+});
+
+describe("shortenPropertyNamesInText", () => {
+  it("shortens a raw list_properties name with a bracket tag and '|' suffix in reply prose", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "list_properties",
+        input: {},
+        result: [{ slug: "cozy-1-bedroom", name: "[DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax" }],
+      },
+    ];
+    const text = "We have [DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax available!";
+    expect(shortenPropertyNamesInText(text, exchanges)).toBe("We have Cozy 1BR Haven available!");
+  });
+
+  it("shortens a get_property_details name in reply prose", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "get_property_details", input: { slug: "cozy-1-bedroom" }, result: { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | 5 Pax" } },
+    ];
+    expect(shortenPropertyNamesInText("Cozy 1BR Haven | 5 Pax has WiFi.", exchanges)).toBe("Cozy 1BR Haven has WiFi.");
+  });
+
+  it("keeps the distinguishing second segment when two properties share a base name", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 15 },
+        result: {
+          options: [
+            {
+              properties: [
+                { slug: "mickey-full", name: "Mickey in Lipa | Full Family House", bookingLink: "/x" },
+                { slug: "mickey-room-only", name: "Mickey in Lipa | Room Only", bookingLink: "/y" },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const text = "Both Mickey in Lipa | Full Family House and Mickey in Lipa | Room Only are free.";
+    expect(shortenPropertyNamesInText(text, exchanges)).toBe(
+      "Both Mickey in Lipa — Full Family House and Mickey in Lipa — Room Only are free."
+    );
+  });
+
+  it("leaves text unchanged when no tool result mentions a property name", () => {
+    expect(shortenPropertyNamesInText("Hello there!", [])).toBe("Hello there!");
+  });
+
+  it("leaves text unchanged when the raw name already matches the short form", () => {
+    const exchanges: ToolExchange[] = [{ name: "get_property_details", input: {}, result: { slug: "cozy-1-bedroom", name: "Cozy 1BR" } }];
+    expect(shortenPropertyNamesInText("Cozy 1BR is available.", exchanges)).toBe("Cozy 1BR is available.");
+  });
+});
+
+describe("fixDadalawPhrasing", () => {
+  it("replaces an 'ilang guests ang dadalaw' question in Tagalog mode", () => {
+    expect(fixDadalawPhrasing("Sige, ilang guests ang dadalaw sa inyo?", "tl")).toBe("Sige, Ilang guests kayo?");
+  });
+
+  it("replaces it with the Batangueño form in btg mode", () => {
+    expect(fixDadalawPhrasing("Ilang tao ang dadalaw?", "btg")).toBe("Ilan ga kayo?");
+  });
+
+  it("leaves text with no 'dadalaw' phrasing untouched", () => {
+    const input = "Ilang guests kayo?";
+    expect(fixDadalawPhrasing(input, "tl")).toBe(input);
+  });
+});
+
+describe("isEnglishContext", () => {
+  it("is always true for explicit lang 'en'", () => {
+    expect(isEnglishContext("en", "may bakante ba kayo")).toBe(true);
+  });
+
+  it("is always false for explicit lang 'tl'/'btg'", () => {
+    expect(isEnglishContext("tl", "Do you have WiFi?")).toBe(false);
+    expect(isEnglishContext("btg", "Do you have WiFi?")).toBe(false);
+  });
+
+  it("is true for 'auto' when the guest's message has no Tagalog marker word", () => {
+    expect(isEnglishContext("auto", "Do you have WiFi and parking?")).toBe(true);
+  });
+
+  it("is false for 'auto' when the guest's message carries a Tagalog marker word", () => {
+    expect(isEnglishContext("auto", "May WiFi po ba kayo?")).toBe(false);
+  });
+});
+
+describe("stripTagalogWordsInEnglish", () => {
+  it("replaces 'grupo' with 'group'", () => {
+    expect(stripTagalogWordsInEnglish("Your grupo of 10 is welcome.")).toBe("Your group of 10 is welcome.");
+  });
+
+  it("drops a trailing 'po' and tidies the spacing", () => {
+    expect(stripTagalogWordsInEnglish("Sure thing po, we have availability.")).toBe("Sure thing, we have availability.");
+  });
+
+  it("replaces 'kabayan' with 'friend', preserving capitalization", () => {
+    expect(stripTagalogWordsInEnglish("Kabayan, we have a 2BR free.")).toBe("Friend, we have a 2BR free.");
+  });
+
+  it("leaves an all-English reply untouched", () => {
+    const input = "We have a 2BR available for those dates.";
+    expect(stripTagalogWordsInEnglish(input)).toBe(input);
+  });
+});
+
+describe("firstResolvedDateRange", () => {
+  it("reads checkIn/checkOut from a resolve_dates tool result", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "resolve_dates", input: { expression: "next Friday" }, result: { checkIn: "2026-11-14", checkOut: "2026-11-15", interpreted: "x" } },
+    ];
+    expect(firstResolvedDateRange(exchanges)).toEqual({ checkIn: "2026-11-14", checkOut: "2026-11-15" });
+  });
+
+  it("falls back to a later tool's input checkIn/checkOut when no result carries dates", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "list_properties", input: {}, result: [] },
+      { name: "get_quote", input: { slug: "a", checkIn: "2026-12-24", checkOut: "2026-12-26", guests: 2 }, result: {} },
+    ];
+    expect(firstResolvedDateRange(exchanges)).toEqual({ checkIn: "2026-12-24", checkOut: "2026-12-26" });
+  });
+
+  it("returns null when no exchange carries a date range", () => {
+    expect(firstResolvedDateRange([{ name: "get_faq", input: { query: "wifi" }, result: { results: [] } }])).toBeNull();
+  });
+});
+
+describe("formatDateRangeArrow", () => {
+  it("formats an arrow-separated range with the year on the end date only", () => {
+    expect(formatDateRangeArrow("2026-11-14", "2026-11-15")).toBe("Saturday, November 14 → Sunday, November 15, 2026");
+  });
+});
+
+describe("ensureDatesStated", () => {
+  const resolved = { checkIn: "2026-11-14", checkOut: "2026-11-15" };
+
+  it("prepends the resolved date range when English and the reply doesn't state it", () => {
+    const result = ensureDatesStated("We have availability for that stay.", resolved, true);
+    expect(result).toBe("For Saturday, November 14 → Sunday, November 15, 2026:\n\nWe have availability for that stay.");
+  });
+
+  it("leaves the reply untouched when it already states the check-in month/day", () => {
+    const input = "For November 14, we have availability.";
+    expect(ensureDatesStated(input, resolved, true)).toBe(input);
+  });
+
+  it("leaves the reply untouched when not in English context", () => {
+    const input = "May bakante kami sa petsang iyan.";
+    expect(ensureDatesStated(input, resolved, false)).toBe(input);
+  });
+
+  it("leaves the reply untouched when no dates were resolved this turn", () => {
+    const input = "We have availability for that stay.";
+    expect(ensureDatesStated(input, null, true)).toBe(input);
   });
 });

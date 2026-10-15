@@ -2,11 +2,11 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPublicListings, getPublicListingGroups } from "@/lib/listings";
-import { getPropertyConflicts, formatConflictRange } from "@/lib/availability";
+import { getPropertyConflicts, getInventoryScopeConflicts, formatConflictRange } from "@/lib/availability";
 import { computeBookingQuote } from "@/lib/booking-quote";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
-import { toUtcMidnight } from "@/lib/dates";
+import { toUtcMidnight, addUtcDays } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import type { ToolDefinition } from "./provider";
@@ -430,6 +430,118 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
   },
 };
 
+// ── check_early_late ──────────────────────────────────────────────────────────
+
+export type EarlyLateStatus = "likely_possible" | "not_possible" | "unknown";
+
+export interface EarlyLateResult {
+  status: EarlyLateStatus;
+  reason: string;
+  standardTime: string | null;
+  fee: string;
+}
+
+const EARLY_LATE_FEE_LABEL = `₱${HOURLY_FEE_RATE}/hour`;
+
+type HousePoliciesShape = { checkInTime?: string; checkOutTime?: string };
+
+const checkEarlyLateSchema = z.object({
+  slug: z.string().min(1).max(200),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(["early_checkin", "late_checkout"]),
+});
+
+/**
+ * Date-aware early check-in / late checkout check. Early check-in on `date` is blocked
+ * if some stay/block occupies the night before it (a conflict ending exactly on `date`);
+ * late checkout on `date` is blocked if some stay/block occupies the night of `date`
+ * itself (a conflict starting exactly on `date`). Uses `getInventoryScopeConflicts` —
+ * the same commit-time check the booking flow uses — so a shared-inventory sibling
+ * booking or an imported Airbnb iCal event blocks the fee the same way a direct booking
+ * does. Never promises a fee is approved: at most "likely possible, subject to
+ * confirmation" (DEC-029 — no tool computes an availability *decision* on its own, this
+ * only ever relays what `getInventoryScopeConflicts` already found).
+ */
+const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = {
+  definition: {
+    name: "check_early_late",
+    description:
+      "Check whether an early check-in or late checkout is likely possible for a specific " +
+      "property and date, given other guests' stays/blocks on neighboring nights. Always " +
+      "subject to confirmation — never state a fee is approved from this tool alone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD — the check-in (early) or check-out (late) date in question." },
+        kind: { type: "string", enum: ["early_checkin", "late_checkout"] },
+      },
+      required: ["slug", "date", "kind"],
+      additionalProperties: false,
+    },
+  },
+  schema: checkEarlyLateSchema,
+  handler: async ({ slug, date, kind }) => {
+    const unknown = (reason: string, standardTime: string | null = null): EarlyLateResult => ({
+      status: "unknown",
+      reason,
+      standardTime,
+      fee: EARLY_LATE_FEE_LABEL,
+    });
+
+    const property = await prisma.property.findFirst({
+      where: { slug, isActive: true, pricePerNight: { gt: 0 } },
+      select: { id: true, housePolicies: true },
+    });
+    if (!property) return unknown("Property not found.");
+
+    const target = toUtcMidnight(date);
+    if (isNaN(target.getTime())) return unknown("Invalid date.");
+
+    const policies = safeJsonParse<HousePoliciesShape>(property.housePolicies, {});
+    const standardTime = (kind === "early_checkin" ? policies.checkInTime : policies.checkOutTime) ?? null;
+
+    let conflicts;
+    try {
+      conflicts = await getInventoryScopeConflicts({
+        propertyId: property.id,
+        start: addUtcDays(target, -1),
+        end: addUtcDays(target, 1),
+      });
+    } catch {
+      return unknown("Could not check availability for that date right now.", standardTime);
+    }
+
+    const targetTime = target.getTime();
+    const blocked =
+      kind === "early_checkin"
+        ? conflicts.some((c) => c.end.getTime() === targetTime)
+        : conflicts.some((c) => c.start.getTime() === targetTime);
+
+    if (blocked) {
+      return {
+        status: "not_possible",
+        reason:
+          kind === "early_checkin"
+            ? "Another guest is staying the night before and the house won't be ready early that day."
+            : "Another guest is checking in that same day, so a late checkout isn't possible.",
+        standardTime,
+        fee: EARLY_LATE_FEE_LABEL,
+      };
+    }
+
+    return {
+      status: "likely_possible",
+      reason:
+        kind === "early_checkin"
+          ? "No other guest is staying the night before, but this is always subject to confirmation with the team."
+          : "No other guest is checking in that day, but this is always subject to confirmation with the team.",
+      standardTime,
+      fee: EARLY_LATE_FEE_LABEL,
+    };
+  },
+};
+
 // ── get_faq ───────────────────────────────────────────────────────────────────
 
 const getFaqSchema = z.object({ query: z.string().min(1).max(300) });
@@ -490,6 +602,7 @@ export const HAVEN_TOOLS: HavenToolEntry[] = [
   defineTool(checkAvailabilityTool),
   defineTool(getQuoteTool),
   defineTool(findStayTool),
+  defineTool(checkEarlyLateTool),
   defineTool(getFaqTool),
 ];
 

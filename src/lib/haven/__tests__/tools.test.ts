@@ -8,7 +8,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { db, listingsApi, availabilityApi, quoteApi } = vi.hoisted(() => ({
   db: { property: { findFirst: vi.fn() } },
   listingsApi: { getPublicListings: vi.fn(), getPublicListingGroups: vi.fn() },
-  availabilityApi: { getPropertyConflicts: vi.fn(), formatConflictRange: vi.fn((c: { start: string; end: string }) => `${c.start}-${c.end}`) },
+  availabilityApi: {
+    getPropertyConflicts: vi.fn(),
+    getInventoryScopeConflicts: vi.fn(),
+    formatConflictRange: vi.fn((c: { start: string; end: string }) => `${c.start}-${c.end}`),
+  },
   quoteApi: { computeBookingQuote: vi.fn() },
 }));
 
@@ -94,6 +98,108 @@ describe("get_quote", () => {
 
     const result = await runHavenTool("get_quote", { slug: "cozy-1-bedroom", checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 50 });
     expect(result).toEqual({ error: "This property accommodates up to 5 guests." });
+  });
+});
+
+describe("check_early_late", () => {
+  const housePolicies = JSON.stringify({ checkInTime: "3:00 PM", checkOutTime: "12:00 PM (noon)" });
+
+  it("is not_possible for early check-in when a conflict ends exactly on the target date", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([
+      { kind: "booking", id: 1, start: new Date("2026-11-13T00:00:00Z"), end: new Date("2026-11-15T00:00:00Z") },
+    ]);
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
+      expect(result).toEqual({
+        status: "not_possible",
+        reason: "Another guest is staying the night before and the house won't be ready early that day.",
+        standardTime: "3:00 PM",
+        fee: "₱200/hour",
+      });
+    });
+  });
+
+  it("is not_possible for late checkout when a conflict starts exactly on the target date", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([
+      { kind: "booking", id: 2, start: new Date("2026-11-15T00:00:00Z"), end: new Date("2026-11-17T00:00:00Z") },
+    ]);
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "late_checkout" }).then((result) => {
+      expect(result).toEqual({
+        status: "not_possible",
+        reason: "Another guest is checking in that same day, so a late checkout isn't possible.",
+        standardTime: "12:00 PM (noon)",
+        fee: "₱200/hour",
+      });
+    });
+  });
+
+  it("is likely_possible, subject to confirmation, when there's no neighboring conflict", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([]);
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
+      expect(result).toMatchObject({ status: "likely_possible", standardTime: "3:00 PM", fee: "₱200/hour" });
+      expect((result as { reason: string }).reason).toMatch(/subject to confirmation/i);
+    });
+  });
+
+  it("flags a shared-inventory sibling's booking as a blocking conflict for late checkout", () => {
+    // getInventoryScopeConflicts already folds sibling bookings into its result — the tool
+    // only has to relay what it returns, never re-derive sibling membership itself.
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([
+      {
+        kind: "booking",
+        id: 9,
+        start: new Date("2026-11-15T00:00:00Z"),
+        end: new Date("2026-11-16T00:00:00Z"),
+        sourcePropertyName: "Mickey Sleeps 11, shared inventory",
+      },
+    ]);
+
+    return runHavenTool("check_early_late", { slug: "mickey-full", date: "2026-11-15", kind: "late_checkout" }).then((result) => {
+      expect(result).toMatchObject({ status: "not_possible" });
+    });
+  });
+
+  it("flags an imported Airbnb iCal event as a blocking conflict for early check-in", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([
+      { kind: "external_event", id: 3, start: new Date("2026-11-13T00:00:00Z"), end: new Date("2026-11-15T00:00:00Z") },
+    ]);
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
+      expect(result).toMatchObject({ status: "not_possible" });
+    });
+  });
+
+  it("is unknown when the property doesn't exist, without fabricating a status", () => {
+    db.property.findFirst.mockResolvedValue(null);
+
+    return runHavenTool("check_early_late", { slug: "ghost", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
+      expect(result).toEqual({ status: "unknown", reason: "Property not found.", standardTime: null, fee: "₱200/hour" });
+    });
+  });
+
+  it("is unknown when the availability check itself errors", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockRejectedValue(new Error("db down"));
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
+      expect(result).toMatchObject({ status: "unknown" });
+    });
+  });
+
+  it("falls back to null standardTime when housePolicies has no matching time", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies: null });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([]);
+
+    return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "late_checkout" }).then((result) => {
+      expect((result as { standardTime: string | null }).standardTime).toBeNull();
+    });
   });
 });
 

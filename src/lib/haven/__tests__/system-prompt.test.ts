@@ -65,7 +65,11 @@ describe("buildHavenSystemPrompt", () => {
 
     it("includes a placeholder-only few-shot block with no digit prices or exact calendar dates", () => {
       expect(prompt).toMatch(/placeholder/i);
-      expect(prompt).not.toMatch(/₱\d/);
+      // Scoped to the few-shot block itself — the owner-approved facts that follow it in
+      // the prompt legitimately state a real price (₱200/hour early check-in/late checkout).
+      const fewshot = prompt.slice(prompt.indexOf("Example exchanges"), prompt.indexOf("Owner-approved facts"));
+      expect(fewshot.length).toBeGreaterThan(0);
+      expect(fewshot).not.toMatch(/₱\d/);
     });
   });
 });
