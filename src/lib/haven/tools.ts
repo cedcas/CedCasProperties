@@ -9,6 +9,7 @@ import { faqs as staticFaqs } from "@/lib/faqs";
 import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
+import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
 import type { ToolDefinition } from "./provider";
 
 /**
@@ -29,6 +30,46 @@ function safeJsonParse<T>(text: string | null | undefined, fallback: T): T {
 
 function bookingLink(slug: string, checkIn: string, checkOut: string, guests: number): string {
   return `/properties/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`;
+}
+
+export interface AmbiguousPropertyResult {
+  ambiguous: true;
+  candidates: PropertyCandidate[];
+  message: string;
+}
+
+/**
+ * Every slug-taking tool calls this on a miss, never on a first hit — an exact slug the
+ * model already got right (the common case) never touches this or `getPublicListings()`.
+ * Resolves the guest's informal/partial property name against the public listings
+ * (DEC-029 — still never decides anything itself, just maps a name to an existing slug)
+ * and returns either a resolved slug to retry the lookup with, or a tool-result shape the
+ * caller returns verbatim: an ambiguity list the model should turn into a short
+ * clarifying question, or the same "Property not found." error as before when nothing
+ * plausible matches.
+ */
+async function resolveSlugFallback(
+  rawSlug: string
+): Promise<{ ok: true; slug: string } | { ok: false; result: AmbiguousPropertyResult | { error: string } }> {
+  let listings: Awaited<ReturnType<typeof getPublicListings>>;
+  try {
+    listings = await getPublicListings();
+  } catch {
+    listings = [];
+  }
+  const resolved = resolvePropertyMatch(rawSlug, Array.isArray(listings) ? listings : []);
+  if (resolved.status === "unique") return { ok: true, slug: resolved.slug };
+  if (resolved.status === "ambiguous") {
+    return {
+      ok: false,
+      result: {
+        ambiguous: true,
+        candidates: resolved.candidates,
+        message: "Multiple properties could match that name — ask the guest which one they mean, listing these names, instead of saying none exist.",
+      },
+    };
+  }
+  return { ok: false, result: { error: "Property not found." } };
 }
 
 /**
@@ -121,24 +162,27 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
   },
   schema: getPropertyDetailsSchema,
   handler: async ({ slug }) => {
-    const p = await prisma.property.findFirst({
-      where: { slug, isActive: true, pricePerNight: { gt: 0 } },
-      select: {
-        slug: true,
-        name: true,
-        description: true,
-        amenities: true,
-        amenityDetails: true,
-        propertyRules: true,
-        housePolicies: true,
-        pricingNotes: true,
-        propertyFaqs: true,
-        neighborhoodPlaces: true,
-        maxGuests: true,
-        includedGuests: true,
-        extraGuestFeePerNight: true,
-      },
-    });
+    const select = {
+      slug: true,
+      name: true,
+      description: true,
+      amenities: true,
+      amenityDetails: true,
+      propertyRules: true,
+      housePolicies: true,
+      pricingNotes: true,
+      propertyFaqs: true,
+      neighborhoodPlaces: true,
+      maxGuests: true,
+      includedGuests: true,
+      extraGuestFeePerNight: true,
+    } as const;
+    let p = await prisma.property.findFirst({ where: { slug, isActive: true, pricePerNight: { gt: 0 } }, select });
+    if (!p) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      p = await prisma.property.findFirst({ where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } }, select });
+    }
     if (!p) return { error: "Property not found." };
 
     const occupancy = {
@@ -196,10 +240,18 @@ const checkAvailabilityTool: HavenToolSpec<z.infer<typeof checkAvailabilitySchem
   },
   schema: checkAvailabilitySchema,
   handler: async ({ slug, checkIn, checkOut }) => {
-    const property = await prisma.property.findFirst({
+    let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true },
     });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true },
+      });
+    }
     if (!property) return { error: "Property not found." };
 
     const start = toUtcMidnight(checkIn);
@@ -243,10 +295,18 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
   },
   schema: getQuoteSchema,
   handler: async ({ slug, checkIn, checkOut, guests }) => {
-    const property = await prisma.property.findFirst({
+    let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true, name: true },
     });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true, name: true },
+      });
+    }
     if (!property) return { error: "Property not found." };
 
     const result = await computeBookingQuote({ propertyId: property.id, checkIn, checkOut, guests });
@@ -509,10 +569,21 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
       fee: EARLY_LATE_FEE_LABEL,
     });
 
-    const property = await prisma.property.findFirst({
+    let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true, housePolicies: true },
     });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) {
+        if ("ambiguous" in fallback.result) return fallback.result;
+        return unknown(fallback.result.error);
+      }
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true, housePolicies: true },
+      });
+    }
     if (!property) return unknown("Property not found.");
 
     const target = toUtcMidnight(date);

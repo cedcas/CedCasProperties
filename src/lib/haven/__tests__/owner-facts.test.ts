@@ -9,6 +9,9 @@ import {
   ensureCapacityHandoffLink,
   parseGuestCount,
   buildCapacityContextNote,
+  isLargeGroupMessage,
+  isLargeGroupToolCall,
+  buildLargeGroupHandoffReply,
 } from "../owner-facts";
 import { MESSENGER_HREF, type ToolExchange } from "../post-process";
 
@@ -238,5 +241,73 @@ describe("buildCapacityContextNote", () => {
 
   it("is empty when no guest count is mentioned", () => {
     expect(buildCapacityContextNote("Do you have WiFi?")).toBe("");
+  });
+});
+
+describe("isLargeGroupMessage", () => {
+  it("is true for a split group that sums to 24 ('8 adults + 16 kids')", () => {
+    expect(isLargeGroupMessage("We're 8 adults + 16 kids for that weekend.")).toBe(true);
+  });
+
+  it("is true for a plain '24 people' claim", () => {
+    expect(isLargeGroupMessage("Can we book for 24 people?")).toBe(true);
+  });
+
+  it("is false under the cap", () => {
+    expect(isLargeGroupMessage("We are 10 people for that weekend.")).toBe(false);
+  });
+
+  it("is false when no guest count is mentioned at all", () => {
+    expect(isLargeGroupMessage("Do you have WiFi?")).toBe(false);
+  });
+});
+
+describe("isLargeGroupToolCall", () => {
+  it("is true for a find_stay call with guests >= cap", () => {
+    const exchanges: ToolExchange[] = [{ name: "find_stay", input: { guests: 24 }, result: {} }];
+    expect(isLargeGroupToolCall(exchanges)).toBe(true);
+  });
+
+  it("is true for a get_quote call with guests > cap", () => {
+    const exchanges: ToolExchange[] = [{ name: "get_quote", input: { guests: 30 }, result: {} }];
+    expect(isLargeGroupToolCall(exchanges)).toBe(true);
+  });
+
+  it("is false for a guest count under the cap", () => {
+    const exchanges: ToolExchange[] = [{ name: "find_stay", input: { guests: 12 }, result: {} }];
+    expect(isLargeGroupToolCall(exchanges)).toBe(false);
+  });
+
+  it("is false for an unrelated tool call", () => {
+    const exchanges: ToolExchange[] = [{ name: "get_faq", input: { query: "parking" }, result: {} }];
+    expect(isLargeGroupToolCall(exchanges)).toBe(false);
+  });
+});
+
+describe("buildLargeGroupHandoffReply", () => {
+  it("returns the fixed English script for lang 'en'", () => {
+    expect(buildLargeGroupHandoffReply("en", "24 people please")).toBe(
+      "What a big group! For 24 or more guests, our team will plan it with you personally — tap below to message us on Messenger."
+    );
+  });
+
+  it("returns the fixed Tagalog script for lang 'tl'", () => {
+    expect(buildLargeGroupHandoffReply("tl", "24 katao po kami")).toBe(
+      "Ang saya, ang dami ninyo! Para sa 24 o higit pang bisita, ang team namin mismo ang tutulong sa inyo — i-tap lang sa ibaba para mag-message sa Messenger."
+    );
+  });
+
+  it("returns the fixed Batangueño script for lang 'btg', regardless of guest wording", () => {
+    expect(buildLargeGroupHandoffReply("btg", "24 people please")).toBe(
+      "Aba'y ang dami ninyo, ala eh ang saya! Para sa 24 o higit pa, ang team namin mismo ang aasikaso sa inyo — pindutin lang sa ibaba para mag-message sa Messenger."
+    );
+  });
+
+  it("auto-detects English from the guest's own message", () => {
+    expect(buildLargeGroupHandoffReply("auto", "Can you fit 24 of us next weekend?")).toContain("What a big group!");
+  });
+
+  it("auto-detects Tagalog from the guest's own message", () => {
+    expect(buildLargeGroupHandoffReply("auto", "Kami ay 24 na tao po, pwede ba kami?")).toContain("Ang saya, ang dami ninyo!");
   });
 });

@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-10-14 — Haven AI live bug fixes: fuzzy property-name resolution, deterministic 24+ guest handoff (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,333 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Two more live bugs fixed in `src/lib/haven/*`, on the same branch as the preview-retest
+pass below:
+
+1. **A plausible informal property name got "isn't coming up in our system."** A guest
+   asked "Can we check in early at 9am … at the Mickey Full Family House?" and Haven
+   wrongly said the property wasn't in the system — every slug-taking tool
+   (`get_property_details`, `check_availability`, `get_quote`, `check_early_late`) only
+   ever did an exact-slug `WHERE` lookup, so informal/partial names the model passed
+   through never matched. Added `src/lib/haven/property-resolver.ts`: a pure,
+   DB-free `resolvePropertyMatch(query, listings)` that normalizes case/accents/
+   punctuation, strips a `[...]` bracket prefix and a `" | "`/`"•"` suffix, drops filler
+   tokens ("house", "bahay", "yung", "sa", "ang", "the"), and scores every public listing
+   by token overlap plus a capacity-number bonus (a bare number in the query that matches
+   a listing's `maxGuests` outscores a same-named sibling). A small owner-confirmed alias
+   table (same pattern as `owner-facts.ts`) covers names that don't appear in any DB
+   column at all — "B34"/"B38" block numbers, "Mickey", "pinakamalaki"/"malaki" ("the
+   biggest"), "studio" for the Cozy 1BR, etc. Two or more listings tied at the top score
+   (e.g. a bare "B38" or "Mickey" — all three configurations qualify equally) come back
+   `ambiguous` with a candidate list instead of guessing; `tools.ts`'s new
+   `resolveSlugFallback()` is called by each tool only *after* its existing exact-slug
+   lookup misses, so a model that already got the slug right (the common case) never
+   touches this path at all. `system-prompt.ts` now tells the model to turn an
+   `ambiguous: true` tool result into a short clarifying question naming the candidates,
+   and to never claim a property isn't in the system when a tool result doesn't say so.
+2. **24+ guest handoff wording drifted even with the Messenger link forced on** — the
+   model's own clarifying questions and "exactly max"/"might fit" hedging survived the
+   existing guardrails because they only ever forced the *link*, never the *text*. The
+   model is now skipped entirely for this case: `owner-facts.ts` gained
+   `isLargeGroupMessage()`/`isLargeGroupToolCall()` (the same detection
+   `needsCapacityHandoff()` already used, pulled out into reusable checks) and a fixed,
+   warm `buildLargeGroupHandoffReply()` script in English/Tagalog/Batangueño (`auto` picks
+   English vs. Tagalog the same way `isEnglishContext()` already does — there's no
+   reliable way to detect Batangueño from the guest's own text, so `auto` never produces
+   the `btg` script). `chat-service.ts`'s `runToolLoop()` checks the guest's latest
+   message *before* calling the provider at all (zero tokens, zero cost, logged as
+   `outcome: "handoff"` — a new, additive value in `HavenChatUsage.outcome`, no schema
+   change) and also mid-loop after any tool call, in case a 24+ `find_stay`/`get_quote`
+   call happens without the raw message itself parsing to a number.
+
+Tests: `property-resolver.test.ts` (new — exact-slug fast path, "Mickey Full Family
+House", "mickey 15", the Tagalog "yung malaking bahay ng Mickey", "spacious 2 bedroom",
+"the 1BR", ambiguous "B38"/"Mickey", garbage), `tools.test.ts` (fuzzy fallback for all
+four slug-taking tools, ambiguous-candidates shape, fallback never retried on ambiguity),
+`owner-facts.test.ts` (`isLargeGroupMessage`, `isLargeGroupToolCall`,
+`buildLargeGroupHandoffReply` per language incl. `auto`), `chat-service.test.ts`
+(provider never called for a 24+ message in any language incl. "8 adults + 16 kids", mid-
+loop handoff on a 24+ `find_stay` call, `outcome: "handoff"` logged with zero cost, a
+sub-24 group still reaches the model normally).
+
+---
+
 ## 2026-10-14 — Haven AI preview-retest fixes: 24+ handoff parser, early/late fee guard, amenity search, Tagalog-mode Batangueño leak, pricing-arithmetic guard (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
 
 Area: Website

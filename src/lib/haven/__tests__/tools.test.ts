@@ -17,7 +17,12 @@ const { db, listingsApi, availabilityApi, quoteApi } = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
-vi.mock("@/lib/listings", () => listingsApi);
+// `buildShortNames` is real (not stubbed) — the property-resolver's ambiguous-candidate
+// labels go through it, same as production, so a test exercising that path is meaningful.
+vi.mock("@/lib/listings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/listings")>("@/lib/listings");
+  return { ...listingsApi, buildShortNames: actual.buildShortNames };
+});
 vi.mock("@/lib/availability", () => availabilityApi);
 vi.mock("@/lib/booking-quote", () => quoteApi);
 
@@ -272,6 +277,114 @@ describe("check_early_late", () => {
     return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "late_checkout" }).then((result) => {
       expect((result as { standardTime: string | null }).standardTime).toBeNull();
     });
+  });
+});
+
+describe("fuzzy property-name fallback (DEC-029 — a plausible informal name must never say 'not in our system')", () => {
+  const MICKEY_LISTINGS = [
+    { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax", maxGuests: 5 },
+    { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7 },
+    { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11 },
+    { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15 },
+  ];
+
+  it("get_property_details resolves an informal name after an exact-slug miss", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null); // exact "mickey full family house" slug lookup misses
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+    db.property.findFirst.mockResolvedValueOnce({
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+      name: "Mickey in Lipa | Full Family House•Sleeps 15",
+      description: "The big one.",
+      amenities: "[]",
+      amenityDetails: null,
+      propertyRules: null,
+      housePolicies: null,
+      pricingNotes: null,
+      propertyFaqs: null,
+      neighborhoodPlaces: null,
+      maxGuests: 15,
+      includedGuests: 10,
+      extraGuestFeePerNight: 300,
+    });
+
+    const result = (await runHavenTool("get_property_details", { slug: "mickey full family house" })) as Record<string, unknown>;
+    expect(result.slug).toBe("mickey-in-lipa--full-family-house--sleeps-15");
+    expect(result).not.toHaveProperty("ambiguous");
+  });
+
+  it("get_property_details surfaces candidates instead of 'not found' when the name is ambiguous", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+
+    const result = (await runHavenTool("get_property_details", { slug: "Mickey" })) as {
+      ambiguous: true;
+      candidates: Array<{ slug: string }>;
+    };
+    expect(result.ambiguous).toBe(true);
+    expect(result.candidates).toHaveLength(3);
+    expect(db.property.findFirst).toHaveBeenCalledTimes(1); // never retried with an ambiguous name
+  });
+
+  it("get_property_details still reports 'Property not found.' for genuine garbage, not an empty ambiguity list", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+
+    const result = await runHavenTool("get_property_details", { slug: "zzz nonsense property zzz" });
+    expect(result).toEqual({ error: "Property not found." });
+  });
+
+  it("check_availability resolves an informal name after an exact-slug miss", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+    db.property.findFirst.mockResolvedValueOnce({ id: 42 });
+    availabilityApi.getPropertyConflicts.mockResolvedValue([]);
+
+    const result = await runHavenTool("check_availability", {
+      slug: "mickey 15",
+      checkIn: "2026-11-14",
+      checkOut: "2026-11-15",
+    });
+    expect(result).toEqual({ available: true, conflicts: [] });
+  });
+
+  it("get_quote resolves an informal name after an exact-slug miss", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+    db.property.findFirst.mockResolvedValueOnce({ id: 1, name: "Mickey in Lipa | Full Family House•Sleeps 15" });
+    quoteApi.computeBookingQuote.mockResolvedValue({
+      ok: true,
+      quote: { nightlyTotal: 10000, extraGuestFee: 0, discountAmount: 0, total: 10000, dailyRates: [{}] },
+    });
+
+    const result = (await runHavenTool("get_quote", {
+      slug: "the full family house",
+      checkIn: "2026-11-14",
+      checkOut: "2026-11-15",
+      guests: 15,
+    })) as Record<string, unknown>;
+    expect(result.total).toBe(10000);
+  });
+
+  it("check_early_late resolves an informal name after an exact-slug miss", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+    db.property.findFirst.mockResolvedValueOnce({ id: 1, housePolicies: null });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([]);
+
+    const result = await runHavenTool("check_early_late", { slug: "Mickey Full Family House", date: "2026-11-15", kind: "early_checkin" });
+    expect(result).toMatchObject({ status: "likely_possible" });
+  });
+
+  it("check_early_late surfaces candidates instead of 'unknown' when the name is ambiguous", async () => {
+    db.property.findFirst.mockResolvedValueOnce(null);
+    listingsApi.getPublicListings.mockResolvedValue(MICKEY_LISTINGS);
+
+    const result = (await runHavenTool("check_early_late", { slug: "Mickey", date: "2026-11-15", kind: "early_checkin" })) as {
+      ambiguous: true;
+      candidates: unknown[];
+    };
+    expect(result.ambiguous).toBe(true);
+    expect(result.candidates).toHaveLength(3);
   });
 });
 

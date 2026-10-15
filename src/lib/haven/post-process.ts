@@ -253,12 +253,12 @@ function singlePropertyLabel(name: string, guests: number | undefined): string {
 }
 
 /** Strips a leading "[DEVDB]"-style bracket tag (dev-DB test data convention). */
-function stripBracketPrefix(name: string): string {
+export function stripBracketPrefix(name: string): string {
   return name.replace(/^\s*(\[[^\]]*\]\s*)+/, "").trim();
 }
 
 /** Strips a leading bracket tag, then cuts at the first " | " or "•". */
-function stripToBaseName(name: string): string {
+export function stripToBaseName(name: string): string {
   return stripBracketPrefix(name).split(/\s*\|\s*|\s*•\s*/)[0].trim();
 }
 

@@ -129,6 +129,11 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "For a unisex or ambiguous name (e.g. \"Ako si Toni\", or names like Jun, Ali, Rene) stay " +
       "neutral. Otherwise, always default to a neutral, warm term: \"kabayan\", \"kaibigan\", " +
       "or \"ka-Haven\".",
+    "- If a tool result has `ambiguous: true` with a `candidates` list, the guest's property " +
+      "name could mean more than one listing — ask a short clarifying question naming each " +
+      "candidate, then call the tool again once they pick. If a tool instead returns " +
+      "`{error: \"Property not found.\"}`, don't claim the property isn't in the system — ask " +
+      "the guest to confirm the property name, or offer Messenger if you still can't tell.",
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +
