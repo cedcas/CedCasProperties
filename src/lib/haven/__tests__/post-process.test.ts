@@ -8,11 +8,21 @@ import {
   dedupeLinks,
   collectBookingLinks,
   ensureHandoffLink,
+  needsAmenityHandoff,
   limitToOneProvisional,
   ensureBatanguenoMarker,
+  stripBatanguenoFromTagalog,
   enforceTermsOfAddress,
+  shortenPropertyNamesInText,
+  fixDadalawPhrasing,
+  isEnglishContext,
+  stripTagalogWordsInEnglish,
+  firstResolvedDateRange,
+  formatDateRangeArrow,
+  ensureDatesStated,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
+  FALLBACK_HOURLY_FEE_TEXT,
   MESSENGER_HREF,
   type ToolExchange,
 } from "../post-process";
@@ -117,15 +127,19 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
   it("never leaves a dangling fragment like a trailing unit behind (the /hour regression)", () => {
     const amounts = collectToolAmounts([{ earlyCheckInPerHour: 200 }]);
     const result = enforcePriceClaims("Early check-in runs about ₱9999/hour if we can swing it.", amounts);
-    expect(result).toBe(FALLBACK_FEE_TEXT);
-    expect(result).not.toContain("/hour");
+    expect(result).toBe(FALLBACK_HOURLY_FEE_TEXT);
     expect(result).not.toContain("9999");
   });
 
-  it("uses the fee-handoff fallback (not the checkout fallback) for an unverified per-hour/per-night rate", () => {
+  it("states the real ₱200/hour fact (not the generic Messenger fallback) for an unverified early check-in/late checkout rate", () => {
     const amounts = new Set<number>();
-    expect(enforcePriceClaims("Late checkout is ₱500/hour.", amounts)).toBe(FALLBACK_FEE_TEXT);
-    expect(enforcePriceClaims("There's an extra fee of ₱500 for late checkout.", amounts)).toBe(FALLBACK_FEE_TEXT);
+    expect(enforcePriceClaims("Late checkout is ₱500/hour.", amounts)).toBe(FALLBACK_HOURLY_FEE_TEXT);
+    expect(enforcePriceClaims("There's an extra fee of ₱500 for late checkout.", amounts)).toBe(FALLBACK_HOURLY_FEE_TEXT);
+  });
+
+  it("uses the generic fee-handoff fallback for an unverified rate unrelated to early check-in/late checkout", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("There's an extra fee of ₱500 per guest.", amounts)).toBe(FALLBACK_FEE_TEXT);
   });
 
   it("uses the checkout fallback for an unverified stay total with no fee language", () => {
@@ -140,7 +154,7 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     );
     const result = enforcePriceClaims(text, amounts);
     expect(result).toBe(
-      ["Here's the breakdown:", "- Nightly total: ₱4,500", `- ${FALLBACK_FEE_TEXT}`, "Let us know!"].join("\n")
+      ["Here's the breakdown:", "- Nightly total: ₱4,500", `- ${FALLBACK_HOURLY_FEE_TEXT}`, "Let us know!"].join("\n")
     );
   });
 
@@ -159,6 +173,63 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     expect(enforcePriceClaims("We hope you enjoy your stay with us!", amounts)).toBe(
       "We hope you enjoy your stay with us!"
     );
+  });
+
+  it("recognizes P200/PHP 200/200 pesos as the same allowed amount as ₱200 (owner fact, any format)", () => {
+    const amounts = new Set([200]);
+    expect(enforcePriceClaims("Early check-in is P200/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is P200/hour, subject to availability."
+    );
+    expect(enforcePriceClaims("Late checkout runs PHP 200/hour, subject to confirmation.", amounts)).toBe(
+      "Late checkout runs PHP 200/hour, subject to confirmation."
+    );
+    expect(enforcePriceClaims("Early check-in is 200 pesos/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is 200 pesos/hour, subject to availability."
+    );
+  });
+
+  it("flags a disallowed amount written as 'P' or 'pesos' the same as a ₱-prefixed one", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("That'll be P9999 total.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+    expect(enforcePriceClaims("That'll be 9999 pesos total.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+  });
+
+  it("rejects '₱2,800 × 2 = ₱5,600' style arithmetic even when every number involved happens to be allowed", () => {
+    const amounts = new Set([2800, 2, 5600]);
+    const result = enforcePriceClaims("The total is ₱2,800 × 2 = ₱5,600 for two nights.", amounts);
+    expect(result).toBe(FALLBACK_TOTAL_TEXT);
+    expect(result).not.toContain("5,600");
+  });
+
+  it("rejects the same arithmetic written with a lowercase 'x'", () => {
+    const amounts = new Set<number>();
+    expect(enforcePriceClaims("That's ₱2,800 x 2 for the stay.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
+  });
+
+  it("still allows a tool-provided per-night breakdown with no arithmetic operator", () => {
+    const amounts = collectToolAmounts([{ perNight: [{ rate: 2800 }, { rate: 3500 }], total: 6300 }]);
+    const text = "Thursday: ₱2,800, Friday: ₱3,500. Total: ₱6,300.";
+    expect(enforcePriceClaims(text, amounts)).toBe(text);
+  });
+});
+
+describe("needsAmenityHandoff", () => {
+  it("is true when find_amenity found nothing anywhere", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "find_amenity", input: { term: "karaoke" }, result: { found: false, properties: [] } },
+    ];
+    expect(needsAmenityHandoff(exchanges)).toBe(true);
+  });
+
+  it("is false when find_amenity found a match", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "find_amenity", input: { term: "pool" }, result: { found: true, properties: [{ slug: "a", name: "A" }] } },
+    ];
+    expect(needsAmenityHandoff(exchanges)).toBe(false);
+  });
+
+  it("is false when find_amenity was never called", () => {
+    expect(needsAmenityHandoff([{ name: "get_faq", input: { query: "wifi" }, result: { results: [] } }])).toBe(false);
   });
 });
 
@@ -486,6 +557,52 @@ describe("ensureBatanguenoMarker", () => {
   });
 });
 
+describe("stripBatanguenoFromTagalog", () => {
+  it("converts a question-particle 'ga' to 'ba' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Ilan ga kayo talaga?", "tl", false)).toBe("Ilan ba kayo talaga?");
+  });
+
+  it("converts 'baga' to 'ba' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Totoo baga, meron pa kaming bakante?", "tl", false)).toBe(
+      "Totoo ba, meron pa kaming bakante?"
+    );
+  });
+
+  it("converts 'ari'/'ire' used as 'this/here' to 'ito' in tl mode", () => {
+    expect(stripBatanguenoFromTagalog("Ari ang bahay na bagay sa inyo.", "tl", false)).toBe("Ito ang bahay na bagay sa inyo.");
+    expect(stripBatanguenoFromTagalog("Ire ang link.", "tl", false)).toBe("Ito ang link.");
+  });
+
+  it("does not touch a misused 'Oo ga' bare affirmation (same carve-out as btg mode)", () => {
+    const input = "Oo ga, may bakante kami.";
+    expect(stripBatanguenoFromTagalog(input, "tl", false)).toBe(input);
+  });
+
+  it("leaves btg mode untouched", () => {
+    const input = "Ay ga, ilan ga kayo talaga?";
+    expect(stripBatanguenoFromTagalog(input, "btg", false)).toBe(input);
+  });
+
+  it("leaves explicit English mode untouched", () => {
+    const input = "Ga is not an English word anyway.";
+    expect(stripBatanguenoFromTagalog(input, "en", false)).toBe(input);
+  });
+
+  it("applies in auto mode when the turn isn't in English", () => {
+    expect(stripBatanguenoFromTagalog("Ilan ga kayo?", "auto", false)).toBe("Ilan ba kayo?");
+  });
+
+  it("does not apply in auto mode when the turn is in English", () => {
+    const input = "Ga is fine here, it's English mode.";
+    expect(stripBatanguenoFromTagalog(input, "auto", true)).toBe(input);
+  });
+
+  it("leaves a reply with no Batangueño particle untouched", () => {
+    const input = "Ilan tao kayo?";
+    expect(stripBatanguenoFromTagalog(input, "tl", false)).toBe(input);
+  });
+});
+
 describe("enforceTermsOfAddress", () => {
   it("replaces a banned term in English mode with 'friend' when the guest never used it", () => {
     const result = enforceTermsOfAddress("Sure thing, bro — I'll sort that out.", "Hi, got a 2BR free?", "en");
@@ -515,5 +632,162 @@ describe("enforceTermsOfAddress", () => {
   it("leaves text with no banned term untouched", () => {
     const result = enforceTermsOfAddress("Hello kabayan, how can I help?", "Hi there", "en");
     expect(result).toBe("Hello kabayan, how can I help?");
+  });
+});
+
+describe("shortenPropertyNamesInText", () => {
+  it("shortens a raw list_properties name with a bracket tag and '|' suffix in reply prose", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "list_properties",
+        input: {},
+        result: [{ slug: "cozy-1-bedroom", name: "[DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax" }],
+      },
+    ];
+    const text = "We have [DEVDB] Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax available!";
+    expect(shortenPropertyNamesInText(text, exchanges)).toBe("We have Cozy 1BR Haven available!");
+  });
+
+  it("shortens a get_property_details name in reply prose", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "get_property_details", input: { slug: "cozy-1-bedroom" }, result: { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | 5 Pax" } },
+    ];
+    expect(shortenPropertyNamesInText("Cozy 1BR Haven | 5 Pax has WiFi.", exchanges)).toBe("Cozy 1BR Haven has WiFi.");
+  });
+
+  it("keeps the distinguishing second segment when two properties share a base name", () => {
+    const exchanges: ToolExchange[] = [
+      {
+        name: "find_stay",
+        input: { checkIn: "2026-11-14", checkOut: "2026-11-16", guests: 15 },
+        result: {
+          options: [
+            {
+              properties: [
+                { slug: "mickey-full", name: "Mickey in Lipa | Full Family House", bookingLink: "/x" },
+                { slug: "mickey-room-only", name: "Mickey in Lipa | Room Only", bookingLink: "/y" },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const text = "Both Mickey in Lipa | Full Family House and Mickey in Lipa | Room Only are free.";
+    expect(shortenPropertyNamesInText(text, exchanges)).toBe(
+      "Both Mickey in Lipa — Full Family House and Mickey in Lipa — Room Only are free."
+    );
+  });
+
+  it("leaves text unchanged when no tool result mentions a property name", () => {
+    expect(shortenPropertyNamesInText("Hello there!", [])).toBe("Hello there!");
+  });
+
+  it("leaves text unchanged when the raw name already matches the short form", () => {
+    const exchanges: ToolExchange[] = [{ name: "get_property_details", input: {}, result: { slug: "cozy-1-bedroom", name: "Cozy 1BR" } }];
+    expect(shortenPropertyNamesInText("Cozy 1BR is available.", exchanges)).toBe("Cozy 1BR is available.");
+  });
+});
+
+describe("fixDadalawPhrasing", () => {
+  it("replaces an 'ilang guests ang dadalaw' question in Tagalog mode", () => {
+    expect(fixDadalawPhrasing("Sige, ilang guests ang dadalaw sa inyo?", "tl")).toBe("Sige, Ilang guests kayo?");
+  });
+
+  it("replaces it with the Batangueño form in btg mode", () => {
+    expect(fixDadalawPhrasing("Ilang tao ang dadalaw?", "btg")).toBe("Ilan ga kayo?");
+  });
+
+  it("leaves text with no 'dadalaw' phrasing untouched", () => {
+    const input = "Ilang guests kayo?";
+    expect(fixDadalawPhrasing(input, "tl")).toBe(input);
+  });
+});
+
+describe("isEnglishContext", () => {
+  it("is always true for explicit lang 'en'", () => {
+    expect(isEnglishContext("en", "may bakante ba kayo")).toBe(true);
+  });
+
+  it("is always false for explicit lang 'tl'/'btg'", () => {
+    expect(isEnglishContext("tl", "Do you have WiFi?")).toBe(false);
+    expect(isEnglishContext("btg", "Do you have WiFi?")).toBe(false);
+  });
+
+  it("is true for 'auto' when the guest's message has no Tagalog marker word", () => {
+    expect(isEnglishContext("auto", "Do you have WiFi and parking?")).toBe(true);
+  });
+
+  it("is false for 'auto' when the guest's message carries a Tagalog marker word", () => {
+    expect(isEnglishContext("auto", "May WiFi po ba kayo?")).toBe(false);
+  });
+});
+
+describe("stripTagalogWordsInEnglish", () => {
+  it("replaces 'grupo' with 'group'", () => {
+    expect(stripTagalogWordsInEnglish("Your grupo of 10 is welcome.")).toBe("Your group of 10 is welcome.");
+  });
+
+  it("drops a trailing 'po' and tidies the spacing", () => {
+    expect(stripTagalogWordsInEnglish("Sure thing po, we have availability.")).toBe("Sure thing, we have availability.");
+  });
+
+  it("replaces 'kabayan' with 'friend', preserving capitalization", () => {
+    expect(stripTagalogWordsInEnglish("Kabayan, we have a 2BR free.")).toBe("Friend, we have a 2BR free.");
+  });
+
+  it("leaves an all-English reply untouched", () => {
+    const input = "We have a 2BR available for those dates.";
+    expect(stripTagalogWordsInEnglish(input)).toBe(input);
+  });
+});
+
+describe("firstResolvedDateRange", () => {
+  it("reads checkIn/checkOut from a resolve_dates tool result", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "resolve_dates", input: { expression: "next Friday" }, result: { checkIn: "2026-11-14", checkOut: "2026-11-15", interpreted: "x" } },
+    ];
+    expect(firstResolvedDateRange(exchanges)).toEqual({ checkIn: "2026-11-14", checkOut: "2026-11-15" });
+  });
+
+  it("falls back to a later tool's input checkIn/checkOut when no result carries dates", () => {
+    const exchanges: ToolExchange[] = [
+      { name: "list_properties", input: {}, result: [] },
+      { name: "get_quote", input: { slug: "a", checkIn: "2026-12-24", checkOut: "2026-12-26", guests: 2 }, result: {} },
+    ];
+    expect(firstResolvedDateRange(exchanges)).toEqual({ checkIn: "2026-12-24", checkOut: "2026-12-26" });
+  });
+
+  it("returns null when no exchange carries a date range", () => {
+    expect(firstResolvedDateRange([{ name: "get_faq", input: { query: "wifi" }, result: { results: [] } }])).toBeNull();
+  });
+});
+
+describe("formatDateRangeArrow", () => {
+  it("formats an arrow-separated range with the year on the end date only", () => {
+    expect(formatDateRangeArrow("2026-11-14", "2026-11-15")).toBe("Saturday, November 14 → Sunday, November 15, 2026");
+  });
+});
+
+describe("ensureDatesStated", () => {
+  const resolved = { checkIn: "2026-11-14", checkOut: "2026-11-15" };
+
+  it("prepends the resolved date range when English and the reply doesn't state it", () => {
+    const result = ensureDatesStated("We have availability for that stay.", resolved, true);
+    expect(result).toBe("For Saturday, November 14 → Sunday, November 15, 2026:\n\nWe have availability for that stay.");
+  });
+
+  it("leaves the reply untouched when it already states the check-in month/day", () => {
+    const input = "For November 14, we have availability.";
+    expect(ensureDatesStated(input, resolved, true)).toBe(input);
+  });
+
+  it("leaves the reply untouched when not in English context", () => {
+    const input = "May bakante kami sa petsang iyan.";
+    expect(ensureDatesStated(input, resolved, false)).toBe(input);
+  });
+
+  it("leaves the reply untouched when no dates were resolved this turn", () => {
+    const input = "We have availability for that stay.";
+    expect(ensureDatesStated(input, null, true)).toBe(input);
   });
 });

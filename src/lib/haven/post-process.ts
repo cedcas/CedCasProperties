@@ -1,6 +1,7 @@
 import "server-only";
-import { formatStayRangeShort } from "@/lib/dates";
+import { formatStayRangeShort, toUtcMidnight } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
+import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import type { HavenLang } from "./system-prompt";
 
 /**
@@ -82,23 +83,51 @@ export function collectToolAmounts(toolResults: unknown[]): Set<number> {
 
 // ── Price guard: whole-sentence / whole-bullet-line replacement ────────────────
 
-const PESO_AMOUNT_SOURCE = String.raw`(?:₱|PHP\s?)\s?\d[\d,]*(?:\.\d{1,2})?`;
+/**
+ * Recognizes ₱/PHP-prefixed amounts, plus the other formats guests and the owner-fact
+ * prompt sometimes use for the SAME number — a bare "P" prefix right before a digit
+ * (never mid-word, via the negative lookbehind, so "Top200" doesn't match) and a
+ * "<number> pesos" suffix with no symbol at all (e.g. "P200", "200 pesos").
+ */
+const PESO_PREFIX = String.raw`(?:₱|PHP\s?|(?<![A-Za-z])P(?=\d))`;
+const PESO_AMOUNT_SOURCE = String.raw`${PESO_PREFIX}\s?\d[\d,]*(?:\.\d{1,2})?|\d[\d,]*(?:\.\d{1,2})?\s*pesos?\b`;
 /** Fresh global regex per use — avoids `lastIndex` state bugs from a shared `/g` instance. */
 function pesoAmountRegex(): RegExp {
   return new RegExp(PESO_AMOUNT_SOURCE, "gi");
 }
 
+/**
+ * The model showing its own multiplication/sum ("₱2,800 × 2 = ₱5,600") is never allowed,
+ * even on the rare chance the resulting number happens to be right — Haven may only ever
+ * relay a total `get_quote`/`find_stay` returned, never arithmetic it performed itself
+ * (see system-prompt.ts and the DEC-029 "a Thu→Sat total read as nights × one rate" bug).
+ * No `g` flag, so this is safe to keep as a shared module-level instance.
+ */
+const PRICE_ARITHMETIC_RE = new RegExp(`(?:${PESO_AMOUNT_SOURCE})\\s*[x×*]\\s*\\d+`, "i");
+
 export const FALLBACK_TOTAL_TEXT = "You'll see the exact total at checkout.";
 export const FALLBACK_FEE_TEXT = `For that fee, please ask us via Messenger (${MESSENGER_HREF}).`;
+/**
+ * Unlike `FALLBACK_FEE_TEXT`, this fee is a published owner fact Haven always knows the
+ * answer to (see owner-facts.ts) — a hallucinated number for an early check-in/late
+ * checkout question should fall back to restating the real rate, never to "ask us via
+ * Messenger", which wrongly implies Haven doesn't know.
+ */
+export const FALLBACK_HOURLY_FEE_TEXT = `Early check-in and late checkout are ₱${HOURLY_FEE_RATE}/hour, subject to availability and confirmation with the team.`;
 
 /** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. */
 const FEE_CONTEXT = /\/\s*(?:hour|hr|night|day|guest)\b|\bper\s+(?:hour|hr|night|day|guest)\b|\bfee\b|\bcharges?\b|\bcharged\b/i;
+/** Early check-in/late checkout context, in any of the owner-approved phrasings. */
+const HOURLY_FEE_CONTEXT_RE =
+  /\/\s*(?:hr|hour)\b|\bper\s+hour\b|\ban\s+hour\b|\bkada\s+oras\b|\bbawat\s+oras\b|\bearly\s*check-?in\b|\blate\s*check-?out\b|\bmaagang\s+check-?in\b/i;
 
 function classifyFallback(unit: string): string {
+  if (HOURLY_FEE_CONTEXT_RE.test(unit)) return FALLBACK_HOURLY_FEE_TEXT;
   return FEE_CONTEXT.test(unit) ? FALLBACK_FEE_TEXT : FALLBACK_TOTAL_TEXT;
 }
 
 function unitHasDisallowedAmount(unit: string, allowedAmounts: Set<number>): boolean {
+  if (PRICE_ARITHMETIC_RE.test(unit)) return true;
   let disallowed = false;
   unit.replace(pesoAmountRegex(), (match) => {
     const numeric = Number(match.replace(/[^\d.]/g, ""));
@@ -157,6 +186,32 @@ export function enforcePriceClaims(text: string, allowedAmounts: Set<number>): s
     .join("\n");
 }
 
+/**
+ * Generic version of the sentence/bullet-line replacement `enforcePriceClaims` uses,
+ * for any other owner-guardrail that must swap out a WHOLE matching sentence or bullet
+ * line rather than a substring (e.g. `owner-facts.ts`'s budget-question and kids/babies
+ * "don't count" guards). `replacement` of `""` drops the sentence entirely — the caller
+ * is responsible for tidying up any resulting blank lines.
+ */
+export function replaceMatchingSentences(text: string, test: RegExp, replacement: string): string {
+  function processPiece(piece: string): string {
+    const trailingWs = piece.match(/\s+$/)?.[0] ?? "";
+    const core = trailingWs ? piece.slice(0, -trailingWs.length) : piece;
+    test.lastIndex = 0;
+    return test.test(core) ? replacement + trailingWs : piece;
+  }
+  function processGenericLine(line: string): string {
+    const bulletMatch = line.match(BULLET_LINE);
+    if (bulletMatch) {
+      const [, marker, rest] = bulletMatch;
+      test.lastIndex = 0;
+      return test.test(rest) ? marker + replacement : line;
+    }
+    return splitSentences(line).map(processPiece).join("");
+  }
+  return text.split("\n").map(processGenericLine).join("\n");
+}
+
 // ── Booking-link collection ─────────────────────────────────────────────────
 
 export interface ToolExchange {
@@ -198,12 +253,12 @@ function singlePropertyLabel(name: string, guests: number | undefined): string {
 }
 
 /** Strips a leading "[DEVDB]"-style bracket tag (dev-DB test data convention). */
-function stripBracketPrefix(name: string): string {
+export function stripBracketPrefix(name: string): string {
   return name.replace(/^\s*(\[[^\]]*\]\s*)+/, "").trim();
 }
 
 /** Strips a leading bracket tag, then cuts at the first " | " or "•". */
-function stripToBaseName(name: string): string {
+export function stripToBaseName(name: string): string {
   return stripBracketPrefix(name).split(/\s*\|\s*|\s*•\s*/)[0].trim();
 }
 
@@ -283,6 +338,74 @@ export function collectBookingLinks(exchanges: ToolExchange[], max = 8): LinkBut
   return links.filter((l) => isAllowedHref(l.href)).slice(0, max);
 }
 
+// ── Short property names in reply TEXT (not just link labels) ──────────────
+
+/**
+ * Every {slug, name} pair a tool returned this turn, across every tool shape that can
+ * mention a property name — not just the booking-link-producing ones `collectBookingLinks`
+ * covers, so a plain `list_properties`/`get_property_details` answer also gets shortened.
+ */
+export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string }[] {
+  const pairs: { slug: string; name: string }[] = [];
+  for (const { name: toolName, input, result } of exchanges) {
+    const i = asRecord(input);
+    const r = asRecord(result);
+    if (toolName === "list_properties" && Array.isArray(result)) {
+      for (const item of result) {
+        const p = asRecord(item);
+        if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+      }
+    } else if (toolName === "get_property_details" && typeof r.slug === "string" && typeof r.name === "string") {
+      pairs.push({ slug: r.slug, name: r.name });
+    } else if (toolName === "get_quote" && typeof i.slug === "string" && typeof r.name === "string") {
+      pairs.push({ slug: i.slug, name: r.name });
+    } else if (toolName === "find_stay" && Array.isArray(r.options)) {
+      for (const option of r.options) {
+        const properties = asRecord(option).properties;
+        if (!Array.isArray(properties)) continue;
+        for (const property of properties) {
+          const p = asRecord(property);
+          if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+        }
+      }
+    }
+  }
+  return pairs;
+}
+
+/**
+ * Replaces every raw DB property name (dev-DB bracket tag, SEO `|`/`•` suffix and all)
+ * that appears verbatim in the reply text with its short guest-facing form — the same
+ * shortener `collectBookingLinks` already applies to link labels. The model reads the raw
+ * name straight from a tool result and often echoes it into prose verbatim, so this is a
+ * literal substring swap, not a regex guess.
+ */
+export function shortenPropertyNamesInText(text: string, exchanges: ToolExchange[]): string {
+  const pairs = collectPropertyNamePairs(exchanges);
+  if (pairs.length === 0) return text;
+  const shortNames = shortPropertyLabels(pairs);
+  const rawNameBySlug = new Map(pairs.map((p) => [p.slug, p.name]));
+  let out = text;
+  for (const [slug, rawName] of rawNameBySlug) {
+    const short = shortNames.get(slug);
+    if (!short || rawName === short || !out.includes(rawName)) continue;
+    out = out.split(rawName).join(short);
+  }
+  return out;
+}
+
+/**
+ * True when a `find_amenity` call this turn came back empty — the independent backstop
+ * for the amenity rule in owner-facts.ts: if nothing was found anywhere, Haven must always
+ * surface the Messenger handoff rather than leaving the guest with no next step.
+ */
+export function needsAmenityHandoff(exchanges: ToolExchange[]): boolean {
+  return exchanges.some(({ name, result }) => {
+    if (name !== "find_amenity") return false;
+    return asRecord(result).found === false;
+  });
+}
+
 // ── Messenger handoff safety net ────────────────────────────────────────────
 
 const MESSENGER_MENTION = /m\.me\/haveninlipa/i;
@@ -355,6 +478,35 @@ export function ensureBatanguenoMarker(text: string): string {
   return `Ala eh, ${text}`;
 }
 
+// ── Tagalog-mode Batangueño-particle guard ──────────────────────────────────
+
+/**
+ * "ga"/"baga" as a yes/no question particle, and "ari"/"ire" as "this/here", are
+ * Batangueño-specific markers (see system-prompt.ts's LANGUAGE_RULES.btg) that must stay
+ * confined to `btg` mode — a plain Tagalog reply (`lang: "tl"`, or `"auto"` mirroring a
+ * Tagalog-speaking guest) must not read as Batangueño. The "Oo ga"/"Oo baga" misuse
+ * (a bare affirmation, not a question) is left alone here, same as the btg-mode marker
+ * check — converting it would produce the nonsensical "Oo ba".
+ */
+const GA_QUESTION_PARTICLE_RE = /(?<!\boo\s)\bga\b/gi;
+const BAGA_RE = /(?<!\boo\s)\bbaga\b/gi;
+const ARI_IRE_RE = /\b(?:ari|ire)\b/gi;
+
+/**
+ * Converts a leaked Batangueño particle back to standard Tagalog when the effective reply
+ * language is plain Tagalog — `lang: "tl"` always, or `"auto"` whenever the turn isn't in
+ * English (`isEnglish`, the same test `stripTagalogWordsInEnglish` is gated on). A no-op
+ * for `"en"` and `"btg"` (where these markers are correct, see `ensureBatanguenoMarker`).
+ */
+export function stripBatanguenoFromTagalog(text: string, lang: HavenLang, isEnglish: boolean): string {
+  if (lang === "btg" || lang === "en") return text;
+  if (lang === "auto" && isEnglish) return text;
+  return text
+    .replace(BAGA_RE, (m) => capitalizeLike(m, "ba"))
+    .replace(GA_QUESTION_PARTICLE_RE, (m) => capitalizeLike(m, "ba"))
+    .replace(ARI_IRE_RE, (m) => capitalizeLike(m, "ito"));
+}
+
 // ── Terms-of-address guard ───────────────────────────────────────────────────
 
 const BANNED_ADDRESS_TERMS = ["partner", "pare", "bro", "sis", "dude"];
@@ -381,4 +533,108 @@ export function enforceTermsOfAddress(text: string, guestMessages: string, lang:
     result = result.replace(new RegExp(`\\b${term}\\b`, "gi"), (match) => capitalizeLike(match, replacement));
   }
   return result;
+}
+
+// ── "Dadalaw" phrasing guard (Tagalog/Batangueño) ───────────────────────────
+
+/**
+ * "Dadalaw" means to visit — asking "ilang guests ang dadalaw" reads as "how many guests
+ * will visit", which is confusing for a STAYING guest count. The correct ask is "Ilang tao
+ * kayo?" / "Ilang guests kayo?" (btg: "Ilan ga kayo?").
+ */
+const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?dadalaw)[^?]*\?/gi;
+
+export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
+  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang guests kayo?";
+  return text.replace(DADALAW_RE, replacement);
+}
+
+// ── English-mode guard: no stray Tagalog words ──────────────────────────────
+
+/** Common Tagalog function words — their presence in the guest's own message means the
+ * conversation isn't really in English, even under `lang: "auto"`. */
+const TAGALOG_MARKER_WORDS =
+  /\b(?:ba|po|ng|mga|ang|ko|sa|ito|hindi|oo|salamat|kayo|tayo|natin|kami|siya|paano|magkano|pwede|gusto|opo|kumusta)\b/i;
+
+/** True when Haven should reply English-only this turn: explicit `en`, or `auto` with an
+ * English-looking guest message (no detectable Tagalog marker word). */
+export function isEnglishContext(lang: HavenLang, guestMessages: string): boolean {
+  if (lang === "en") return true;
+  if (lang !== "auto") return false;
+  return guestMessages.trim().length > 0 && !TAGALOG_MARKER_WORDS.test(guestMessages);
+}
+
+/** word -> English replacement, or "" to drop the word entirely (e.g. "po"). */
+const TAGALOG_WORDS_IN_ENGLISH: Record<string, string> = {
+  grupo: "group",
+  kabayan: "friend",
+  kaibigan: "friend",
+  po: "",
+};
+
+/**
+ * Backstop for English mode: strips a small set of Tagalog words the model sometimes
+ * leaks into an otherwise-English reply (see `isEnglishContext`), independent of the
+ * system prompt's own "reply in English" instruction.
+ */
+export function stripTagalogWordsInEnglish(text: string): string {
+  let out = text;
+  for (const [word, replacement] of Object.entries(TAGALOG_WORDS_IN_ENGLISH)) {
+    out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => (replacement ? capitalizeLike(match, replacement) : ""));
+  }
+  return cleanupStrippedPunctuation(out);
+}
+
+// ── Resolved-dates-stated guard ──────────────────────────────────────────────
+
+/**
+ * The first checkIn/checkOut pair this turn's tools resolved or were called with —
+ * `resolve_dates`' own result, or any other tool's input (check_availability, get_quote,
+ * find_stay, check_early_late all take explicit YYYY-MM-DD dates).
+ */
+export function firstResolvedDateRange(exchanges: ToolExchange[]): { checkIn: string; checkOut: string } | null {
+  for (const { result } of exchanges) {
+    const r = asRecord(result);
+    if (typeof r.checkIn === "string" && typeof r.checkOut === "string") return { checkIn: r.checkIn, checkOut: r.checkOut };
+  }
+  for (const { input } of exchanges) {
+    const i = asRecord(input);
+    if (typeof i.checkIn === "string" && typeof i.checkOut === "string") return { checkIn: i.checkIn, checkOut: i.checkOut };
+  }
+  return null;
+}
+
+function weekdayMonthDay(d: Date): string {
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" });
+}
+
+function monthDay(d: Date): string {
+  return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "long", day: "numeric" });
+}
+
+/** "Saturday, November 14 → Sunday, November 15, 2026" — the explicit date line English
+ * replies must carry whenever dates were resolved this turn (see `ensureDatesStated`). */
+export function formatDateRangeArrow(checkIn: string, checkOut: string): string {
+  const ci = toUtcMidnight(checkIn);
+  const co = toUtcMidnight(checkOut);
+  return `${weekdayMonthDay(ci)} → ${weekdayMonthDay(co)}, ${co.getUTCFullYear()}`;
+}
+
+/**
+ * English replies must always state the resolved dates explicitly (system-prompt.ts
+ * already instructs this; this is the independent backstop). If this turn resolved a
+ * date range and the reply doesn't already mention the check-in month/day, prepend a
+ * "For <range>:" line rather than leaving the dates implicit. `isEnglish` is the same
+ * English-context test `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) —
+ * explicit `en`, or `auto` with an English-looking guest message.
+ */
+export function ensureDatesStated(
+  text: string,
+  resolved: { checkIn: string; checkOut: string } | null,
+  isEnglish: boolean
+): string {
+  if (!resolved || !isEnglish) return text;
+  const ci = toUtcMidnight(resolved.checkIn);
+  if (isNaN(ci.getTime()) || text.toLowerCase().includes(monthDay(ci).toLowerCase())) return text;
+  return `For ${formatDateRangeArrow(resolved.checkIn, resolved.checkOut)}:\n\n${text}`;
 }

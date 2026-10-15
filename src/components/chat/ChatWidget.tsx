@@ -72,8 +72,11 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
 
   const currentNode = tree[currentNodeId];
   const isAdmin = pathname.startsWith("/admin");
-  // AI mode per the owner's UX request: the flag is on AND the latest reply was AI-generated.
-  // Flag off, or a turn that fell back to the static tree, renders exactly as before.
+  // Topic-chip collapse and the persistent Messenger link key off `aiEnabled` alone — the
+  // welcome message always comes from the static tree (lastMode: "tree"), so gating on
+  // lastMode left the chips expanded on first render. `aiModeActive` (lastMode === "ai")
+  // is still used for the reply-scroll behavior below, where "was the latest message
+  // actually AI-generated" is the right question.
   const aiModeActive = aiEnabled && lastMode === "ai";
 
   // ── Load from sessionStorage ──
@@ -197,6 +200,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       const historySource = [...messages, userMessage];
       setMessages(historySource);
       setAiLoading(true);
+      setTopicsOpen(false);
       track("haven_ai_message", { lang });
 
       const fallbackToTree = (reason: string) => {
@@ -381,12 +385,13 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
               </div>
             )}
 
-            {/* Options for current node — topic buttons. In AI mode these collapse behind a
-                "Topics" toggle (owner feedback: the full chip grid buried the newest reply).
-                Static mode, and a turn that fell back to the tree, render the chips exactly
-                as before. */}
+            {/* Options for current node — topic buttons. Whenever the AI flag is on, these
+                collapse behind a "Topics" toggle from the very first render (owner feedback:
+                the full chip grid buried the welcome message and every reply) — gated on
+                `aiEnabled` alone, not `lastMode`, so the static-tree welcome message doesn't
+                start expanded. Flag off renders the chips exactly as before. */}
             {currentNode?.options && currentNode.options.length > 0 && (
-              aiModeActive ? (
+              aiEnabled ? (
                 <div className="pl-9 mb-3">
                   <button
                     type="button"
@@ -446,8 +451,9 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
                 </Link>
               </p>
               {/* The Topics toggle can hide the "Talk to a Human" chip, so keep it reachable
-                  as a small persistent link once the chips are collapsed. */}
-              {aiModeActive && (
+                  as a small persistent link whenever AI mode is on — not just once an AI
+                  reply has landed — since the chips now start collapsed from first render. */}
+              {aiEnabled && (
                 <a
                   href="https://m.me/haveninlipa"
                   target="_blank"

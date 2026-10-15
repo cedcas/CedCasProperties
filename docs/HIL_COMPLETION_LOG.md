@@ -4,6 +4,212 @@
 
 ---
 
+## 2026-10-14 — Haven AI live bug fixes: fuzzy property-name resolution, deterministic 24+ guest handoff (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,333 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Two more live bugs fixed in `src/lib/haven/*`, on the same branch as the preview-retest
+pass below:
+
+1. **A plausible informal property name got "isn't coming up in our system."** A guest
+   asked "Can we check in early at 9am … at the Mickey Full Family House?" and Haven
+   wrongly said the property wasn't in the system — every slug-taking tool
+   (`get_property_details`, `check_availability`, `get_quote`, `check_early_late`) only
+   ever did an exact-slug `WHERE` lookup, so informal/partial names the model passed
+   through never matched. Added `src/lib/haven/property-resolver.ts`: a pure,
+   DB-free `resolvePropertyMatch(query, listings)` that normalizes case/accents/
+   punctuation, strips a `[...]` bracket prefix and a `" | "`/`"•"` suffix, drops filler
+   tokens ("house", "bahay", "yung", "sa", "ang", "the"), and scores every public listing
+   by token overlap plus a capacity-number bonus (a bare number in the query that matches
+   a listing's `maxGuests` outscores a same-named sibling). A small owner-confirmed alias
+   table (same pattern as `owner-facts.ts`) covers names that don't appear in any DB
+   column at all — "B34"/"B38" block numbers, "Mickey", "pinakamalaki"/"malaki" ("the
+   biggest"), "studio" for the Cozy 1BR, etc. Two or more listings tied at the top score
+   (e.g. a bare "B38" or "Mickey" — all three configurations qualify equally) come back
+   `ambiguous` with a candidate list instead of guessing; `tools.ts`'s new
+   `resolveSlugFallback()` is called by each tool only *after* its existing exact-slug
+   lookup misses, so a model that already got the slug right (the common case) never
+   touches this path at all. `system-prompt.ts` now tells the model to turn an
+   `ambiguous: true` tool result into a short clarifying question naming the candidates,
+   and to never claim a property isn't in the system when a tool result doesn't say so.
+2. **24+ guest handoff wording drifted even with the Messenger link forced on** — the
+   model's own clarifying questions and "exactly max"/"might fit" hedging survived the
+   existing guardrails because they only ever forced the *link*, never the *text*. The
+   model is now skipped entirely for this case: `owner-facts.ts` gained
+   `isLargeGroupMessage()`/`isLargeGroupToolCall()` (the same detection
+   `needsCapacityHandoff()` already used, pulled out into reusable checks) and a fixed,
+   warm `buildLargeGroupHandoffReply()` script in English/Tagalog/Batangueño (`auto` picks
+   English vs. Tagalog the same way `isEnglishContext()` already does — there's no
+   reliable way to detect Batangueño from the guest's own text, so `auto` never produces
+   the `btg` script). `chat-service.ts`'s `runToolLoop()` checks the guest's latest
+   message *before* calling the provider at all (zero tokens, zero cost, logged as
+   `outcome: "handoff"` — a new, additive value in `HavenChatUsage.outcome`, no schema
+   change) and also mid-loop after any tool call, in case a 24+ `find_stay`/`get_quote`
+   call happens without the raw message itself parsing to a number.
+
+Tests: `property-resolver.test.ts` (new — exact-slug fast path, "Mickey Full Family
+House", "mickey 15", the Tagalog "yung malaking bahay ng Mickey", "spacious 2 bedroom",
+"the 1BR", ambiguous "B38"/"Mickey", garbage), `tools.test.ts` (fuzzy fallback for all
+four slug-taking tools, ambiguous-candidates shape, fallback never retried on ambiguity),
+`owner-facts.test.ts` (`isLargeGroupMessage`, `isLargeGroupToolCall`,
+`buildLargeGroupHandoffReply` per language incl. `auto`), `chat-service.test.ts`
+(provider never called for a 24+ message in any language incl. "8 adults + 16 kids", mid-
+loop handoff on a 24+ `find_stay` call, `outcome: "handoff"` logged with zero cost, a
+sub-24 group still reaches the model normally).
+
+---
+
+## 2026-10-14 — Haven AI preview-retest fixes: 24+ handoff parser, early/late fee guard, amenity search, Tagalog-mode Batangueño leak, pricing-arithmetic guard (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,219 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Five bugs found in a preview retest of the H1 AI chat mode, all fixed in `src/lib/haven/*`:
+
+1. **24+ group handoff didn't fire without a tool call.** `Kami ay 24 na tao sa ikalawang
+   Sabado ng Nobyembre. Saan kami pwede?` got a "how many nights?" follow-up instead of a
+   handoff — `needsCapacityHandoff()` only checked `find_stay`/`get_quote` tool-call
+   arguments, never the guest's own wording. Added `parseGuestCount()` (owner-facts.ts): a
+   language-agnostic parser recognizing "24 people/pax/guests/adults", "kami ay 24", "24 na
+   tao", "24 katao", and a split group like "8 adults + 4 kids" (summed) — scoped to a
+   number sitting next to a people-noun, so a date/time/price number is never picked up.
+   `needsCapacityHandoff()` now also checks the parsed count; a new `buildCapacityContextNote()`
+   injects a server-resolved instruction into the system prompt (same pattern as
+   `dateContextNote`) telling the model to hand off immediately rather than ask for more
+   details, with the Messenger button still forced on independently either way.
+2. **Price guard swallowed the approved early-check-in/late-checkout fee.** A reply with a
+   hallucinated per-hour total (the model computing a specific hours × ₱200 figure instead
+   of stating the flat rate) got its whole sentence replaced with the generic "ask us via
+   Messenger" fallback — including the correct ₱200/hour fact that was in the same
+   sentence. Added `FALLBACK_HOURLY_FEE_TEXT` (post-process.ts): any disallowed amount in
+   an early-check-in/late-checkout context now falls back to restating the real ₱200/hour
+   rate instead of deflecting to Messenger. `PESO_AMOUNT_SOURCE` broadened to also
+   recognize "P200" and "200 pesos" phrasing (not just ₱/PHP), and the system prompt now
+   explicitly forbids computing an hours × rate total — state the flat rate only.
+3. **Amenity questions (e.g. "Do you have karaoke?") asked which house first**, because the
+   model only had `get_property_details` (one property at a time). Added a new `find_amenity`
+   tool (tools.ts) that searches every public property's `amenities`/`amenityDetails` for a
+   term and reports which propert(y/ies) have it, or `found: false` if none do — read-only,
+   no write tools exposed. A new `needsAmenityHandoff()` independently forces the Messenger
+   button on whenever `find_amenity` comes back empty.
+4. **Tagalog mode (`lang: "tl"`) leaked Batangueño particles** — "ga"/"baga" as a question
+   particle, "ari"/"ire" as "this/here" — that should be confined to `btg` mode. Added
+   `stripBatanguenoFromTagalog()`, applied whenever the effective reply language is plain
+   Tagalog (`tl` always, or `auto` mirroring a Tagalog-speaking guest): converts "ga"/"baga"
+   → "ba" and "ari"/"ire" → "ito", preserving capitalization. Leaves the "Oo ga" bare-
+   affirmation misuse alone (same carve-out as the btg-mode marker check), and is a no-op
+   for `btg`/`en`.
+5. **HIGH priority — a Thu→Sat quote read as nights × one night's rate**, undercounting a
+   weekend-rate stay (owner report: looked like 2 × ₱2,800 instead of ₱2,800 + ₱3,500 =
+   ₱6,300). `computeBookingQuote`/`getDailyRates` were confirmed correct — every `get_quote`/
+   `find_stay` call already passes the exact full `checkIn`/`checkOut`; the risk was the
+   model doing its own multiplication in prose. Fixed three ways: the system prompt now
+   explicitly bans multiplying/summing a rate itself (a `pricePerNight` "from" figure may
+   only be stated as "from ₱X/night", and the only total/nightlyTotal Haven may state is the
+   one `get_quote`/`find_stay` returned this turn); `get_quote` and `find_stay` now also
+   return a `perNight` breakdown (date, weekday, rate) so Haven can show the nightly split
+   without recomputing it; and a new `PRICE_ARITHMETIC_RE` check in the price guard rejects
+   any "₱2,800 × 2 = ₱5,600"-style arithmetic in the reply outright, even if every number
+   involved happens to be individually valid.
+
+Tests: `owner-facts.test.ts` (`parseGuestCount`, `buildCapacityContextNote`, updated
+`needsCapacityHandoff`), `post-process.test.ts` (hourly-fee fallback reclassification,
+broadened amount formats, `PRICE_ARITHMETIC_RE`, `needsAmenityHandoff`,
+`stripBatanguenoFromTagalog`), `tools.test.ts` (`find_amenity`, `get_quote`'s `perNight`
+breakdown on a Thu→Sat weekend-rate stay), `system-prompt.test.ts` (arithmetic ban, early/
+late fee rule), and `chat-service.test.ts` end-to-end coverage of the exact field-reported
+24-guest sentence, the amenity handoff, and the Tagalog-mode particle leak.
+
+---
+
+## 2026-10-14 — Haven AI chat-widget bug fix: topic chips expanded on the welcome screen (fix/haven-ai-guardrails-101426, PR #84)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on
+`fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Owner screenshot on `dev` (after PR #83 merged) showed that with the AI flag on, the
+welcome screen still rendered all 7 topic chips expanded, pushing the conversation down —
+the collapse was gated on `aiModeActive = aiEnabled && lastMode === "ai"`, but the welcome
+message always comes from the static tree (`lastMode: "tree"`), so chips started expanded
+on first render and stayed expanded after any static-tree turn. Fixed in
+`ChatWidget.tsx`: the topic-chip collapse-behind-"Topics"-toggle and the persistent "Talk
+to a Human" (`m.me/haveninlipa`) link now gate on `aiEnabled` alone, not `lastMode` —
+collapsed by default from the very first render (including a restored `sessionStorage`
+session), regardless of whether the latest reply was AI-generated or static. Topics
+re-collapse after a chip tap (already did) and now also after the guest sends a free-text
+message (`setTopicsOpen(false)` added to `handleFreeTextSubmit`). `aiModeActive` is
+unchanged and still gates the AI-reply scroll-to-top-of-message behavior, which is
+specifically about "did the latest message come from the AI" rather than "is AI mode on."
+Flag-off (`aiEnabled` false) is untouched — renders exactly as before.
+
+Tests: `ChatWidget.test.ts` extended — AI mode now asserts the Topics toggle and no chip
+buttons on first render (before any message) with the Messenger link present, that tapping
+Topics expands all 7, that chips collapse again after a guest message with the AI bubble
+still rendering correctly, and that a static-fallback turn mid-conversation keeps the root
+7 chips collapsed with the Messenger link still present (previously asserted the opposite).
+
+---
+
+## 2026-10-14 — Haven AI owner guardrails and facts: capacity, payment, early-check-in/late-checkout fee, quiet hours, karaoke, plus dadalaw/English/name/date-statement fixes (fix/haven-ai-guardrails-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-guardrails-101426`, PR open against `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+Cedric (the Owner) reviewed H1's live behavior and approved a batch of additional facts and
+guardrails, all sourced in a new single-source-of-truth module, `src/lib/haven/owner-facts.ts`
+(dated "Cedric, 2026-10-14"):
+- **Never ask the guest's budget** — prompt rule plus `stripBudgetQuestions()` drops the
+  sentence regardless of what the model says.
+- **Capacity is 24 guests combined, across both houses, and counts adults** — there is no
+  documented age policy for kids/babies, so Haven must never claim they're free or
+  uncounted, and must never promise flexibility for a 24+ guest group, squeezing in extra
+  people, or an extra bed/mattress. `needsCapacityHandoff()`/`ensureCapacityHandoffLink()`
+  force the Messenger button on for any of those triggers independent of the model's own
+  wording; `removeKidsFreeClaims()` replaces a wrongful "kids are free/uncounted" claim
+  with a Messenger-confirmation sentence.
+- **Full payment is due at booking** — no half payment, no deposit-to-reserve — stated
+  directly from the owner-facts prompt block.
+- **Early check-in/late checkout is ₱200/hour, every listing, subject to availability** —
+  `OWNER_FACT_ALLOWED_AMOUNTS` (`{200}`) is merged into the price guard's allowlist so this
+  fact can be stated without a tool call. A new read-only tool, `check_early_late(slug,
+  date, kind)`, answers a date-specific question from `getInventoryScopeConflicts()` (the
+  same commit-time check the booking flow uses, covering bookings, manual blocks, iCal
+  events, and shared-inventory siblings), returning `likely_possible`/`not_possible`/
+  `unknown` — never a promise.
+- **Quiet hours (10 PM–8 AM) and the other identical-everywhere house rules** (no pets, no
+  smoking inside, no parties/events without approval) get a direct general answer instead
+  of "which house?" — only a genuinely differing rule (e.g. check-in time) still names the
+  difference.
+- **Karaoke/equipment answers only from `amenities`/`amenityDetails`** — marketing copy
+  (e.g. "a karaoke-and-lechon dinner") is never read as a confirmed-equipment claim.
+- **Leftover fixes bundled into the same PR**: `shortenPropertyNamesInText()` applies the
+  existing bracket/pipe name shortener to reply text, not just link labels;
+  `ensureDatesStated()`/`firstResolvedDateRange()` make an English reply state its resolved
+  dates explicitly even when the model's prose omits them; `isEnglishContext()`/
+  `stripTagalogWordsInEnglish()` strip a stray Tagalog word from an English reply;
+  `fixDadalawPhrasing()` rewrites "ilang guests ang dadalaw" (confusing — "dadalaw" means
+  "to visit") to "Ilang guests kayo?"/"Ilan ga kayo?".
+
+New/updated tests: `owner-facts.test.ts` (new), `tools.test.ts` (`check_early_late`'s three
+outcomes, a shared-inventory-sibling conflict, an imported-iCal-event conflict),
+`post-process.test.ts` (the six new text-level guardrails), `system-prompt.test.ts` (scoped
+the few-shot-only price-free assertion now that the owner-facts block legitimately states
+₱200), and nine new `chat-service.test.ts` end-to-end cases.
+
+---
+
 ## 2026-10-14 — Haven AI terms-of-address pass: provisional-dedupe punctuation cleanup, per-option booking-link dedup, single-offer labels, gendered/neutral address terms, "ga"/"baga" question-only guidance (fix/haven-ai-polish-101426, DEC-029)
 
 Area: Website

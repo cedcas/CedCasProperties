@@ -16,9 +16,29 @@ import {
   limitToOneProvisional,
   ensureBatanguenoMarker,
   enforceTermsOfAddress,
+  shortenPropertyNamesInText,
+  fixDadalawPhrasing,
+  isEnglishContext,
+  stripTagalogWordsInEnglish,
+  firstResolvedDateRange,
+  ensureDatesStated,
+  needsAmenityHandoff,
+  stripBatanguenoFromTagalog,
+  MESSENGER_HREF,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
+import {
+  OWNER_FACT_ALLOWED_AMOUNTS,
+  stripBudgetQuestions,
+  removeKidsFreeClaims,
+  needsCapacityHandoff,
+  ensureCapacityHandoffLink,
+  buildCapacityContextNote,
+  isLargeGroupMessage,
+  isLargeGroupToolCall,
+  buildLargeGroupHandoffReply,
+} from "./owner-facts";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
   havenAiActive,
@@ -71,6 +91,23 @@ interface ToolLoopResult {
   inputTokens: number;
   outputTokens: number;
   toolCalls: number;
+  outcome: "ai" | "handoff";
+}
+
+const MESSENGER_BUTTON: LinkButton = { label: "Message us on Messenger", href: MESSENGER_HREF };
+
+/** The deterministic 24+ guest reply, skipping the model entirely (see owner-facts.ts). */
+function largeGroupHandoffResult(
+  lang: HavenLang,
+  guestMessages: string,
+  partial: { toolNames: string[]; inputTokens: number; outputTokens: number; toolCalls: number }
+): ToolLoopResult {
+  return {
+    reply: buildLargeGroupHandoffReply(lang, guestMessages),
+    links: [MESSENGER_BUTTON],
+    outcome: "handoff",
+    ...partial,
+  };
 }
 
 /**
@@ -101,7 +138,23 @@ function dateContextNote(latestUserMessage: string, now: Date): string {
  */
 async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopResult> {
   const provider = getChatProvider();
-  const system = buildHavenSystemPrompt(body.lang as HavenLang) + dateContextNote(lastUserMessage(body.messages), now);
+  const latestMessage = lastUserMessage(body.messages);
+  const lang = body.lang as HavenLang;
+  const guestMessages = body.messages
+    .filter((m) => m.role === "user")
+    .map((m) => m.content)
+    .join(" ");
+
+  // 24+ guests: a fixed script, not the model — see owner-facts.ts. Checked before the
+  // model is ever called so a guest's own message never reaches it for this case at all.
+  if (isLargeGroupMessage(latestMessage)) {
+    return largeGroupHandoffResult(lang, guestMessages, { toolNames: [], inputTokens: 0, outputTokens: 0, toolCalls: 0 });
+  }
+
+  const system =
+    buildHavenSystemPrompt(lang) +
+    dateContextNote(latestMessage, now) +
+    buildCapacityContextNote(latestMessage);
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -130,28 +183,45 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
       toolExchangesThisTurn.push({ name: call.name, input: call.input, result: toolResult });
       messages.push({ role: "tool", toolCallId: call.id, name: call.name, content: JSON.stringify(toolResult) });
     }
+
+    // Caught here, not just from the guest's own wording above, for a tool call the model
+    // itself made with guests >= 24 (e.g. ambiguous phrasing the parser above missed).
+    if (isLargeGroupToolCall(toolExchangesThisTurn)) {
+      return largeGroupHandoffResult(lang, guestMessages, { toolNames: [...toolNames], inputTokens, outputTokens, toolCalls });
+    }
   }
 
   if (!text.trim()) text = NO_ANSWER_FALLBACK;
 
+  const englishMode = isEnglishContext(lang, guestMessages);
+
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
-  const guestMessages = body.messages
-    .filter((m) => m.role === "user")
-    .map((m) => m.content)
-    .join(" ");
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(text, allowedAmounts));
-  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, body.lang as HavenLang);
+  OWNER_FACT_ALLOWED_AMOUNTS.forEach((amount) => allowedAmounts.add(amount));
+
+  const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
+  const noBudgetAsk = stripBudgetQuestions(named);
+  const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
+  const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));
+  const termsChecked = enforceTermsOfAddress(priceChecked, guestMessages, lang);
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
-  const reply = body.lang === "btg" ? ensureBatanguenoMarker(strippedReply) : strippedReply;
+  const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
+  const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
+  const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);
+  const reply = lang === "btg" ? ensureBatanguenoMarker(batanguenoFixed) : batanguenoFixed;
+
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);
   // bookingLinks may legitimately repeat the same href across different find_stay options —
   // only dedupe the model's own prose links against each other and against bookingLinks,
   // never bookingLinks against itself.
   const bookingHrefs = new Set(bookingLinks.map((l) => l.href));
   const dedupedModelLinks = dedupeLinks(modelLinks).filter((l) => !bookingHrefs.has(l.href));
-  const links = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const forceHandoff =
+    needsCapacityHandoff(latestMessage, toolExchangesThisTurn) || needsAmenityHandoff(toolExchangesThisTurn);
+  const links = ensureCapacityHandoffLink(handoffLinks, forceHandoff);
 
-  return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls };
+  return { reply, links, toolNames: [...toolNames], inputTokens, outputTokens, toolCalls, outcome: "ai" };
 }
 
 async function logUsage(opts: {
@@ -160,7 +230,7 @@ async function logUsage(opts: {
   inputTokens: number;
   outputTokens: number;
   toolCalls: number;
-  outcome: "ai" | "error";
+  outcome: "ai" | "error" | "handoff";
   reason?: string;
 }): Promise<void> {
   try {
@@ -249,7 +319,7 @@ export async function handleHavenChat(rawBody: unknown, ip: string, now: Date = 
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       toolCalls: result.toolCalls,
-      outcome: "ai",
+      outcome: result.outcome,
     });
     await persistTranscript({
       sessionId: body.sessionId,

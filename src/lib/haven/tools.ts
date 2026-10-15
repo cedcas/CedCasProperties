@@ -2,13 +2,14 @@ import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPublicListings, getPublicListingGroups } from "@/lib/listings";
-import { getPropertyConflicts, formatConflictRange } from "@/lib/availability";
+import { getPropertyConflicts, getInventoryScopeConflicts, formatConflictRange } from "@/lib/availability";
 import { computeBookingQuote } from "@/lib/booking-quote";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
-import { toUtcMidnight } from "@/lib/dates";
+import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
+import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
 import type { ToolDefinition } from "./provider";
 
 /**
@@ -29,6 +30,59 @@ function safeJsonParse<T>(text: string | null | undefined, fallback: T): T {
 
 function bookingLink(slug: string, checkIn: string, checkOut: string, guests: number): string {
   return `/properties/${slug}/book?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}`;
+}
+
+export interface AmbiguousPropertyResult {
+  ambiguous: true;
+  candidates: PropertyCandidate[];
+  message: string;
+}
+
+/**
+ * Every slug-taking tool calls this on a miss, never on a first hit — an exact slug the
+ * model already got right (the common case) never touches this or `getPublicListings()`.
+ * Resolves the guest's informal/partial property name against the public listings
+ * (DEC-029 — still never decides anything itself, just maps a name to an existing slug)
+ * and returns either a resolved slug to retry the lookup with, or a tool-result shape the
+ * caller returns verbatim: an ambiguity list the model should turn into a short
+ * clarifying question, or the same "Property not found." error as before when nothing
+ * plausible matches.
+ */
+async function resolveSlugFallback(
+  rawSlug: string
+): Promise<{ ok: true; slug: string } | { ok: false; result: AmbiguousPropertyResult | { error: string } }> {
+  let listings: Awaited<ReturnType<typeof getPublicListings>>;
+  try {
+    listings = await getPublicListings();
+  } catch {
+    listings = [];
+  }
+  const resolved = resolvePropertyMatch(rawSlug, Array.isArray(listings) ? listings : []);
+  if (resolved.status === "unique") return { ok: true, slug: resolved.slug };
+  if (resolved.status === "ambiguous") {
+    return {
+      ok: false,
+      result: {
+        ambiguous: true,
+        candidates: resolved.candidates,
+        message: "Multiple properties could match that name — ask the guest which one they mean, listing these names, instead of saying none exist.",
+      },
+    };
+  }
+  return { ok: false, result: { error: "Property not found." } };
+}
+
+/**
+ * Per-night (date, weekday, rate) rows from a quote's own `dailyRates` — so Haven can
+ * optionally show a stay's nightly breakdown (e.g. a weekday vs. weekend rate) without
+ * ever having to add the nights up itself (DEC-029 — see system-prompt.ts's ban on the
+ * model multiplying/summing rates). Filters out any entry missing a `date` defensively;
+ * every real `getDailyRates` row has one, this only guards a malformed input.
+ */
+function dailyRateBreakdown(dailyRates: { date: string; rate: number }[]): { date: string; weekday: string; rate: number }[] {
+  return dailyRates
+    .filter((d) => typeof d.date === "string")
+    .map((d) => ({ date: d.date, weekday: formatStayDate(d.date, { weekday: "long" }), rate: d.rate }));
 }
 
 export interface HavenToolSpec<Args = unknown> {
@@ -108,24 +162,27 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
   },
   schema: getPropertyDetailsSchema,
   handler: async ({ slug }) => {
-    const p = await prisma.property.findFirst({
-      where: { slug, isActive: true, pricePerNight: { gt: 0 } },
-      select: {
-        slug: true,
-        name: true,
-        description: true,
-        amenities: true,
-        amenityDetails: true,
-        propertyRules: true,
-        housePolicies: true,
-        pricingNotes: true,
-        propertyFaqs: true,
-        neighborhoodPlaces: true,
-        maxGuests: true,
-        includedGuests: true,
-        extraGuestFeePerNight: true,
-      },
-    });
+    const select = {
+      slug: true,
+      name: true,
+      description: true,
+      amenities: true,
+      amenityDetails: true,
+      propertyRules: true,
+      housePolicies: true,
+      pricingNotes: true,
+      propertyFaqs: true,
+      neighborhoodPlaces: true,
+      maxGuests: true,
+      includedGuests: true,
+      extraGuestFeePerNight: true,
+    } as const;
+    let p = await prisma.property.findFirst({ where: { slug, isActive: true, pricePerNight: { gt: 0 } }, select });
+    if (!p) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      p = await prisma.property.findFirst({ where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } }, select });
+    }
     if (!p) return { error: "Property not found." };
 
     const occupancy = {
@@ -183,10 +240,18 @@ const checkAvailabilityTool: HavenToolSpec<z.infer<typeof checkAvailabilitySchem
   },
   schema: checkAvailabilitySchema,
   handler: async ({ slug, checkIn, checkOut }) => {
-    const property = await prisma.property.findFirst({
+    let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true },
     });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true },
+      });
+    }
     if (!property) return { error: "Property not found." };
 
     const start = toUtcMidnight(checkIn);
@@ -230,10 +295,18 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
   },
   schema: getQuoteSchema,
   handler: async ({ slug, checkIn, checkOut, guests }) => {
-    const property = await prisma.property.findFirst({
+    let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true, name: true },
     });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) return fallback.result;
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true, name: true },
+      });
+    }
     if (!property) return { error: "Property not found." };
 
     const result = await computeBookingQuote({ propertyId: property.id, checkIn, checkOut, guests });
@@ -247,6 +320,9 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
       discountAmount: quote.discountAmount,
       total: quote.total,
       nights: quote.dailyRates.length,
+      // Per-night (date, weekday, rate) rows — state the `total` above for the stay; never
+      // multiply/sum these rows yourself (see system-prompt.ts).
+      perNight: dailyRateBreakdown(quote.dailyRates),
       bookingLink: bookingLink(slug, checkIn, checkOut, guests),
     };
   },
@@ -413,7 +489,11 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
               name: p.name,
               guests: combo.guestSplit[i],
               quote: quoteResult.ok
-                ? { total: quoteResult.quote.total, nightlyTotal: quoteResult.quote.nightlyTotal }
+                ? {
+                    total: quoteResult.quote.total,
+                    nightlyTotal: quoteResult.quote.nightlyTotal,
+                    perNight: dailyRateBreakdown(quoteResult.quote.dailyRates),
+                  }
                 : null,
               bookingLink: bookingLink(p.slug, checkIn, checkOut, combo.guestSplit[i]),
             };
@@ -427,6 +507,129 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
     );
 
     return { options };
+  },
+};
+
+// ── check_early_late ──────────────────────────────────────────────────────────
+
+export type EarlyLateStatus = "likely_possible" | "not_possible" | "unknown";
+
+export interface EarlyLateResult {
+  status: EarlyLateStatus;
+  reason: string;
+  standardTime: string | null;
+  fee: string;
+}
+
+const EARLY_LATE_FEE_LABEL = `₱${HOURLY_FEE_RATE}/hour`;
+
+type HousePoliciesShape = { checkInTime?: string; checkOutTime?: string };
+
+const checkEarlyLateSchema = z.object({
+  slug: z.string().min(1).max(200),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  kind: z.enum(["early_checkin", "late_checkout"]),
+});
+
+/**
+ * Date-aware early check-in / late checkout check. Early check-in on `date` is blocked
+ * if some stay/block occupies the night before it (a conflict ending exactly on `date`);
+ * late checkout on `date` is blocked if some stay/block occupies the night of `date`
+ * itself (a conflict starting exactly on `date`). Uses `getInventoryScopeConflicts` —
+ * the same commit-time check the booking flow uses — so a shared-inventory sibling
+ * booking or an imported Airbnb iCal event blocks the fee the same way a direct booking
+ * does. Never promises a fee is approved: at most "likely possible, subject to
+ * confirmation" (DEC-029 — no tool computes an availability *decision* on its own, this
+ * only ever relays what `getInventoryScopeConflicts` already found).
+ */
+const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = {
+  definition: {
+    name: "check_early_late",
+    description:
+      "Check whether an early check-in or late checkout is likely possible for a specific " +
+      "property and date, given other guests' stays/blocks on neighboring nights. Always " +
+      "subject to confirmation — never state a fee is approved from this tool alone.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        slug: { type: "string" },
+        date: { type: "string", description: "YYYY-MM-DD — the check-in (early) or check-out (late) date in question." },
+        kind: { type: "string", enum: ["early_checkin", "late_checkout"] },
+      },
+      required: ["slug", "date", "kind"],
+      additionalProperties: false,
+    },
+  },
+  schema: checkEarlyLateSchema,
+  handler: async ({ slug, date, kind }) => {
+    const unknown = (reason: string, standardTime: string | null = null): EarlyLateResult => ({
+      status: "unknown",
+      reason,
+      standardTime,
+      fee: EARLY_LATE_FEE_LABEL,
+    });
+
+    let property = await prisma.property.findFirst({
+      where: { slug, isActive: true, pricePerNight: { gt: 0 } },
+      select: { id: true, housePolicies: true },
+    });
+    if (!property) {
+      const fallback = await resolveSlugFallback(slug);
+      if (!fallback.ok) {
+        if ("ambiguous" in fallback.result) return fallback.result;
+        return unknown(fallback.result.error);
+      }
+      property = await prisma.property.findFirst({
+        where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
+        select: { id: true, housePolicies: true },
+      });
+    }
+    if (!property) return unknown("Property not found.");
+
+    const target = toUtcMidnight(date);
+    if (isNaN(target.getTime())) return unknown("Invalid date.");
+
+    const policies = safeJsonParse<HousePoliciesShape>(property.housePolicies, {});
+    const standardTime = (kind === "early_checkin" ? policies.checkInTime : policies.checkOutTime) ?? null;
+
+    let conflicts;
+    try {
+      conflicts = await getInventoryScopeConflicts({
+        propertyId: property.id,
+        start: addUtcDays(target, -1),
+        end: addUtcDays(target, 1),
+      });
+    } catch {
+      return unknown("Could not check availability for that date right now.", standardTime);
+    }
+
+    const targetTime = target.getTime();
+    const blocked =
+      kind === "early_checkin"
+        ? conflicts.some((c) => c.end.getTime() === targetTime)
+        : conflicts.some((c) => c.start.getTime() === targetTime);
+
+    if (blocked) {
+      return {
+        status: "not_possible",
+        reason:
+          kind === "early_checkin"
+            ? "Another guest is staying the night before and the house won't be ready early that day."
+            : "Another guest is checking in that same day, so a late checkout isn't possible.",
+        standardTime,
+        fee: EARLY_LATE_FEE_LABEL,
+      };
+    }
+
+    return {
+      status: "likely_possible",
+      reason:
+        kind === "early_checkin"
+          ? "No other guest is staying the night before, but this is always subject to confirmation with the team."
+          : "No other guest is checking in that day, but this is always subject to confirmation with the team.",
+      standardTime,
+      fee: EARLY_LATE_FEE_LABEL,
+    };
   },
 };
 
@@ -465,6 +668,50 @@ const getFaqTool: HavenToolSpec<z.infer<typeof getFaqSchema>> = {
   },
 };
 
+// ── find_amenity ──────────────────────────────────────────────────────────────
+
+const findAmenitySchema = z.object({ term: z.string().min(1).max(100) });
+
+/**
+ * Searches EVERY public property's amenities + amenityDetails for one item (karaoke,
+ * videoke, pool, grill, etc.) — so the model never has to ask "which house?" before it
+ * knows whether we have something at all, and never falls back to inferring equipment
+ * from marketing/description copy (DEC-029 addendum — see owner-facts.ts).
+ */
+const findAmenityTool: HavenToolSpec<z.infer<typeof findAmenitySchema>> = {
+  definition: {
+    name: "find_amenity",
+    description:
+      "Search ALL public properties' amenities/amenityDetails for a specific item (e.g. " +
+      "karaoke, videoke, pool, grill). ALWAYS use this for an amenity/equipment question " +
+      "instead of asking which house has it, and never infer equipment from marketing copy.",
+    inputSchema: {
+      type: "object",
+      properties: { term: { type: "string", description: "The amenity/equipment the guest asked about, e.g. 'karaoke'." } },
+      required: ["term"],
+      additionalProperties: false,
+    },
+  },
+  schema: findAmenitySchema,
+  handler: async ({ term }) => {
+    const properties = await prisma.property.findMany({
+      where: { isActive: true, pricePerNight: { gt: 0 } },
+      select: { slug: true, name: true, amenities: true, amenityDetails: true },
+    });
+
+    const needle = term.trim().toLowerCase();
+    const matches: { slug: string; name: string }[] = [];
+    for (const p of properties) {
+      const amenities = safeJsonParse<string[]>(p.amenities, []);
+      const amenityDetails = safeJsonParse<unknown[]>(p.amenityDetails, []);
+      const haystack = [...amenities, ...amenityDetails.map((d) => JSON.stringify(d))].join(" | ").toLowerCase();
+      if (haystack.includes(needle)) matches.push({ slug: p.slug, name: p.name });
+    }
+
+    return matches.length > 0 ? { found: true, properties: matches } : { found: false, properties: [] };
+  },
+};
+
 // ── Registry ───────────────────────────────────────────────────────────────
 
 /** Type-erased storage shape — every tool's handler is called only after its own `schema`
@@ -490,7 +737,9 @@ export const HAVEN_TOOLS: HavenToolEntry[] = [
   defineTool(checkAvailabilityTool),
   defineTool(getQuoteTool),
   defineTool(findStayTool),
+  defineTool(checkEarlyLateTool),
   defineTool(getFaqTool),
+  defineTool(findAmenityTool),
 ];
 
 export function getToolDefinitions(): ToolDefinition[] {
