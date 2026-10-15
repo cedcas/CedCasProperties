@@ -1,11 +1,13 @@
 import "server-only";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { getPublicListings } from "@/lib/listings";
 import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
 import { resolveDates } from "./dates";
+import { buildPropertyContextNote, dropUnknownPropertyClaims, resolveGuestPropertyMention } from "./property-resolver";
 import {
   extractAllowedLinks,
   collectToolAmounts,
@@ -41,6 +43,7 @@ import {
   isLargeGroupMessage,
   isLargeGroupToolCall,
   buildLargeGroupHandoffReply,
+  parseGuestCount,
 } from "./owner-facts";
 import { checkRateLimit, checkMonthlyCapAndAlert, hashIp } from "./rate-limit";
 import {
@@ -218,10 +221,32 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     return largeGroupHandoffResult(lang, guestMessages, { toolNames: [], inputTokens: 0, outputTokens: 0, toolCalls: 0 });
   }
 
+  // Property-name pre-resolution (DEC-029, 2026-10-15 live-retest fix): same pattern as
+  // the date/capacity context notes above — resolved BEFORE the model is called, so an
+  // identity (or a clarifying question) is available even on a turn where the model
+  // answers free-text without calling a tool. See property-resolver.ts.
+  let publicListings: Awaited<ReturnType<typeof getPublicListings>> = [];
+  try {
+    publicListings = await getPublicListings();
+  } catch {
+    publicListings = [];
+  }
+  const propertyResolution = resolveGuestPropertyMention(
+    latestMessage,
+    Array.isArray(publicListings) ? publicListings : []
+  );
+  const resolvedDates = resolveDates(latestMessage, now);
+  const guestCount = parseGuestCount(latestMessage);
+
   const system =
     buildHavenSystemPrompt(lang) +
     dateContextNote(latestMessage, now) +
-    buildCapacityContextNote(latestMessage);
+    buildCapacityContextNote(latestMessage) +
+    buildPropertyContextNote(propertyResolution, {
+      checkIn: resolvedDates?.checkIn,
+      checkOut: resolvedDates?.checkOut,
+      guests: guestCount,
+    });
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -266,7 +291,8 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   OWNER_FACT_ALLOWED_AMOUNTS.forEach((amount) => allowedAmounts.add(amount));
 
   const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
-  const noBudgetAsk = stripBudgetQuestions(named);
+  const propertyKnown = dropUnknownPropertyClaims(named, propertyResolution, lang, guestMessages);
+  const noBudgetAsk = stripBudgetQuestions(propertyKnown);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(dadalawFixed, allowedAmounts));

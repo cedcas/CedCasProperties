@@ -1,5 +1,6 @@
 import { buildShortNames } from "@/lib/listings";
-import { stripToBaseName } from "./post-process";
+import { isEnglishContext, replaceMatchingSentences, shortPropertyLabels, stripToBaseName } from "./post-process";
+import type { HavenLang } from "./system-prompt";
 
 /**
  * Fuzzy property-name resolution for every Haven tool that takes a `slug` (DEC-029 —
@@ -20,7 +21,7 @@ export type ResolveResult =
   | { status: "ambiguous"; candidates: PropertyCandidate[] }
   | { status: "none" };
 
-interface ResolvableListing {
+export interface ResolvableListing {
   slug: string;
   name: string;
   maxGuests: number;
@@ -129,4 +130,152 @@ export function resolvePropertyMatch(query: string, listings: ResolvableListing[
     status: "ambiguous",
     candidates: top.map(({ listing }) => ({ slug: listing.slug, name: shortNames.get(listing.slug) ?? listing.name })),
   };
+}
+
+// ── Server-side pre-resolution (DEC-029 live-retest fix, 2026-10-15) ───────────
+//
+// `resolveSlugFallback` in tools.ts only ever runs AFTER a tool call already missed — so
+// it never helps on a turn where the model answers free-text without calling a tool at
+// all (the live bug: Haiku replied "hindi ko alam ang property na 'yan" / asked for the
+// exact name instead of using the guest's own wording). The functions below run on the
+// guest's latest message BEFORE the model is ever called (same pattern as
+// chat-service.ts's `dateContextNote` and owner-facts.ts's `buildCapacityContextNote`),
+// so an identity (or a clarifying question) is already available on turn one.
+
+export interface PropertyMentionOption {
+  slug: string;
+  label: string;
+  maxGuests: number;
+}
+
+export type PropertyMentionResolution =
+  | { status: "none" }
+  | { status: "unique"; slug: string; label: string }
+  | { status: "ambiguous"; options: PropertyMentionOption[] };
+
+/**
+ * Resolves the guest's latest message against the public listings, the same way
+ * `resolveSlugFallback` resolves a model-supplied slug — but pure and listing-set aware,
+ * so `label` is always the properly disambiguated short name (e.g. "Mickey in Lipa — Full
+ * Family House"), not just whatever a single tool result happened to carry this turn.
+ */
+export function resolveGuestPropertyMention(
+  guestMessage: string,
+  listings: ResolvableListing[]
+): PropertyMentionResolution {
+  const resolved = resolvePropertyMatch(guestMessage, listings);
+  if (resolved.status === "none") return { status: "none" };
+
+  const shortNames = shortPropertyLabels(listings.map((l) => ({ slug: l.slug, name: l.name })));
+
+  if (resolved.status === "ambiguous") {
+    const options = resolved.candidates.map((c) => {
+      const listing = listings.find((l) => l.slug === c.slug);
+      return {
+        slug: c.slug,
+        label: shortNames.get(c.slug) ?? stripToBaseName(c.name),
+        maxGuests: listing?.maxGuests ?? 0,
+      };
+    });
+    return { status: "ambiguous", options };
+  }
+
+  return {
+    status: "unique",
+    slug: resolved.slug,
+    label: shortNames.get(resolved.slug) ?? stripToBaseName(resolved.name),
+  };
+}
+
+export interface PropertyContextDates {
+  checkIn?: string;
+  checkOut?: string;
+  guests?: number | null;
+}
+
+/**
+ * Server-resolved context note for the model, appended to the system prompt (same pattern
+ * as `dateContextNote`/`buildCapacityContextNote`). A unique match tells the model which
+ * slug to use and forbids asking for the name again; an ambiguous match hands it the exact
+ * short-named candidate list to turn into a clarifying question, never a claim the
+ * property is unknown. When the dates and guest count are ALSO already known this turn, a
+ * unique match additionally tells the model to call `get_quote` immediately rather than
+ * asking the guest to repeat information it already gave.
+ */
+export function buildPropertyContextNote(
+  resolution: PropertyMentionResolution,
+  dates: PropertyContextDates = {}
+): string {
+  if (resolution.status === "none") return "";
+
+  if (resolution.status === "ambiguous") {
+    const list = resolution.options.map((o) => `${o.label} (sleeps up to ${o.maxGuests})`).join("; ");
+    return (
+      "\n\nContext (already detected by the system, not a guest claim): the guest's latest " +
+      `message could mean more than one property: ${list}. Ask the guest which one they mean, ` +
+      "in their active language, naming these options — never say the property is unknown, " +
+      "not in our system, or that you don't recognize it."
+    );
+  }
+
+  let note =
+    "\n\nContext (already resolved by the system, not a guest claim): the guest's latest " +
+    `message refers to "${resolution.label}" (slug ${resolution.slug}). Use this exact slug ` +
+    "for any tool call about this property this turn, and do not ask the guest to name or " +
+    "confirm the property.";
+
+  if (dates.checkIn && dates.checkOut && typeof dates.guests === "number" && dates.guests > 0) {
+    note +=
+      ` The guest's dates (checkIn=${dates.checkIn}, checkOut=${dates.checkOut}) and guest ` +
+      `count (${dates.guests}) are also already known this turn — call get_quote now with ` +
+      `slug=${resolution.slug}, checkIn=${dates.checkIn}, checkOut=${dates.checkOut}, ` +
+      `guests=${dates.guests} instead of asking again.`;
+  }
+  return note;
+}
+
+/**
+ * Backstop for the same guardrail: independent of whatever the system prompt instructs,
+ * drop any sentence/bullet line claiming the property is unknown or not in the system
+ * whenever the server itself already found a match or an ambiguity list — replacing it
+ * with a clarifying "did you mean ...?" question instead of leaving a contradictory claim
+ * in the reply (the model resolved nothing, so it must never SAY it found nothing).
+ */
+const UNKNOWN_PROPERTY_CLAIM_RE =
+  /hindi ko alam ang property|hindi ko alam (?:ang|yung) (?:bahay|unit)|not in our system|isn['’]?t in our (?:system|listings)|don['’]?t recognize (?:that|this) propert(?:y|ies)|isn['’]?t coming up|not coming up/i;
+
+function joinOptionLabels(labels: string[], english: boolean): string {
+  if (labels.length === 0) return "";
+  if (labels.length === 1) return labels[0];
+  const head = labels.slice(0, -1).join(", ");
+  const last = labels[labels.length - 1];
+  return english ? `${head}, or ${last}` : `${head}, o ${last}`;
+}
+
+function unknownPropertyReplacement(
+  resolution: PropertyMentionResolution,
+  lang: HavenLang,
+  guestMessages: string
+): string {
+  const english = isEnglishContext(lang, guestMessages);
+  if (resolution.status === "ambiguous") {
+    const list = joinOptionLabels(resolution.options.map((o) => o.label), english);
+    return english ? `Did you mean ${list}?` : `Alin po sa ${list} ang sinasabi n'yo?`;
+  }
+  if (resolution.status === "unique") {
+    return english ? `Did you mean ${resolution.label}?` : `Ang ${resolution.label} po ba ang sinasabi n'yo?`;
+  }
+  return "";
+}
+
+export function dropUnknownPropertyClaims(
+  text: string,
+  resolution: PropertyMentionResolution,
+  lang: HavenLang,
+  guestMessages: string
+): string {
+  if (resolution.status === "none") return text;
+  const replacement = unknownPropertyReplacement(resolution, lang, guestMessages);
+  if (!replacement) return text;
+  return replaceMatchingSentences(text, UNKNOWN_PROPERTY_CLAIM_RE, replacement);
 }

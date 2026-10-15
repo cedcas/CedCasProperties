@@ -53,6 +53,21 @@ describe("list_properties", () => {
     expect(result[0].maxGuests).toBe(5);
     expect(result[0]).not.toHaveProperty("airbnbIcsUrl");
   });
+
+  it("includes a shortName, disambiguated against the full listing set (DEC-029, 2026-10-15)", async () => {
+    listingsApi.getPublicListings.mockResolvedValue([
+      { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", type: "House", location: "Lipa City", pricePerNight: 5000, bedrooms: 2, bathrooms: 1, maxGuests: 7 },
+      { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", type: "House", location: "Lipa City", pricePerNight: 6000, bedrooms: 2, bathrooms: 2, maxGuests: 11 },
+      { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", type: "House", location: "Lipa City", pricePerNight: 6500, bedrooms: 3, bathrooms: 2, maxGuests: 15 },
+    ]);
+
+    const result = (await runHavenTool("list_properties", {})) as Array<Record<string, unknown>>;
+    expect(result.map((p) => p.shortName)).toEqual([
+      "Mickey in Lipa — Family Staycation",
+      "Mickey in Lipa — Family House",
+      "Mickey in Lipa — Full Family House",
+    ]);
+  });
 });
 
 describe("check_availability", () => {
@@ -421,6 +436,38 @@ describe("get_property_details", () => {
     db.property.findFirst.mockResolvedValue(null);
     const result = await runHavenTool("get_property_details", { slug: "ghost" });
     expect(result).toEqual({ error: "Property not found." });
+  });
+
+  it("includes a shortName disambiguated against the full listing set, not just this one result (DEC-029, 2026-10-15)", async () => {
+    db.property.findFirst.mockResolvedValue({
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+      name: "Mickey in Lipa | Full Family House•Sleeps 15",
+      description: "The big one.",
+      amenities: "[]",
+      amenityDetails: null,
+      propertyRules: null,
+      housePolicies: null,
+      pricingNotes: null,
+      propertyFaqs: null,
+      neighborhoodPlaces: null,
+      maxGuests: 15,
+      includedGuests: 10,
+      extraGuestFeePerNight: 300,
+    });
+    // Only this ONE Mickey configuration is in the listing set the tool fetches for
+    // disambiguation — proving the short name still comes back distinguishable even when
+    // its siblings aren't part of this particular call.
+    listingsApi.getPublicListings.mockResolvedValue([
+      { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7 },
+      { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11 },
+      { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15 },
+    ]);
+
+    const result = (await runHavenTool("get_property_details", {
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+    })) as Record<string, unknown>;
+
+    expect(result.shortName).toBe("Mickey in Lipa — Full Family House");
   });
 });
 

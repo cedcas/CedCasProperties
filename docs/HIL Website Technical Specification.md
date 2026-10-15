@@ -1,6 +1,33 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-15 (Haven AI owner guardrails — base-rate "from"/"simula" prefix
+> **Last updated:** 2026-10-15 (Haven AI: server-side property-name pre-resolution +
+> `shortName` on every property tool result, same branch `fix/haven-ai-freetext-reset-101526`:
+> [Haven AI Chat](#haven-ai-chat) — two more live-retest failures, both because
+> `property-resolver.ts`'s fuzzy resolver only ever ran *after* a model tool call already
+> missed a slug, so it never helped on a turn where Haiku answered free-text with **no**
+> tool call at all: (1) Batangueño, after some history, "Mickey in lipa" → "hindi ko alam
+> ang property na 'yan" (claimed the property didn't exist); (2) "Magkano ga ang yung
+> malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" → asked for the exact name instead
+> of recognizing "malaking bahay" as the full-family-house listing. Fixed the same way
+> `dateContextNote()`/`buildCapacityContextNote()` already pre-resolve dates/guest counts:
+> three new pure functions in `property-resolver.ts` — `resolveGuestPropertyMention()`
+> (resolves the guest's latest message against the full public-listing set before the
+> model is ever called), `buildPropertyContextNote()` (system-prompt note: a unique match
+> names the slug and short name and forbids asking for the name again, additionally
+> telling the model to call `get_quote` immediately when dates and a guest count are ALSO
+> already known this turn; an ambiguous match lists every candidate's short name and
+> capacity and tells the model to ask which one), and `dropUnknownPropertyClaims()` (the
+> independent post-process backstop — replaces an "hindi ko alam ang property"/"not in our
+> system"/"isn't coming up"/"don't recognize" sentence with a "did you mean ...?" question
+> whenever the server itself already found a match or ambiguity list). Separately:
+> `list_properties`/`get_property_details` now both return a `shortName` field computed
+> against the FULL public-listing set (not just whatever else was in that turn's tool
+> calls) — fixes a related gap where looking up a single Mickey configuration alone
+> couldn't disambiguate it from its siblings; `post-process.ts`'s `shortPropertyLabels()`
+> is now exported and lets an explicit per-pair `shortName` win over its own turn-scoped
+> computed fallback, so `shortenPropertyNamesInText()` and `collectBookingLinks()` both
+> pick up the correctly-disambiguated name automatically.). Prior, same day (Haven AI owner
+> guardrails — base-rate "from"/"simula" prefix
 > and a local-places Welcome Book pointer, same branch `fix/haven-ai-freetext-reset-101526`:
 > [Haven AI Chat](#haven-ai-chat) — two new Owner guardrails (Cedric, 2026-10-15): (1) a
 > base/listing nightly rate (a property's own `pricePerNight`, from `list_properties`, or a
@@ -1862,6 +1889,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   computing a price or availability decision itself: `list_properties`
   (`getPublicListings`, never `airbnbIcsUrl`), `get_property_details`
   (`sanitizeChargeProse` + the property's JSON content fields), `check_availability`
+  — both `list_properties` and `get_property_details` also return a `shortName` field
+  *(added 2026-10-15, live-retest fix)*, always correctly disambiguated against the FULL
+  public-listing set via `post-process.ts`'s `shortPropertyLabels()` (`list_properties`
+  passes its own already-fetched list; `get_property_details` re-fetches via a new
+  `shortNameFor(slug, name)` helper, since a single resolved property alone can't tell if
+  its base name collides with siblings it didn't look up) — `system-prompt.ts` tells the
+  model to always say `shortName`, never the raw `name`.
   (`getPropertyConflicts`/`formatConflictRange`), `get_quote` (`computeBookingQuote`),
   `find_stay` (checks every public property's availability for a date range and returns
   single properties that fit or combinations whose summed `maxGuests` covers the group —
@@ -1925,6 +1959,31 @@ buttons and "Talk to a Human" link are unaffected either way.
   model that already has the right slug (the common case) never touches this path or
   `getPublicListings()` at all. `system-prompt.ts` (below) tells the model how to use an
   `ambiguous` result and never to claim a property isn't in the system otherwise.
+  **Server-side pre-resolution** *(added 2026-10-15, live-retest fix)* closes the gap left
+  by `resolveSlugFallback()` above: that path only ever runs AFTER a tool call already
+  missed, so a turn where the model answers free-text with no tool call at all (the two
+  exact live failures — Batangueño "Mickey in lipa" after some history got "hindi ko alam
+  ang property na 'yan"; "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14
+  para sa 10?" got asked for the exact name) never touched it. Three new pure functions,
+  same pattern as `dateContextNote()`/`buildCapacityContextNote()`:
+  `resolveGuestPropertyMention(guestMessage, listings)` resolves the guest's latest
+  message against the full public-listing set and returns a short-named `unique`/
+  `ambiguous`/`none` result (reuses `resolvePropertyMatch()` above, then
+  `shortPropertyLabels()` for a properly disambiguated label — see `post-process.ts`
+  below); `buildPropertyContextNote(resolution, dates)`, called from `chat-service.ts`
+  alongside the date/capacity notes, appends a system-prompt note — a unique match names
+  the slug and short name and forbids asking for the name again, and additionally tells
+  the model to call `get_quote` immediately (with the slug/dates/guest count spelled out)
+  when a resolved date range AND a `parseGuestCount()`-detected guest count are ALSO
+  already known this turn; an ambiguous match lists every candidate's short name and
+  capacity and tells the model to ask which one, in the guest's active language, and never
+  to say the property is unknown; `dropUnknownPropertyClaims(text, resolution, lang,
+  guestMessages)` is the independent post-process backstop in the same file — whenever the
+  server itself already found a match or ambiguity list, it replaces any sentence/bullet
+  line claiming the property is unknown/not in the system ("hindi ko alam ang property",
+  "not in our system", "isn't coming up", "don't recognize") with a "did you mean ...?"
+  question instead, run in `chat-service.ts`'s post-process pipeline right after
+  `shortenPropertyNamesInText()`.
 - `system-prompt.ts` — the fixed, server-side persona (a warm, chatty Batangueña host) and
   hard rules (facts only from this turn's tool results, except the owner-approved facts
   above; totals "confirmed at checkout" and the word "provisional" at most once per reply;
@@ -2061,7 +2120,15 @@ buttons and "Talk to a Human" link are unaffected either way.
   applies the same bracket/pipe shortener `collectBookingLinks()` uses for link labels to
   the reply **text** too — a literal substring swap for every raw `{slug, name}` pair any
   tool returned this turn (`collectPropertyNamePairs()` covers `list_properties`,
-  `get_property_details`, `get_quote`, and `find_stay`). `fixDadalawPhrasing(text, lang)`
+  `get_property_details`, `get_quote`, and `find_stay`). `shortPropertyLabels()` is now
+  exported and accepts an optional per-pair `shortName`, which always wins over its own
+  turn-scoped `buildShortNames()` computation; `collectPropertyNamePairs()` now carries a
+  `list_properties`/`get_property_details` result's own `shortName` field through, so both
+  `shortenPropertyNamesInText()` and `collectBookingLinks()`' link labels automatically
+  pick up the correctly-disambiguated name `tools.ts` computed against the full
+  public-listing set — fixing a gap where looking up/mentioning only ONE of several
+  same-base-name listings in a turn couldn't tell it apart from its unmentioned siblings
+  *(added 2026-10-15, live-retest fix)*. `fixDadalawPhrasing(text, lang)`
   rewrites "ilang guests/tao ang dadalaw" (dadalaw = "to visit", confusing for a staying
   headcount) to "Ilang guests kayo?" (btg: "Ilan ga kayo?"). `isEnglishContext(lang,
   guestMessages)` is true for explicit `en`, or `auto` with no detectable Tagalog marker

@@ -10,6 +10,7 @@ import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import { resolveDates } from "./dates";
 import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
+import { shortPropertyLabels } from "./post-process";
 import type { ToolDefinition } from "./provider";
 
 /**
@@ -73,6 +74,28 @@ async function resolveSlugFallback(
 }
 
 /**
+ * Guest-facing short name for a single resolved property (DEC-029, 2026-10-15 — guests
+ * saw a raw SEO-suffixed name like "Mickey in Lipa | Full Family House•Sleeps 15" echoed
+ * into a reply). Disambiguates against the FULL public-listing set, not just this one
+ * result, so the three Mickey configurations always come back distinguishable
+ * ("Mickey in Lipa — Full Family House") even when only one of them is being looked up —
+ * `shortPropertyLabels` run over a single-entry list can't tell it apart from its
+ * siblings. Never throws: an empty/failed listing fetch just falls back to this property's
+ * own name alone (still correct, just not disambiguated).
+ */
+async function shortNameFor(slug: string, name: string): Promise<string> {
+  let listings: Awaited<ReturnType<typeof getPublicListings>>;
+  try {
+    listings = await getPublicListings();
+  } catch {
+    listings = [];
+  }
+  const pairs = Array.isArray(listings) ? listings.map((l) => ({ slug: l.slug, name: l.name })) : [];
+  if (!pairs.some((p) => p.slug === slug)) pairs.push({ slug, name });
+  return shortPropertyLabels(pairs).get(slug) ?? name;
+}
+
+/**
  * Per-night (date, weekday, rate) rows from a quote's own `dailyRates` — so Haven can
  * optionally show a stay's nightly breakdown (e.g. a weekday vs. weekend rate) without
  * ever having to add the nights up itself (DEC-029 — see system-prompt.ts's ban on the
@@ -129,9 +152,14 @@ const listPropertiesTool: HavenToolSpec<z.infer<typeof listPropertiesSchema>> = 
   schema: listPropertiesSchema,
   handler: async () => {
     const properties = await getPublicListings();
+    const shortNames = shortPropertyLabels(properties.map((p) => ({ slug: p.slug, name: p.name })));
     return properties.map((p) => ({
       slug: p.slug,
       name: p.name,
+      // Always use this in guest-facing replies, never the raw `name` above, which can
+      // carry an SEO suffix ("Mickey in Lipa | Full Family House•Sleeps 15") — see
+      // system-prompt.ts.
+      shortName: shortNames.get(p.slug) ?? p.name,
       type: p.type,
       location: p.location,
       pricePerNight: Number(p.pricePerNight),
@@ -194,6 +222,9 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
     return {
       slug: p.slug,
       name: p.name,
+      // Always use this in guest-facing replies, never the raw `name` above — see
+      // list_properties and system-prompt.ts.
+      shortName: await shortNameFor(p.slug, p.name),
       description: p.description,
       amenities: safeJsonParse<string[]>(p.amenities, []),
       amenityDetails: safeJsonParse(p.amenityDetails, []),

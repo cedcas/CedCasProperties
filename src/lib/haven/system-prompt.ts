@@ -140,6 +140,14 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "candidate, then call the tool again once they pick. If a tool instead returns " +
       "`{error: \"Property not found.\"}`, don't claim the property isn't in the system — ask " +
       "the guest to confirm the property name, or offer Messenger if you still can't tell.",
+    "- `list_properties` and `get_property_details` each include a `shortName` field — " +
+      "always say that name in your replies, never the raw `name` field, which carries an " +
+      "internal SEO suffix (e.g. \"Mickey in Lipa | Full Family House•Sleeps 15\").",
+    "- If the system message below includes a \"Context (already resolved/detected by the " +
+      "system...)\" note naming a property or listing candidate properties, trust it: use " +
+      "the given slug directly for a unique match, or ask the given clarifying question " +
+      "naming the candidates for an ambiguous one. Never say a property is unknown, not in " +
+      "our system, or unrecognized when such a note is present.",
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +

@@ -4,6 +4,77 @@
 
 ---
 
+## 2026-10-15 — Haven AI: server-side property-name pre-resolution, shortName on every property tool result (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,468 tests).
+
+### Outcome
+Live retest on the preview surfaced two failures the existing fuzzy property-name
+resolver (`property-resolver.ts`, `resolveSlugFallback` in `tools.ts`) never caught,
+because that resolver only ever runs AFTER a model tool call already missed a slug — on a
+turn where Haiku answers free-text with no tool call at all, nothing resolved the guest's
+wording:
+1. Batangueño, after some history, "Mickey in lipa" → Haven replied "hindi ko alam ang
+   property na 'yan" (claimed the property didn't exist).
+2. "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" → Haven
+   asked for the exact property name instead of recognizing "malaking bahay" ("the big
+   house") as the full-family-house listing.
+
+Both are fixed by pre-resolving the guest's latest message server-side, BEFORE the model
+is called — the same pattern `chat-service.ts` already used for dates
+(`dateContextNote`) and the 24+ guest capacity note (`buildCapacityContextNote`). A
+second, independent gap: a property's `shortName` (e.g. "Mickey in Lipa — Full Family
+House", not the raw "Mickey in Lipa | Full Family House•Sleeps 15") was only ever computed
+from whatever was mentioned in a single turn's tool exchanges — looking up ONE Mickey
+configuration alone couldn't tell it apart from its siblings, since there was nothing else
+in the turn to disambiguate against.
+
+### Material Changes
+- **`property-resolver.ts`:** three new pure functions reusing the existing
+  `resolvePropertyMatch`/`shortPropertyLabels`: `resolveGuestPropertyMention()` (resolves
+  the guest's latest message against the full public-listing set — unique, ambiguous, or
+  none), `buildPropertyContextNote()` (the system-prompt note: a unique match names the
+  slug and short name and forbids asking for the name again, additionally instructing an
+  immediate `get_quote` call when dates and a guest count are ALSO already known this
+  turn; an ambiguous match lists every candidate's short name and capacity and tells the
+  model to ask which one), and `dropUnknownPropertyClaims()` (the independent
+  post-process backstop — replaces any "hindi ko alam ang property"/"not in our
+  system"/"isn't coming up"/"don't recognize" sentence with a "did you mean ...?"
+  question whenever the server itself already found a match or ambiguity list).
+- **`chat-service.ts`:** `runToolLoop` now fetches the public listings once per turn,
+  resolves the guest's property mention, appends `buildPropertyContextNote()` to the
+  system prompt alongside the existing date/capacity notes, and runs
+  `dropUnknownPropertyClaims()` right after the existing `shortenPropertyNamesInText()`
+  step in the post-process pipeline.
+- **`tools.ts`:** `list_properties` and `get_property_details` now both return a
+  `shortName` field, computed against the FULL public-listing set (a new `shortNameFor()`
+  helper re-fetches listings for `get_property_details`'s single-property case) — always
+  correctly disambiguated even when only one of several same-base-name listings is being
+  looked up.
+- **`post-process.ts`:** `shortPropertyLabels()` is now exported and accepts an optional
+  per-pair `shortName`, which always wins over the turn-scoped computed fallback;
+  `collectPropertyNamePairs()` carries a tool result's own `shortName` through (for
+  `list_properties`/`get_property_details`) so `shortenPropertyNamesInText()` picks it up
+  automatically.
+- **`system-prompt.ts`:** two new hard rules — always use a property's `shortName`, never
+  its raw `name`; and trust a "Context (already resolved/detected by the system...)"
+  property note when present, never claiming a property is unknown while one exists.
+
+Tests: `property-resolver.test.ts` (both exact live-failure messages, plus
+`buildPropertyContextNote`'s get_quote-trigger and no-get_quote-without-a-guest-count
+cases, plus `dropUnknownPropertyClaims`), `tools.test.ts` (`shortName` on both tools,
+including the single-Mickey-configuration disambiguation case), `post-process.test.ts`
+(an explicit tool-provided `shortName` winning over the computed fallback), `system-prompt.test.ts`,
+and `chat-service.test.ts` (both exact live messages end-to-end, plus the get_quote-trigger
+and no-match-found-is-a-no-op cases).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
 ## 2026-10-15 — Haven AI: base-rate "from"/"simula" prefix, local-places Welcome Book guardrail (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

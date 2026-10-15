@@ -76,6 +76,20 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  describe("shortName + pre-resolved property context (DEC-029, 2026-10-15)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("instructs the model to always use shortName over the raw name", () => {
+      expect(prompt).toMatch(/shortName/);
+      expect(prompt).toMatch(/never the raw `name` field/i);
+    });
+
+    it("instructs the model to trust a pre-resolved property context note and never claim a property is unknown", () => {
+      expect(prompt).toMatch(/Context \(already resolved\/detected by the/i);
+      expect(prompt).toMatch(/never say a property is unknown, not in our system, or unrecognized/i);
+    });
+  });
+
   describe("btg mode", () => {
     const prompt = buildHavenSystemPrompt("btg");
 

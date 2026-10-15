@@ -353,12 +353,27 @@ export function stripToBaseName(name: string): string {
  * results — reuses buildShortNames' "same base name → keep the distinguishing second
  * segment" disambiguation (e.g. the three "Mickey in Lipa" configurations), but first
  * strips a dev-DB bracket tag and cuts at a bare "•" for names with no "|" segment at all.
+ *
+ * A pair may carry its own `shortName` (e.g. `list_properties`/`get_property_details`
+ * results — tools.ts computes those against the FULL public-listing set, so they're
+ * already correctly disambiguated even when only one of several same-base-name listings
+ * is mentioned this turn, which the turn-scoped computation below can't guarantee) — an
+ * explicit `shortName` always wins over the computed fallback.
  */
-function shortPropertyLabels(pairs: { slug: string; name: string }[]): Map<string, string> {
-  const uniqueBySlug = new Map(pairs.map((p) => [p.slug, p.name]));
-  const prepped = [...uniqueBySlug].map(([slug, name]) => ({ slug, name: stripBracketPrefix(name) }));
-  const short = buildShortNames(prepped);
-  return new Map([...short].map(([slug, label]) => [slug, stripToBaseName(label)]));
+export function shortPropertyLabels(pairs: { slug: string; name: string; shortName?: string }[]): Map<string, string> {
+  const uniqueBySlug = new Map(pairs.map((p) => [p.slug, p]));
+  const explicit = new Map<string, string>();
+  const needsComputed: { slug: string; name: string }[] = [];
+  for (const [slug, p] of uniqueBySlug) {
+    if (typeof p.shortName === "string" && p.shortName.length > 0) explicit.set(slug, p.shortName);
+    else needsComputed.push({ slug, name: stripBracketPrefix(p.name) });
+  }
+  const computed = buildShortNames(needsComputed);
+  const result = new Map<string, string>();
+  for (const [slug] of uniqueBySlug) {
+    result.set(slug, explicit.get(slug) ?? stripToBaseName(computed.get(slug) ?? ""));
+  }
+  return result;
 }
 
 /**
@@ -431,18 +446,20 @@ export function collectBookingLinks(exchanges: ToolExchange[], max = 8): LinkBut
  * mention a property name — not just the booking-link-producing ones `collectBookingLinks`
  * covers, so a plain `list_properties`/`get_property_details` answer also gets shortened.
  */
-export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string }[] {
-  const pairs: { slug: string; name: string }[] = [];
+export function collectPropertyNamePairs(exchanges: ToolExchange[]): { slug: string; name: string; shortName?: string }[] {
+  const pairs: { slug: string; name: string; shortName?: string }[] = [];
   for (const { name: toolName, input, result } of exchanges) {
     const i = asRecord(input);
     const r = asRecord(result);
     if (toolName === "list_properties" && Array.isArray(result)) {
       for (const item of result) {
         const p = asRecord(item);
-        if (typeof p.slug === "string" && typeof p.name === "string") pairs.push({ slug: p.slug, name: p.name });
+        if (typeof p.slug === "string" && typeof p.name === "string") {
+          pairs.push({ slug: p.slug, name: p.name, shortName: typeof p.shortName === "string" ? p.shortName : undefined });
+        }
       }
     } else if (toolName === "get_property_details" && typeof r.slug === "string" && typeof r.name === "string") {
-      pairs.push({ slug: r.slug, name: r.name });
+      pairs.push({ slug: r.slug, name: r.name, shortName: typeof r.shortName === "string" ? r.shortName : undefined });
     } else if (toolName === "get_quote" && typeof i.slug === "string" && typeof r.name === "string") {
       pairs.push({ slug: i.slug, name: r.name });
     } else if (toolName === "find_stay" && Array.isArray(r.options)) {

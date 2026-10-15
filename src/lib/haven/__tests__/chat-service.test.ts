@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { MAX_TOOL_ROUNDS } from "../config";
 
-const { db, sendMail, providerChat, runHavenToolMock } = vi.hoisted(() => ({
+const { db, sendMail, providerChat, runHavenToolMock, listingsApi } = vi.hoisted(() => ({
   db: {
     havenChatUsage: { count: vi.fn(), aggregate: vi.fn(), findFirst: vi.fn(), create: vi.fn() },
     havenChatTranscript: { createMany: vi.fn() },
@@ -16,6 +16,7 @@ const { db, sendMail, providerChat, runHavenToolMock } = vi.hoisted(() => ({
   sendMail: vi.fn(),
   providerChat: vi.fn(),
   runHavenToolMock: vi.fn(),
+  listingsApi: { getPublicListings: vi.fn() },
 }));
 
 vi.mock("@/lib/prisma", () => ({ prisma: db }));
@@ -27,6 +28,22 @@ vi.mock("../tools", () => ({
   getToolDefinitions: () => [],
   runHavenTool: runHavenToolMock,
 }));
+// `buildShortNames`/`shortPropertyLabels` stay real — the property pre-resolution path
+// (property-resolver.ts) goes through them, same as production, so a test exercising it
+// is meaningful. Only `getPublicListings` is stubbed (no DB in this test file).
+vi.mock("@/lib/listings", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/listings")>("@/lib/listings");
+  return { ...actual, getPublicListings: listingsApi.getPublicListings };
+});
+
+/** The two houses' five live listings, as `property-resolver.ts` expects them. */
+const PUBLIC_LISTINGS = [
+  { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax", maxGuests: 5 },
+  { slug: "spacious-2-bedroom", name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax", maxGuests: 9 },
+  { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7 },
+  { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11 },
+  { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15 },
+];
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -49,6 +66,7 @@ beforeEach(() => {
   db.havenChatUsage.count.mockResolvedValue(0);
   db.havenChatUsage.aggregate.mockResolvedValue({ _sum: { costUsd: 0 } });
   db.havenChatUsage.findFirst.mockResolvedValue(null);
+  listingsApi.getPublicListings.mockResolvedValue(PUBLIC_LISTINGS);
 });
 
 afterEach(() => {
@@ -376,6 +394,109 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
 
     const system = providerChat.mock.calls[0][0].system as string;
     expect(system).not.toContain("checkIn=");
+  });
+
+  // DEC-029, 2026-10-15 live-retest fix: the resolver in tools.ts only ever ran AFTER a
+  // model tool call already missed, so it never helped on a turn where Haiku answered
+  // free-text with no tool call at all — the two exact live failures below.
+  describe("property-name pre-resolution (live-retest fix)", () => {
+    it('live failure #1 — Batangueño, history then "Mickey in lipa": injects an ambiguous context note naming all three Mickey listings, and the post-process backstop drops a wrongful "I don\'t know that property" claim', async () => {
+      providerChat.mockResolvedValue({
+        text: "Hindi ko alam ang property na 'yan.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const result = await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [
+            { role: "user", content: "Pwede ba kami mag-book para sa barkada namin?" },
+            { role: "assistant", content: "Ay ga, pwede namán! Ilan po kayo at anong petsa?" },
+            { role: "user", content: "Mickey in lipa" },
+          ],
+        }),
+        "1.2.3.4"
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toContain("Mickey in Lipa — Family Staycation");
+      expect(system).toContain("Mickey in Lipa — Family House");
+      expect(system).toContain("Mickey in Lipa — Full Family House");
+      expect(system).toMatch(/never say the property is unknown/i);
+
+      expect(result.reply).not.toMatch(/hindi ko alam/i);
+      expect(result.reply).toContain("Mickey in Lipa — Family Staycation");
+      expect(result.reply).toContain("Mickey in Lipa — Family House");
+      expect(result.reply).toContain("Mickey in Lipa — Full Family House");
+    });
+
+    it('live failure #2 — "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?": resolves uniquely to the full family house instead of asking for the exact name', async () => {
+      providerChat.mockResolvedValue({
+        text: "Sige po, tatawag ako ng quote para sa inyo.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [{ role: "user", content: "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" }],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toContain('refers to "Mickey in Lipa — Full Family House"');
+      expect(system).toContain("slug mickey-in-lipa--full-family-house--sleeps-15");
+      expect(system).toMatch(/do not ask the guest to name or confirm/i);
+    });
+
+    it("tells the model to call get_quote immediately when a unique property, resolved dates, AND a guest count are all already known", async () => {
+      providerChat.mockResolvedValue({
+        text: "Let me get that quote for you.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          messages: [{ role: "user", content: "How much is the Mickey full family house on Nov 14 for 10 guests?" }],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toMatch(/call get_quote now/i);
+      expect(system).toContain("slug=mickey-in-lipa--full-family-house--sleeps-15");
+      expect(system).toContain("checkIn=2026-11-14");
+      expect(system).toContain("checkOut=2026-11-15");
+      expect(system).toContain("guests=10");
+    });
+
+    it("never says a property is unknown when the resolver found no match either (leaves an unrelated reply untouched)", async () => {
+      providerChat.mockResolvedValue({
+        text: "Sure, happy to help with that!",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const result = await handleHavenChat(validBody({ messages: [{ role: "user", content: "What time is checkout?" }] }), "1.2.3.4");
+
+      expect(result.reply).toBe("Sure, happy to help with that!");
+    });
   });
 
   it("prepends a natural Batangueño opener when a btg reply carries no marker", async () => {

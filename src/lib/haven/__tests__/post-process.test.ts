@@ -752,6 +752,25 @@ describe("shortenPropertyNamesInText", () => {
     const exchanges: ToolExchange[] = [{ name: "get_property_details", input: {}, result: { slug: "cozy-1-bedroom", name: "Cozy 1BR" } }];
     expect(shortenPropertyNamesInText("Cozy 1BR is available.", exchanges)).toBe("Cozy 1BR is available.");
   });
+
+  it("prefers a tool-provided shortName over the turn-scoped computed one (DEC-029, 2026-10-15)", () => {
+    // Only ONE Mickey configuration appears in this turn's exchange — the turn-scoped
+    // computation alone can't tell it apart from its siblings, but get_property_details'
+    // own `shortName` (computed in tools.ts against the FULL listing set) already can.
+    const exchanges: ToolExchange[] = [
+      {
+        name: "get_property_details",
+        input: { slug: "mickey-in-lipa--full-family-house--sleeps-15" },
+        result: {
+          slug: "mickey-in-lipa--full-family-house--sleeps-15",
+          name: "Mickey in Lipa | Full Family House",
+          shortName: "Mickey in Lipa — Full Family House",
+        },
+      },
+    ];
+    const text = "Mickey in Lipa | Full Family House — from ₱6,500/night";
+    expect(shortenPropertyNamesInText(text, exchanges)).toBe("Mickey in Lipa — Full Family House — from ₱6,500/night");
+  });
 });
 
 describe("fixDadalawPhrasing", () => {
