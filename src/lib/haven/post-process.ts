@@ -1,8 +1,9 @@
 import "server-only";
-import { formatStayRangeShort, toUtcMidnight } from "@/lib/dates";
+import { formatStayRangeShort, toUtcMidnight, addUtcDays } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import type { HavenLang } from "./system-prompt";
+import type { StayLabel } from "./dates";
 
 /**
  * Guardrails applied to the model's text AFTER it's generated, on every turn — the model's
@@ -562,6 +563,68 @@ function cleanupStrippedPunctuation(text: string): string {
     .replace(/[ \t]+([.,!?;:])/g, "$1");
 }
 
+// ── Plain-language guard: banned deep/literary Tagalog words (Cedric, 2026-10-16) ──────
+
+/**
+ * The standard quote/checkout caveat, fixed per language (Cedric, 2026-10-16 plain-
+ * language pass) — the single source of truth both `replaceTuklasinFamily` below and
+ * system-prompt.ts's prompt text use, so the model is told to say exactly what the
+ * backstop would restate it as.
+ */
+export const PROVISIONAL_CAVEAT_EN = "This is provisional — confirmed at checkout.";
+export const PROVISIONAL_CAVEAT_TL = "Provisional lang ito, kukumpirmahin sa checkout.";
+
+/**
+ * Owner incident (2026-10-16): Haven qualified a quote as "(provisional lang — tutuklasin
+ * ng tama sa checkout)" — "tutuklasin" is deep, literary Tagalog no real local host would
+ * use for "we'll confirm it." Matches the whole "tuklas" root so every inflection
+ * (tutuklasin, tuklasin, matutuklasan, tinuklasan, natuklasan, …) is caught, not just the
+ * one the owner saw — every live occurrence of this root was this exact checkout caveat,
+ * so the WHOLE sentence/bullet line is swapped for the standard caveat above, never just
+ * the word.
+ */
+const TUKLAS_ROOT_RE = /\w*tuklas\w*/i;
+
+/** Independent backstop for the `PLAIN_LANGUAGE_RULE` instruction in system-prompt.ts. */
+export function replaceTuklasinFamily(text: string, isEnglish: boolean): string {
+  return replaceMatchingSentences(
+    text,
+    TUKLAS_ROOT_RE,
+    isEnglish ? PROVISIONAL_CAVEAT_EN : PROVISIONAL_CAVEAT_TL
+  );
+}
+
+/**
+ * Other deep/literary Tagalog words banned from Haven's plain, conversational voice (same
+ * owner pass, 2026-10-16) — a direct word-level swap for the everyday equivalent that
+ * keeps the surrounding sentence grammatical, independent of the same instruction in
+ * system-prompt.ts's `PLAIN_LANGUAGE_RULE`. "maaaring" (the "-ng" linker form of "maaari")
+ * is listed separately since `\bmaaari\b` doesn't match it — there's no word boundary
+ * between "maaari" and "ng".
+ */
+const DEEP_TAGALOG_WORDS: Record<string, string> = {
+  sukatin: "tingnan",
+  manatili: "mag-stay",
+  nawa: "sana",
+  datapwat: "pero",
+  subalit: "pero",
+  marapat: "dapat",
+  pagsapit: "pagdating",
+  maaaring: "pwedeng",
+  maaari: "pwede",
+};
+
+/** "Tunay na" is two words, so it can't live in the single-word `DEEP_TAGALOG_WORDS` map. */
+const TUNAY_NA_RE = /\btunay\s+na\b/gi;
+
+export function simplifyDeepTagalogWords(text: string): string {
+  let out = text;
+  for (const [word, replacement] of Object.entries(DEEP_TAGALOG_WORDS)) {
+    out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => capitalizeLike(match, replacement));
+  }
+  return out.replace(TUNAY_NA_RE, (match) => capitalizeLike(match, "talagang"));
+}
+
 // ── Batangueño marker check ──────────────────────────────────────────────────
 
 /**
@@ -652,6 +715,40 @@ export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
   return text.replace(DADALAW_RE, replacement);
 }
 
+// ── "The system" mention guard ───────────────────────────────────────────────
+
+/**
+ * Haven must never tell a guest she's checking "the system" / "ang system" / "sa system" /
+ * "our system" — it reads as a bot describing its own backend, not a real local host. The
+ * article/possessive is required immediately before "system" so an unrelated phrase (e.g.
+ * a hypothetical "the sound system") is never caught. Whole sentence/bullet line is dropped
+ * (see `replaceMatchingSentences`) rather than rephrased in place — these are always a
+ * throwaway "let me check..." filler, never a sentence carrying guest-facing information on
+ * its own.
+ */
+const SYSTEM_MENTION_RE = /\b(?:the|our)\s+system\b|\bang\s+system\b|\bsa\s+system\b/i;
+
+/** A bullet marker with nothing left after it — the whole line's content was dropped. */
+const EMPTY_BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s*$/;
+
+/** Tidies the whitespace/blank lines a dropped sentence or bullet line leaves behind. */
+export function tidyAfterSentenceDrop(text: string): string {
+  return text
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,!?;:])/g, "$1")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !EMPTY_BULLET_LINE.test(line))
+    .join("\n")
+    .trim();
+}
+
+/** Drops any sentence/bullet line referring to "the system"/"ang system"/"sa system"/
+ * "our system" — independent backstop for the same rule in system-prompt.ts. */
+export function stripSystemMentions(text: string): string {
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, SYSTEM_MENTION_RE, ""));
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the
@@ -726,18 +823,157 @@ export function formatDateRangeArrow(checkIn: string, checkOut: string): string 
 /**
  * English replies must always state the resolved dates explicitly (system-prompt.ts
  * already instructs this; this is the independent backstop). If this turn resolved a
- * date range and the reply doesn't already mention the check-in month/day, prepend a
- * "For <range>:" line rather than leaving the dates implicit. `isEnglish` is the same
- * English-context test `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) —
- * explicit `en`, or `auto` with an English-looking guest message.
+ * date range and the reply doesn't already mention it, prepend a "For <range>:" line
+ * rather than leaving the dates implicit. `isEnglish` is the same English-context test
+ * `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) — explicit `en`, or `auto`
+ * with an English-looking guest message.
+ *
+ * `stayLabel` is checked FIRST (and takes precedence): the model is told to copy it
+ * verbatim, which uses abbreviated month names ("Nov 19"), so a check for only the full
+ * month name ("November 19") missed it — the doubled-header regression, where a reply
+ * already reading "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights" still got "For
+ * Thursday, November 19 → Saturday, November 21, 2026:" prepended on top. The full-month
+ * check below stays as a fallback for a correct range the model composed in its own words
+ * rather than copying stayLabel.
  */
 export function ensureDatesStated(
   text: string,
   resolved: { checkIn: string; checkOut: string } | null,
+  stayLabel: StayLabel | null,
   isEnglish: boolean
 ): string {
   if (!resolved || !isEnglish) return text;
+  if (stayLabel && text.includes(stayLabel.en)) return text;
   const ci = toUtcMidnight(resolved.checkIn);
   if (isNaN(ci.getTime()) || text.toLowerCase().includes(monthDay(ci).toLowerCase())) return text;
   return `For ${formatDateRangeArrow(resolved.checkIn, resolved.checkOut)}:\n\n${text}`;
+}
+
+// ── Stay-range end-date guard (DEC-029: end date must be check-out, never the last night) ──
+
+const EN_MONTH_FULL_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const EN_WEEKDAY_FULL_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const DATE_MENTION_SOURCE = String.raw`(?:(?:${EN_WEEKDAY_FULL_NAMES.join("|")}),?\s+)?(${EN_MONTH_FULL_NAMES.join(
+  "|"
+)})\s+(\d{1,2})(?:,\s*(\d{4}))?`;
+const RANGE_SEP_SOURCE = String.raw`(?:→|-|–|\bto\b|\bhanggang\b)`;
+const NIGHT_SUFFIX_SOURCE = String.raw`(?:\s*\(\s*\d+\s*(?:nights?|gabi)\s*\))?`;
+
+/** Two English-worded date mentions joined by a range separator, with an optional trailing
+ * "(N nights/gabi)" note absorbed into the match so it's replaced along with the range. */
+const STAY_RANGE_RE = new RegExp(
+  `${DATE_MENTION_SOURCE}\\s*${RANGE_SEP_SOURCE}\\s*${DATE_MENTION_SOURCE}${NIGHT_SUFFIX_SOURCE}`,
+  "gi"
+);
+
+/**
+ * Independent backstop for the live bug: Haven stated a Thu check-in/Sat check-out,
+ * 2-night stay as "Thursday, November 19 hanggang Friday, November 20, 2026 (2 nights)" —
+ * reading the LAST NIGHT (Friday) as the range's end instead of the check-out date
+ * (Saturday). Whatever date-range text the model composed itself, if its end-date mention
+ * matches this turn's resolved/quoted stay's last occupied night (checkOut − 1) AND its
+ * start-date mention matches that stay's checkIn, the whole matched range (plus any
+ * trailing night-count note) is replaced with the correct `stayLabel` — never just the
+ * end date, so no dangling "(2 nights)" is left paired with the wrong end date. A per-night
+ * breakdown line (one date, no range separator) never matches this pattern, so it's
+ * untouched. English month/weekday words only — the only form the live bug ever produced,
+ * including inside an otherwise Tagalog/Batangueño reply.
+ */
+export function fixStayRangeEndDate(
+  text: string,
+  resolved: { checkIn: string; checkOut: string } | null,
+  stayLabel: StayLabel | null,
+  isEnglish: boolean
+): string {
+  if (!resolved || !stayLabel) return text;
+  const checkIn = toUtcMidnight(resolved.checkIn);
+  const checkOut = toUtcMidnight(resolved.checkOut);
+  if (isNaN(checkIn.getTime()) || isNaN(checkOut.getTime())) return text;
+  const lastNight = addUtcDays(checkOut, -1);
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+
+  return text.replace(
+    STAY_RANGE_RE,
+    (match: string, startMonth: string, startDay: string, startYear: string | undefined, endMonth: string, endDay: string, endYear: string | undefined) => {
+      const startMonthIdx = EN_MONTH_FULL_NAMES.indexOf(startMonth);
+      const endMonthIdx = EN_MONTH_FULL_NAMES.indexOf(endMonth);
+
+      const startMatches =
+        startMonthIdx === checkIn.getUTCMonth() &&
+        Number(startDay) === checkIn.getUTCDate() &&
+        (!startYear || Number(startYear) === checkIn.getUTCFullYear());
+      const endMatches =
+        endMonthIdx === lastNight.getUTCMonth() &&
+        Number(endDay) === lastNight.getUTCDate() &&
+        (!endYear || Number(endYear) === lastNight.getUTCFullYear());
+
+      return startMatches && endMatches ? label : match;
+    }
+  );
+}
+
+// ── Date/nights re-confirmation guard (Owner rule, Cedric 2026-10-16) ──────────
+
+/**
+ * Industry standard: a range like "Nov 19 to 21", "Nov 19-21", or "Nobyembre 19 hanggang
+ * 21" always means check-in the FIRST date, check-out the SECOND (nights = the
+ * difference) — Haven must never re-question that once the server has already resolved a
+ * range this turn. Live bug (dev, pre-#86): guest said "Nobyembre 19 hanggang 21, 4 kami"
+ * and Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) —
+ * contradicting the range it had just correctly parsed. Each alternative below targets
+ * one phrasing of that same mistake, in English or Tagalog/Batangueño. The "did you mean"
+ * alternative is scoped to a sentence that ALSO mentions nights/dates, so it never
+ * clobbers property-resolver.ts's own (legitimate) "Did you mean <property>?" question.
+ */
+const DATE_RECONFIRMATION_RE = new RegExp(
+  [
+    String.raw`\bjust to confirm\b`,
+    String.raw`\bis that\s+\d+\s+nights?\s+or\s+\d+\b`,
+    String.raw`\bdo you want\s+\d+\s+nights?\b`,
+    String.raw`(?=.*\bdid you mean\b)(?=.*\b(?:nights?|dates?|check-?in|check-?out)\b)`,
+    String.raw`\btotoo\s+(?:ba|ga)\s+na\s+isang\s+gabi\b`,
+    String.raw`\bisang\s+gabi\s+lang\s+(?:ba|ga)\b`,
+    String.raw`\bilang\s+gabi\b`,
+    String.raw`\bsigurado\s+(?:ba|ga)\s+kayo\b`,
+    String.raw`\b[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\s+o\s+[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\b`,
+  ].join("|"),
+  "i"
+);
+
+/**
+ * Drops any sentence/bullet line re-questioning the guest's nights or dates, whenever a
+ * date range was already resolved this turn (a `resolve_dates`/tool result, or the
+ * pre-resolved date context note — see chat-service.ts). If dropping leaves the reply
+ * completely empty (the live bug's reply was ENTIRELY this kind of question), restate the
+ * resolved stayLabel with a booking nudge instead of sending a blank message.
+ */
+export function dropDateReconfirmationQuestions(
+  text: string,
+  datesResolvedThisTurn: boolean,
+  stayLabel: StayLabel | null,
+  isEnglish: boolean
+): string {
+  if (!datesResolvedThisTurn) return text;
+  const dropped = tidyAfterSentenceDrop(replaceMatchingSentences(text, DATE_RECONFIRMATION_RE, ""));
+  if (dropped.length > 0 || !stayLabel) return dropped;
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+  return isEnglish ? `${label} — want me to help you book it?` : `${label} — gusto n'yo na bang i-book?`;
+}
+
+// ── "What year" guard ────────────────────────────────────────────────────────
+
+/**
+ * Haven must never ask a guest what year they mean — a detected date phrase always
+ * resolves to the next upcoming occurrence (see dates.ts), so the question never needed
+ * answering in the first place. Independent backstop for the same instruction in
+ * system-prompt.ts and the per-turn date context note (chat-service.ts).
+ */
+const WHAT_YEAR_RE = /\bwhat year\b|\bwhich year\b|\banong\s+taon\b|\banong\s+year\b/i;
+
+export function dropWhatYearQuestions(text: string): string {
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, WHAT_YEAR_RE, ""));
 }

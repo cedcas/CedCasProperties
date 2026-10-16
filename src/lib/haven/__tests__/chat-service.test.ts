@@ -499,6 +499,71 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     });
   });
 
+  // Owner rule 3, 2026-10-16: a follow-up message carrying only dates/guest count must
+  // still resolve against the property named in an earlier turn.
+  describe("follow-up turn resolution across property + dates/guests (Owner rule 3, 2026-10-16)", () => {
+    it('btg: "Magkano ga ang Spacious 2BR?" then "Nobyembre 19 hanggang 21, 4 kami" calls get_quote with the earlier property and this turn\'s dates/guests', async () => {
+      providerChat.mockResolvedValue({
+        text: "Sige po, tatawag ako ng quote para sa inyo.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [
+            { role: "user", content: "Magkano ga ang Spacious 2BR?" },
+            { role: "assistant", content: "Ay ga, pwede namán! Anong petsa at ilan po kayo?" },
+            { role: "user", content: "Nobyembre 19 hanggang 21, 4 kami" },
+          ],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toMatch(/call get_quote now/i);
+      expect(system).toContain("slug=spacious-2-bedroom");
+      expect(system).toContain("checkIn=2026-11-19");
+      expect(system).toContain("checkOut=2026-11-21");
+      expect(system).toContain("guests=4");
+    });
+
+    it('English equivalent: "How much is the Cozy 1BR?" then "Nov 19 to 21, 4 guests" calls get_quote with the earlier property and this turn\'s dates/guests', async () => {
+      providerChat.mockResolvedValue({
+        text: "Let me get that quote for you.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-14T12:00:00Z");
+      await handleHavenChat(
+        validBody({
+          messages: [
+            { role: "user", content: "How much is the Cozy 1BR?" },
+            { role: "assistant", content: "Sure — what dates and how many guests?" },
+            { role: "user", content: "Nov 19 to 21, 4 guests" },
+          ],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toMatch(/call get_quote now/i);
+      expect(system).toContain("slug=cozy-1-bedroom");
+      expect(system).toContain("checkIn=2026-11-19");
+      expect(system).toContain("checkOut=2026-11-21");
+      expect(system).toContain("guests=4");
+    });
+  });
+
   it("prepends a natural Batangueño opener when a btg reply carries no marker", async () => {
     providerChat.mockResolvedValue({
       text: "Meron pa kaming bakante sa petsang iyan para sa inyo.",

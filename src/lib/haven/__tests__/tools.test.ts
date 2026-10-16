@@ -27,6 +27,7 @@ vi.mock("@/lib/availability", () => availabilityApi);
 vi.mock("@/lib/booking-quote", () => quoteApi);
 
 import { runHavenTool } from "../tools";
+import { buildStayLabel } from "../dates";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -80,7 +81,11 @@ describe("check_availability", () => {
       checkIn: "2026-11-14",
       checkOut: "2026-11-15",
     });
-    expect(result).toEqual({ available: true, conflicts: [] });
+    expect(result).toEqual({
+      available: true,
+      conflicts: [],
+      stayLabel: buildStayLabel("2026-11-14", "2026-11-15"),
+    });
   });
 
   it("reports the property-not-found error without touching availability", async () => {
@@ -110,6 +115,8 @@ describe("get_quote", () => {
     expect(result.nights).toBe(2);
     expect(result.name).toBe("Cozy 1BR Haven");
     expect(result.bookingLink).toBe("/properties/cozy-1-bedroom/book?checkIn=2026-11-14&checkOut=2026-11-16&guests=3");
+    // The end date is the check-out date (Nov 16), never the last occupied night (Nov 15).
+    expect(result.stayLabel).toEqual(buildStayLabel("2026-11-14", "2026-11-16"));
   });
 
   it("surfaces a quote error (e.g. over capacity) instead of a number", async () => {
@@ -359,7 +366,11 @@ describe("fuzzy property-name fallback (DEC-029 — a plausible informal name mu
       checkIn: "2026-11-14",
       checkOut: "2026-11-15",
     });
-    expect(result).toEqual({ available: true, conflicts: [] });
+    expect(result).toEqual({
+      available: true,
+      conflicts: [],
+      stayLabel: buildStayLabel("2026-11-14", "2026-11-15"),
+    });
   });
 
   it("get_quote resolves an informal name after an exact-slug miss", async () => {
@@ -636,8 +647,12 @@ describe("end-to-end: 'Is there anything available on the 2nd Saturday of Novemb
       checkIn: resolved.checkIn,
       checkOut: resolved.checkOut,
       guests: 12,
-    })) as { options: Array<{ properties: Array<{ bookingLink: string; quote: { total: number } | null }>; combinedTotal: number }> };
+    })) as {
+      options: Array<{ properties: Array<{ bookingLink: string; quote: { total: number } | null }>; combinedTotal: number }>;
+      stayLabel: { en: string; tl: string; btg: string } | null;
+    };
 
+    expect(result.stayLabel).toEqual(buildStayLabel(resolved.checkIn, resolved.checkOut));
     expect(result.options.length).toBeGreaterThan(0);
     const option = result.options[0];
     // sleeps-15 is unavailable, so the only viable combo is cozy-1-bedroom + spacious-2-bedroom.
