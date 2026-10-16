@@ -180,12 +180,24 @@ function toResult(checkIn: Date, checkOut: Date): ResolvedDates {
 const MONTH_NAME_PATTERN = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join("|");
 const WEEKDAY_NAME_PATTERN = Object.keys(WEEKDAYS).sort((a, b) => b.length - a.length).join("|");
 
+/**
+ * Every word/symbol guests use to join a check-in phrase to a check-out phrase — English
+ * ("to", "until", "through", a hyphen/en dash) and Tagalog/Batangueño ("hanggang", "until"
+ * is also understood in Taglish). "hanggang" was missing here, so "Nobyembre 19 hanggang
+ * 21" fell through to the single-date pattern below and silently resolved to a 1-night
+ * stay (Nov 19 -> Nov 20) instead of the intended 2-night range (Nov 19 -> Nov 21) — the
+ * live regression this constant fixes. A leading "mula"/"from" before the check-in phrase
+ * needs no special handling: it's just unmatched prefix text, since none of these patterns
+ * anchor to the start of the expression.
+ */
+const RANGE_SEP = String.raw`(?:-|to|–|through|until|hanggang)`;
+
 export function resolveDates(expression: string, now: Date = new Date()): ResolvedDates | null {
   const expr = expression.trim().toLowerCase();
   const today = todayManila(now);
 
   // ISO range: "2026-12-24 to 2026-12-26" / "2026-12-24 - 2026-12-26"
-  let m = expr.match(/(\d{4}-\d{2}-\d{2})\s*(?:-|to|–|through)\s*(\d{4}-\d{2}-\d{2})/);
+  let m = expr.match(new RegExp(`(\\d{4}-\\d{2}-\\d{2})\\s*${RANGE_SEP}\\s*(\\d{4}-\\d{2}-\\d{2})`));
   if (m) {
     const checkIn = toUtcMidnight(m[1]);
     const checkOut = toUtcMidnight(m[2]);
@@ -232,7 +244,7 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   }
 
   // "next Friday to Sunday" (also "next Fri-Sun")
-  m = expr.match(new RegExp(`\\bnext\\s+(${WEEKDAY_NAME_PATTERN})\\s*(?:-|to|–|through)\\s*(${WEEKDAY_NAME_PATTERN})\\b`));
+  m = expr.match(new RegExp(`\\bnext\\s+(${WEEKDAY_NAME_PATTERN})\\s*${RANGE_SEP}\\s*(${WEEKDAY_NAME_PATTERN})\\b`));
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], true);
     const checkOut = nextOccurrence(checkIn, WEEKDAYS[m[2]], true);
@@ -249,7 +261,7 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   // "Dec 24-26" / "December 24 to 26" / "Dec 24 - Dec 26" / "Nov 30 to Dec 2"
   m = expr.match(
     new RegExp(
-      `\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|to|–|through)\\s*(?:(${MONTH_NAME_PATTERN})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b`
+      `\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*${RANGE_SEP}\\s*(?:(${MONTH_NAME_PATTERN})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b`
     )
   );
   if (m) {

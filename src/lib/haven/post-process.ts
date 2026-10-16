@@ -653,6 +653,40 @@ export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
   return text.replace(DADALAW_RE, replacement);
 }
 
+// ── "The system" mention guard ───────────────────────────────────────────────
+
+/**
+ * Haven must never tell a guest she's checking "the system" / "ang system" / "sa system" /
+ * "our system" — it reads as a bot describing its own backend, not a real local host. The
+ * article/possessive is required immediately before "system" so an unrelated phrase (e.g.
+ * a hypothetical "the sound system") is never caught. Whole sentence/bullet line is dropped
+ * (see `replaceMatchingSentences`) rather than rephrased in place — these are always a
+ * throwaway "let me check..." filler, never a sentence carrying guest-facing information on
+ * its own.
+ */
+const SYSTEM_MENTION_RE = /\b(?:the|our)\s+system\b|\bang\s+system\b|\bsa\s+system\b/i;
+
+/** A bullet marker with nothing left after it — the whole line's content was dropped. */
+const EMPTY_BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s*$/;
+
+/** Tidies the whitespace/blank lines a dropped sentence or bullet line leaves behind. */
+function tidyAfterSentenceDrop(text: string): string {
+  return text
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,!?;:])/g, "$1")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !EMPTY_BULLET_LINE.test(line))
+    .join("\n")
+    .trim();
+}
+
+/** Drops any sentence/bullet line referring to "the system"/"ang system"/"sa system"/
+ * "our system" — independent backstop for the same rule in system-prompt.ts. */
+export function stripSystemMentions(text: string): string {
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, SYSTEM_MENTION_RE, ""));
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the
@@ -727,17 +761,27 @@ export function formatDateRangeArrow(checkIn: string, checkOut: string): string 
 /**
  * English replies must always state the resolved dates explicitly (system-prompt.ts
  * already instructs this; this is the independent backstop). If this turn resolved a
- * date range and the reply doesn't already mention the check-in month/day, prepend a
- * "For <range>:" line rather than leaving the dates implicit. `isEnglish` is the same
- * English-context test `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) —
- * explicit `en`, or `auto` with an English-looking guest message.
+ * date range and the reply doesn't already mention it, prepend a "For <range>:" line
+ * rather than leaving the dates implicit. `isEnglish` is the same English-context test
+ * `stripTagalogWordsInEnglish` is gated on (`isEnglishContext`) — explicit `en`, or `auto`
+ * with an English-looking guest message.
+ *
+ * `stayLabel` is checked FIRST (and takes precedence): the model is told to copy it
+ * verbatim, which uses abbreviated month names ("Nov 19"), so a check for only the full
+ * month name ("November 19") missed it — the doubled-header regression, where a reply
+ * already reading "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights" still got "For
+ * Thursday, November 19 → Saturday, November 21, 2026:" prepended on top. The full-month
+ * check below stays as a fallback for a correct range the model composed in its own words
+ * rather than copying stayLabel.
  */
 export function ensureDatesStated(
   text: string,
   resolved: { checkIn: string; checkOut: string } | null,
+  stayLabel: StayLabel | null,
   isEnglish: boolean
 ): string {
   if (!resolved || !isEnglish) return text;
+  if (stayLabel && text.includes(stayLabel.en)) return text;
   const ci = toUtcMidnight(resolved.checkIn);
   if (isNaN(ci.getTime()) || text.toLowerCase().includes(monthDay(ci).toLowerCase())) return text;
   return `For ${formatDateRangeArrow(resolved.checkIn, resolved.checkOut)}:\n\n${text}`;

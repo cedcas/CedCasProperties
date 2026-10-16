@@ -18,6 +18,7 @@ import {
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
+  stripSystemMentions,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -790,6 +791,44 @@ describe("fixDadalawPhrasing", () => {
   });
 });
 
+describe("stripSystemMentions", () => {
+  it("drops a sentence mentioning 'the system' (English)", () => {
+    const result = stripSystemMentions("Let me check the system for the exact total. We'll confirm shortly.");
+    expect(result).toBe("We'll confirm shortly.");
+    expect(result).not.toContain("system");
+  });
+
+  it("drops a sentence mentioning 'ang system' (Tagalog)", () => {
+    const result = stripSystemMentions("Tama po. Titingnan ko muna ang system para sa eksaktong halaga.");
+    expect(result).toBe("Tama po.");
+  });
+
+  it("drops a sentence mentioning 'sa system' (Tagalog/Batangueño)", () => {
+    const result = stripSystemMentions("Kukunin ko muna ang eksaktong halaga sa system, tapos sasabihin ko sa'yo. Sige po.");
+    expect(result).toBe("Sige po.");
+  });
+
+  it("drops a sentence mentioning 'our system' (English)", () => {
+    const result = stripSystemMentions("That's not listed in our system. Message us on Messenger.");
+    expect(result).toBe("Message us on Messenger.");
+  });
+
+  it("drops only the offending bullet line, keeping other bullets", () => {
+    const input = "- Checking the system now\n- We have availability for those dates";
+    expect(stripSystemMentions(input)).toBe("- We have availability for those dates");
+  });
+
+  it("does not touch an unrelated phrase like 'the sound system'", () => {
+    const input = "The house has a sound system you can use for karaoke.";
+    expect(stripSystemMentions(input)).toBe(input);
+  });
+
+  it("is a no-op when there's no system mention", () => {
+    const input = "We have availability for that stay. Want me to help you book it?";
+    expect(stripSystemMentions(input)).toBe(input);
+  });
+});
+
 describe("isEnglishContext", () => {
   it("is always true for explicit lang 'en'", () => {
     expect(isEnglishContext("en", "may bakante ba kayo")).toBe(true);
@@ -857,25 +896,36 @@ describe("formatDateRangeArrow", () => {
 
 describe("ensureDatesStated", () => {
   const resolved = { checkIn: "2026-11-14", checkOut: "2026-11-15" };
+  const stayLabel = buildStayLabel(resolved.checkIn, resolved.checkOut)!;
 
   it("prepends the resolved date range when English and the reply doesn't state it", () => {
-    const result = ensureDatesStated("We have availability for that stay.", resolved, true);
+    const result = ensureDatesStated("We have availability for that stay.", resolved, stayLabel, true);
     expect(result).toBe("For Saturday, November 14 → Sunday, November 15, 2026:\n\nWe have availability for that stay.");
   });
 
   it("leaves the reply untouched when it already states the check-in month/day", () => {
     const input = "For November 14, we have availability.";
-    expect(ensureDatesStated(input, resolved, true)).toBe(input);
+    expect(ensureDatesStated(input, resolved, stayLabel, true)).toBe(input);
   });
 
   it("leaves the reply untouched when not in English context", () => {
     const input = "May bakante kami sa petsang iyan.";
-    expect(ensureDatesStated(input, resolved, false)).toBe(input);
+    expect(ensureDatesStated(input, resolved, stayLabel, false)).toBe(input);
   });
 
   it("leaves the reply untouched when no dates were resolved this turn", () => {
     const input = "We have availability for that stay.";
-    expect(ensureDatesStated(input, null, true)).toBe(input);
+    expect(ensureDatesStated(input, null, stayLabel, true)).toBe(input);
+  });
+
+  it("does NOT double up a header when the reply already contains the stayLabel verbatim (doubled-date-header regression)", () => {
+    // stayLabel uses abbreviated month names ("Nov 19"), which the old full-month-name-only
+    // check ("November 19") missed, so the "For <range>:" header got prepended on top of an
+    // already-correct range.
+    const twoNight = { checkIn: "2026-11-19", checkOut: "2026-11-21" };
+    const label = buildStayLabel(twoNight.checkIn, twoNight.checkOut)!;
+    const input = `Your stay is ${label.en}. Want me to help you book it?`;
+    expect(ensureDatesStated(input, twoNight, label, true)).toBe(input);
   });
 });
 

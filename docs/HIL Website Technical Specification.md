@@ -1,6 +1,23 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-16 (Haven AI: stay ranges now always end on the check-out
+> **Last updated:** 2026-10-16 (Haven AI: date-range `hanggang`/`until` regression, doubled
+> date header, and a "the system" guard, same branch `fix/haven-ai-checkout-date-101626`:
+> [Haven AI Chat](#haven-ai-chat) — three fixes: (1) `dates.ts`'s month-day/weekday/ISO
+> range separator (`RANGE_SEP`) was missing "hanggang" and "until" — "Nobyembre 19 hanggang
+> 21" (and any other "X hanggang Y" phrasing) wasn't recognized as a range at all, so it
+> fell through to the single-date pattern and silently resolved to a 1-night stay (Nov 19 →
+> Nov 20) instead of the intended 2-night range (Nov 19 → Nov 21), with Haven then asking
+> the guest to confirm the wrong pre-resolved dates; (2) `post-process.ts`'s
+> `ensureDatesStated()` now checks for a literal `stayLabel` match FIRST, before its old
+> full-month-name-only check — the model is told to copy `stayLabel` verbatim, which uses
+> abbreviated month names ("Nov 19"), so the old check ("November 19") never matched it and
+> a correct reply still got a redundant "For Thursday, November 19 → ...:" header prepended
+> on top; (3) a new rule (`system-prompt.ts`) plus independent backstop
+> (`post-process.ts`'s `stripSystemMentions()`) drop any sentence where Haven refers to "the
+> system"/"ang system"/"sa system"/"our system" — including fixing the `BATANGUENO_FEWSHOT`
+> example that had been teaching the model that exact phrasing. See `dates.ts`,
+> `post-process.ts`, and `system-prompt.ts` sections below.
+> Prior, same day (Haven AI: stay ranges now always end on the check-out
 > date, `fix/haven-ai-checkout-date-101626`: [Haven AI Chat](#haven-ai-chat) — live bug:
 > Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday, November 19
 > hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied NIGHT
@@ -14,7 +31,7 @@
 > backstop — whatever range the model composed, if its end date matches the stay's last
 > occupied night it's replaced whole with the correct `stayLabel`, leaving a per-night
 > breakdown line untouched. See `dates.ts`, `tools.ts`, and the `post-process.ts` sections
-> below.
+> below.)
 > Prior: 2026-10-15 (Haven AI: Owner override widens the Welcome Book's
 > restaurants/things-to-do lists from B34-only to global, same branch
 > `fix/haven-ai-freetext-reset-101526`: [Haven AI Chat](#haven-ai-chat) — Cedric amended
@@ -1927,7 +1944,15 @@ buttons and "Talk to a Human" link are unaffected either way.
   `find_stay`, and `check_availability` (`tools.ts`, below) and `dateContextNote()`'s
   system-prompt note — every surface that states a stay's range pulls from this one
   function. See `system-prompt.ts`'s "copy stayLabel verbatim" hard rule and
-  `post-process.ts`'s `fixStayRangeEndDate()` backstop, below.
+  `post-process.ts`'s `fixStayRangeEndDate()` backstop, below. The month-day/weekday/ISO
+  range separator (`RANGE_SEP`) gained "hanggang" and "until" *(added 2026-10-16,
+  fix/haven-ai-checkout-date-101626)* — a live regression: "Nobyembre 19 hanggang 21" (and
+  any other "X hanggang Y" phrasing) wasn't recognized as a range at all, since only
+  "-"/"to"/"–"/"through" were understood, so it fell through to the single-date pattern and
+  silently resolved to a 1-night stay (Nov 19 → Nov 20) instead of the intended 2-night
+  range (Nov 19 → Nov 21) — Haven then asked the guest to confirm the wrong, pre-resolved
+  dates. A leading "mula"/"from" needs no special handling, since none of these patterns
+  anchor to the start of the expression.
 - `owner-facts.ts` *(added 2026-10-14, owner-guardrails pass)* — the single server-side
   source of Owner-confirmed facts (Cedric, 2026-10-14): `buildOwnerFactsPrompt()` is
   injected into `system-prompt.ts`'s prompt and states the 24-guest combined capacity cap
@@ -2141,7 +2166,11 @@ buttons and "Talk to a Human" link are unaffected either way.
   per-night breakdown is unaffected, since each row correctly lists its own occupied night
   *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626 — fixes a live bug where a Thu
   check-in/Sat check-out 2-night stay was read back as "Thursday → Friday"; independent
-  backstop below)*. Language
+  backstop below)*. Haven must never say she's checking/looking something up in "the
+  system"/"ang system"/"sa system"/"our system" — a real host, not software describing its
+  own backend; say what she's actually doing in plain terms instead ("let me check that for
+  you", "tinitingnan ko muna") *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626;
+  independent backstop `post-process.ts`'s `stripSystemMentions()`, above)*. Language
   mode (`en`/`tl`/`btg`/`auto`) is a parameter, not a separate prompt per language.
   **Terms of address** *(policy added 2026-10-14)*: "partner"/"pare"/"bro"/"sis"/"dude" are
   banned unless the guest used that exact word first; "parekoy" (male) / "marekoy" (female)
@@ -2267,7 +2296,14 @@ buttons and "Talk to a Human" link are unaffected either way.
   tool results/inputs (`resolve_dates`'s own result, or any other tool's date-bearing
   input); `ensureDatesStated()` prepends "For `formatDateRangeArrow()`:" (e.g. "For
   Saturday, November 14 → Sunday, November 15, 2026:") to an English reply that resolved
-  dates this turn but doesn't already state the check-in month/day. `fixStayRangeEndDate()`
+  dates this turn but doesn't already state the check-in month/day. It now takes `stayLabel`
+  as a parameter and checks it FIRST — a literal `text.includes(stayLabel.en)` match skips
+  the prepend outright — before falling back to the full-month-name check
+  *(doubled-header fix, added 2026-10-16, fix/haven-ai-checkout-date-101626)*: the model is
+  told to copy `stayLabel` verbatim, which uses abbreviated month names ("Nov 19"), so the
+  old full-month-name-only check ("November 19") never matched it, and a reply already
+  correctly reading "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights" still got "For
+  Thursday, November 19 → Saturday, November 21, 2026:" prepended on top. `fixStayRangeEndDate()`
   *(added 2026-10-16, fix/haven-ai-checkout-date-101626)* is the independent backstop for
   the live bug where Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday,
   November 19 hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied
@@ -2286,7 +2322,15 @@ buttons and "Talk to a Human" link are unaffected either way.
   language is plain Tagalog — `lang: "tl"` always, or `"auto"` mirroring a Tagalog-speaking
   guest (never `btg`, where these are correct, or `en`): "ga"/"baga" (question-particle
   usage only, same "Oo ga" bare-affirmation carve-out as `ensureBatanguenoMarker()`) → "ba";
-  "ari"/"ire" ("this/here") → "ito"; capitalization preserved.
+  "ari"/"ire" ("this/here") → "ito"; capitalization preserved. `stripSystemMentions()`
+  *(added 2026-10-16, fix/haven-ai-checkout-date-101626)* drops the whole sentence/bullet
+  line whenever Haven refers to "the system"/"ang system"/"sa system"/"our system" — a
+  guest-facing reply must never describe Haven's own backend; the article/possessive is
+  required immediately before "system" so an unrelated phrase like "the sound system" is
+  never caught. Independent backstop for the matching `system-prompt.ts` rule below; the
+  `BATANGUENO_FEWSHOT` example that used to say "...sa system, tapos sasabihin ko..." was
+  also corrected, since the few-shot's own wording was teaching the model the exact phrase
+  this guard now bans.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);

@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-10-16 — Haven AI: `hanggang`/`until` date-range regression, doubled date header, "the system" guard (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,744 tests).
+
+### Outcome
+Same branch as the stay-range entry below, later the same day — three more live-preview
+bugs fixed:
+1. **Date-range regression:** "Magkano ga ang Spacious 2BR sa Nobyembre 19 hanggang 21
+   para sa 4?" (and any other "X hanggang Y"/"X until Y" phrasing) wasn't recognized as a
+   date range at all — `dates.ts`'s separator (previously only `-`/`to`/`–`/`through`)
+   didn't include "hanggang"/"until", so the expression fell through to the single-date
+   pattern and silently resolved to a 1-night stay (Nov 19 → Nov 20) instead of the
+   intended 2-night range (Nov 19 → Nov 21), with Haven then asking the guest to confirm
+   the wrong, pre-resolved dates.
+2. **Doubled date header:** an English reply already correctly stating a stay's range via
+   `stayLabel` (e.g. "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights") still got a
+   redundant "For Thursday, November 19 → Saturday, November 21, 2026:" header prepended
+   on top — `ensureDatesStated()`'s "already stated?" check only recognized the full month
+   name ("November 19"), never the abbreviated form `stayLabel` actually uses ("Nov 19").
+3. **"The system" leak:** Haven must never tell a guest she's checking "the system"/"ang
+   system"/"sa system"/"our system" — it reads as a bot describing its own backend. The
+   `BATANGUENO_FEWSHOT` prompt example itself used to say "...sa system, tapos
+   sasabihin..." — fixed alongside the new rule/backstop, since the example was teaching
+   the model the exact phrase being banned.
+
+### Material Changes
+- **`dates.ts`:** new `RANGE_SEP` constant (`-`/`to`/`–`/`through`/`until`/`hanggang`) used
+  by all three range regexes (ISO, weekday, month-day) — single source of truth for every
+  word/symbol that joins a check-in phrase to a check-out phrase.
+- **`post-process.ts`:** `ensureDatesStated()` now takes `stayLabel` as a parameter and
+  checks `text.includes(stayLabel.en)` FIRST, before the existing full-month-name
+  fallback. New `stripSystemMentions()` drops any sentence/bullet line matching
+  `the|our system` / `ang system` / `sa system` (article/possessive required immediately
+  before "system", so "the sound system" is never caught).
+- **`system-prompt.ts`:** new hard rule banning "the system"/"ang system"/"sa
+  system"/"our system"; `BATANGUENO_FEWSHOT`'s example reply no longer says "sa system".
+- **`chat-service.ts`:** wires `stripSystemMentions()` into the post-process pipeline and
+  passes `stayLabel` into `ensureDatesStated()`. The internal "Context (already
+  resolved/detected by the system...)" note headers (`chat-service.ts`, `owner-facts.ts`,
+  `property-resolver.ts`) were also reworded to "...already resolved/detected here..." to
+  avoid teaching the model this phrasing in the first place — defense in depth alongside
+  the backstop.
+
+Tests: `dates.test.ts` (the exact live-bug message, "Nov 19 to 21", "November 19-21",
+"mula Nobyembre 19 hanggang 21", "Dec 30 to Jan 2" year rollover, "Nov 19 until 21"),
+`post-process.test.ts` (`ensureDatesStated` no-double-header case; `stripSystemMentions`
+— English/Tagalog/Batangueño phrasings, bullet lines, and the "sound system" false-positive
+guard), `system-prompt.test.ts` (updated for the reworded context-note phrasing).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
 ## 2026-10-16 — Haven AI: stay ranges now always end on the check-out date (fix/haven-ai-checkout-date-101626)
 
 Area: Website

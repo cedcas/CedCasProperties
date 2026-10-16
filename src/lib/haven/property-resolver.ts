@@ -211,7 +211,7 @@ export function buildPropertyContextNote(
   if (resolution.status === "ambiguous") {
     const list = resolution.options.map((o) => `${o.label} (sleeps up to ${o.maxGuests})`).join("; ");
     return (
-      "\n\nContext (already detected by the system, not a guest claim): the guest's latest " +
+      "\n\nContext (already detected here, not a guest claim): the guest's latest " +
       `message could mean more than one property: ${list}. Ask the guest which one they mean, ` +
       "in their active language, naming these options — never say the property is unknown, " +
       "not in our system, or that you don't recognize it."
@@ -219,7 +219,7 @@ export function buildPropertyContextNote(
   }
 
   let note =
-    "\n\nContext (already resolved by the system, not a guest claim): the guest's latest " +
+    "\n\nContext (already resolved here, not a guest claim): the guest's latest " +
     `message refers to "${resolution.label}" (slug ${resolution.slug}). Use this exact slug ` +
     "for any tool call about this property this turn, and do not ask the guest to name or " +
     "confirm the property.";

@@ -253,7 +253,7 @@ export function buildCapacityContextNote(guestMessage: string): string {
   const count = parseGuestCount(guestMessage);
   if (count === null || count < MAX_TOTAL_CAPACITY) return "";
   return (
-    "\n\nContext (already detected by the system, not a guest claim to verify): the guest's " +
+    "\n\nContext (already detected here, not a guest claim to verify): the guest's " +
     `most recent message indicates a group of ${count}. The largest bookable combination, ` +
     `across both houses on the same dates, is ${MAX_TOTAL_CAPACITY} adults. Do not ask how many ` +
     "nights or for more details before handing off, and do not promise flexibility or guess " +

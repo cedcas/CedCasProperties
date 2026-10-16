@@ -23,6 +23,7 @@ import {
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
+  stripSystemMentions,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -201,7 +202,7 @@ function dateContextNote(latestUserMessage: string, now: Date): string {
   const resolved = resolveDates(latestUserMessage, now);
   if (!resolved) return "";
   return (
-    "\n\nContext (already resolved by the system, not a guest claim): the guest's most " +
+    "\n\nContext (already resolved here, not a guest claim): the guest's most " +
     `recent message contains a date phrase that resolves to checkIn=${resolved.checkIn}, ` +
     `checkOut=${resolved.checkOut} (${resolved.interpreted}). If this is the date range the ` +
     "guest means, use these exact dates for any tool call or reply about this request " +
@@ -326,11 +327,14 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  // Haven must never describe her own backend to a guest ("the system"/"ang system"/
+  // "sa system"/"our system") — independent backstop for the rule in system-prompt.ts.
+  const systemMentionsStripped = stripSystemMentions(dadalawFixed);
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
-  const accessLeakDetected = containsAccessLeak(dadalawFixed);
-  const accessScrubbed = scrubAccessLeak(dadalawFixed, lang, guestMessages);
+  const accessLeakDetected = containsAccessLeak(systemMentionsStripped);
+  const accessScrubbed = scrubAccessLeak(systemMentionsStripped, lang, guestMessages);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
@@ -344,7 +348,7 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const rangeFixed = fixStayRangeEndDate(termsChecked, resolvedRange, stayLabel, englishMode);
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(rangeFixed);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
-  const datesStated = ensureDatesStated(englishClean, resolvedRange, englishMode);
+  const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
   const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);
   const reply = lang === "btg" ? ensureBatanguenoMarker(batanguenoFixed) : batanguenoFixed;
 

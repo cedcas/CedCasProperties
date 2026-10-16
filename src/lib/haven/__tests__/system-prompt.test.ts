@@ -123,7 +123,7 @@ describe("buildHavenSystemPrompt", () => {
     });
 
     it("instructs the model to trust a pre-resolved property context note and never claim a property is unknown", () => {
-      expect(prompt).toMatch(/Context \(already resolved\/detected by the/i);
+      expect(prompt).toMatch(/Context \(already resolved\/detected here/i);
       expect(prompt).toMatch(/never say a property is unknown, not in our system, or unrecognized/i);
     });
   });

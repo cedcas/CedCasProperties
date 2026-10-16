@@ -122,6 +122,45 @@ describe("resolveDates", () => {
     });
   });
 
+  describe("'hanggang'/'until' separators (regression: fell through to a 1-night single-date match)", () => {
+    it("resolves the exact live-bug Batangueño message ('Nobyembre 19 hanggang 21')", () => {
+      const result = resolveDates("Magkano ga ang Spacious 2BR sa Nobyembre 19 hanggang 21 para sa 4?", NOW);
+      expect(result).not.toBeNull();
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("resolves 'Nov 19 to 21'", () => {
+      const result = resolveDates("Nov 19 to 21", NOW);
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("resolves 'November 19-21'", () => {
+      const result = resolveDates("November 19-21", NOW);
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("resolves 'mula Nobyembre 19 hanggang 21' (leading 'mula' prefix is unmatched text, not a separator)", () => {
+      const result = resolveDates("mula Nobyembre 19 hanggang 21", NOW);
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("resolves 'Dec 30 to Jan 2' with a year rollover on checkout", () => {
+      const result = resolveDates("Dec 30 to Jan 2", NOW);
+      expect(result!.checkIn).toBe("2026-12-30");
+      expect(result!.checkOut).toBe("2027-01-02");
+    });
+
+    it("resolves an English 'until' separator ('Nov 19 until 21')", () => {
+      const result = resolveDates("Nov 19 until 21", NOW);
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+  });
+
   describe("bare weekday", () => {
     it("resolves to the nearest future occurrence", () => {
       const result = resolveDates("Saturday", NOW);
