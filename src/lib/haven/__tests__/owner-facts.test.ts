@@ -278,6 +278,14 @@ describe("parseGuestCount", () => {
     expect(parseGuestCount("Kami ay 24, available ba kayo?")).toBe(24);
   });
 
+  it("parses the number-leading '4 kami' idiom (Owner fixture, 2026-10-16)", () => {
+    expect(parseGuestCount("Nobyembre 19 hanggang 21, 4 kami")).toBe(4);
+  });
+
+  it("parses '4 na kami'", () => {
+    expect(parseGuestCount("4 na kami sa Nobyembre 19 hanggang 21")).toBe(4);
+  });
+
   it("sums a split group like '8 adults + 4 kids'", () => {
     expect(parseGuestCount("We're 8 adults + 4 kids for that weekend.")).toBe(12);
   });

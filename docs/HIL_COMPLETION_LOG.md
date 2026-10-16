@@ -4,6 +4,222 @@
 
 ---
 
+## 2026-10-16 — Haven AI: plain-language pass banning deep/literary Tagalog (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,873 tests).
+
+### Outcome
+Same branch as the entry below, later the same day. Owner incident (Cedric): Haven
+qualified a quote as "(provisional lang — tutuklasin ng tama sa checkout)" —
+"tutuklasin" ("will be discovered") is deep, literary Tagalog no real local host would
+use for "we'll confirm it." Haven must always speak plain, conversational Tagalog/
+Batangueño — everyday Taglish is fine, never deep or literary vocabulary. "Tutuklasin"
+and every other word on the "tuklas" root (tuklasin, matutuklasan, tinuklasan, …) are
+banned entirely — the standard quote/checkout caveat is now fixed per language: EN "This
+is provisional — confirmed at checkout.", TL/BTG "Provisional lang ito, kukumpirmahin sa
+checkout."
+
+Reviewing Haven's own fixed scripts and few-shot blocks (`system-prompt.ts`'s
+`BATANGUENO_FEWSHOT`, `owner-facts.ts`, `access-guard.ts`, `welcome-book.ts`, `dates.ts`)
+turned up no other instance of "tutuklasin" or the other deep words the Owner asked to
+be reviewed for ("sukatin", "manatili", "nawa", "datapwat", "subalit", "marapat",
+"pagsapit", "tunay na", "maaari") — they already used "pwede" and plain phrasing
+throughout. The guard below exists as a backstop against the model generating these
+words at runtime (what produced the Owner's live incident), not a fix to existing fixed
+text.
+
+### Material Changes
+- **`system-prompt.ts`:** new `PLAIN_LANGUAGE_RULE` instructs plain, conversational
+  Tagalog/Batangueño and bans the "tuklas" root entirely (say "kukumpirmahin" instead) plus
+  the other deep words, each with its plain replacement:
+  sukatin→tingnan, manatili→mag-stay, nawa→sana, datapwat/subalit→pero, marapat→dapat,
+  pagsapit→pagdating, tunay na→talagang, maaari/maaaring→pwede/pwedeng. The "provisional"
+  hard rule now states the standard caveat explicitly per language.
+- **`post-process.ts`:** `PROVISIONAL_CAVEAT_EN`/`PROVISIONAL_CAVEAT_TL` (the single source
+  of truth both the prompt and the backstop use — defined here, not `system-prompt.ts`, to
+  avoid a module import cycle through `owner-facts.ts`); `replaceTuklasinFamily(text,
+  isEnglish)` matches the whole "tuklas" root and swaps the WHOLE sentence/bullet line for
+  the standard caveat (never just the word, since every live occurrence of this root was
+  this exact checkout caveat); `simplifyDeepTagalogWords(text)` is a word-level,
+  capitalization-preserving swap for the rest of the banned words.
+- **`chat-service.ts`:** both run right after `fixDadalawPhrasing()`, before
+  `stripSystemMentions()`.
+
+Tests: `post-process.test.ts` (the exact Owner string → plain caveat, English-language
+variant, other "tuklas"-root inflections, each banned word replaced, no-op cases),
+`system-prompt.test.ts` (prompt states the per-language caveat and bans "tutuklasin" by
+name, lists the other banned words, and the Batangueño few-shot block contains none of
+them).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86.
+
+---
+
+## 2026-10-16 — Haven AI: never re-question a resolved date range, bare day-of-month ranges, follow-up-turn property/date resolution (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,840 tests).
+
+### Outcome
+Same branch as the two entries below, later the same day — three Owner rules (Cedric,
+2026-10-16), using the Owner's own dev screenshot as a test fixture:
+1. **Never re-question a resolved date range:** guest said "Nobyembre 19 hanggang 21, 4
+   kami" and Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) —
+   contradicting the range it had just correctly parsed. A parsed range always means
+   check-in the first date, check-out the second; Haven must never ask the guest to
+   confirm the number of nights, re-ask which dates were meant, or contradict the range.
+2. **Never ask what year:** always the current year in Asia/Manila, or next year if that
+   date already passed. Also: a bare day-of-month range with no month attached ("19 to
+   21", "19-21") now resolves against a month named earlier in the conversation, or the
+   next upcoming occurrence of that day otherwise.
+3. **Follow-up-turn resolution:** a message carrying only dates/guest count ("Nobyembre 19
+   hanggang 21, 4 kami"), sent after an earlier message naming a property ("Magkano ga ang
+   Spacious 2BR?") or after Haven listed options, now resolves the property from recent
+   history instead of asking again.
+
+### Material Changes
+- **`dates.ts`:** `resolveDates()` gained a third optional `context` parameter and a bare
+  day-of-month-range fallback (lowest priority, guarded against a guest-count phrase like
+  "4 to 5 guests" via a trailing people-noun exclusion); new `findContextMonth(context)`
+  export returns the last month name mentioned in recent history, English or
+  Tagalog/Batangueño.
+- **`owner-facts.ts`:** `parseGuestCount()` gained the number-leading "4 kami"/"4 na kami"
+  idiom (alongside the existing "kami ay 4"), needed to parse the Owner's exact fixture.
+- **`property-resolver.ts`:** new `resolveGuestPropertyMentionAcrossTurns(latestMessage,
+  listings, recentHistory)` — tries the latest message first, then scans the last 6 prior
+  turns (either role), most recent first, only when the latest message names no property.
+- **`post-process.ts`:** new `dropDateReconfirmationQuestions()` (drops any
+  nights/date-reconfirmation sentence in English or Tagalog/Batangueño whenever a range
+  was resolved this turn; falls back to restating `stayLabel` with a booking nudge if
+  dropping would leave the reply empty) and `dropWhatYearQuestions()` (unconditional
+  "what year"/"anong taon" drop).
+- **`system-prompt.ts`:** two new hard rules matching the backstops above.
+- **`chat-service.ts`:** new `recentHistoryMessages()` (last 6 prior turns) feeds both
+  `resolveGuestPropertyMentionAcrossTurns()` and `resolveDates()`'s `context` argument;
+  `dateContextNote()` no longer re-runs `resolveDates()` itself, taking the already-
+  resolved object instead so it's computed once and shared with the property note and the
+  new post-process guards, which run right after `fixStayRangeEndDate()`.
+
+Tests: `dates.test.ts` (bare day-range cases incl. year rollover, history month context,
+guest-count false-positive guard, `findContextMonth`), `owner-facts.test.ts` ("4 kami"/"4
+na kami"), `property-resolver.test.ts` (`resolveGuestPropertyMentionAcrossTurns`),
+`post-process.test.ts` (the exact Owner screenshot fixture, English/Tagalog/Batangueño
+re-question phrasings, the "did you mean" property-disambiguation carve-out,
+`dropWhatYearQuestions`), `chat-service.test.ts` (2-turn property+dates/guests flow, btg
+and English), `system-prompt.test.ts` (new hard-rule text).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
+## 2026-10-16 — Haven AI: `hanggang`/`until` date-range regression, doubled date header, "the system" guard (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,744 tests).
+
+### Outcome
+Same branch as the stay-range entry below, later the same day — three more live-preview
+bugs fixed:
+1. **Date-range regression:** "Magkano ga ang Spacious 2BR sa Nobyembre 19 hanggang 21
+   para sa 4?" (and any other "X hanggang Y"/"X until Y" phrasing) wasn't recognized as a
+   date range at all — `dates.ts`'s separator (previously only `-`/`to`/`–`/`through`)
+   didn't include "hanggang"/"until", so the expression fell through to the single-date
+   pattern and silently resolved to a 1-night stay (Nov 19 → Nov 20) instead of the
+   intended 2-night range (Nov 19 → Nov 21), with Haven then asking the guest to confirm
+   the wrong, pre-resolved dates.
+2. **Doubled date header:** an English reply already correctly stating a stay's range via
+   `stayLabel` (e.g. "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights") still got a
+   redundant "For Thursday, November 19 → Saturday, November 21, 2026:" header prepended
+   on top — `ensureDatesStated()`'s "already stated?" check only recognized the full month
+   name ("November 19"), never the abbreviated form `stayLabel` actually uses ("Nov 19").
+3. **"The system" leak:** Haven must never tell a guest she's checking "the system"/"ang
+   system"/"sa system"/"our system" — it reads as a bot describing its own backend. The
+   `BATANGUENO_FEWSHOT` prompt example itself used to say "...sa system, tapos
+   sasabihin..." — fixed alongside the new rule/backstop, since the example was teaching
+   the model the exact phrase being banned.
+
+### Material Changes
+- **`dates.ts`:** new `RANGE_SEP` constant (`-`/`to`/`–`/`through`/`until`/`hanggang`) used
+  by all three range regexes (ISO, weekday, month-day) — single source of truth for every
+  word/symbol that joins a check-in phrase to a check-out phrase.
+- **`post-process.ts`:** `ensureDatesStated()` now takes `stayLabel` as a parameter and
+  checks `text.includes(stayLabel.en)` FIRST, before the existing full-month-name
+  fallback. New `stripSystemMentions()` drops any sentence/bullet line matching
+  `the|our system` / `ang system` / `sa system` (article/possessive required immediately
+  before "system", so "the sound system" is never caught).
+- **`system-prompt.ts`:** new hard rule banning "the system"/"ang system"/"sa
+  system"/"our system"; `BATANGUENO_FEWSHOT`'s example reply no longer says "sa system".
+- **`chat-service.ts`:** wires `stripSystemMentions()` into the post-process pipeline and
+  passes `stayLabel` into `ensureDatesStated()`. The internal "Context (already
+  resolved/detected by the system...)" note headers (`chat-service.ts`, `owner-facts.ts`,
+  `property-resolver.ts`) were also reworded to "...already resolved/detected here..." to
+  avoid teaching the model this phrasing in the first place — defense in depth alongside
+  the backstop.
+
+Tests: `dates.test.ts` (the exact live-bug message, "Nov 19 to 21", "November 19-21",
+"mula Nobyembre 19 hanggang 21", "Dec 30 to Jan 2" year rollover, "Nov 19 until 21"),
+`post-process.test.ts` (`ensureDatesStated` no-double-header case; `stripSystemMentions`
+— English/Tagalog/Batangueño phrasings, bullet lines, and the "sound system" false-positive
+guard), `system-prompt.test.ts` (updated for the reworded context-note phrasing).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
+## 2026-10-16 — Haven AI: stay ranges now always end on the check-out date (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,702 tests).
+
+### Outcome
+Live bug: Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday, November
+19 hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied NIGHT
+(Friday) as the range's end instead of the check-out date (Saturday). Fixed with a single
+source of truth for how a stay's range is worded, enforced at three independent layers
+(DEC-029's usual pattern: a tool-surfaced fact, a prompt rule, and an independent
+post-generation backstop).
+
+### Material Changes
+- **`dates.ts`:** new `buildStayLabel(checkIn, checkOut)` returns `{en, tl, btg}` (`btg`
+  identical to `tl`) — e.g. EN "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights",
+  TL/BTG "Huwebes, Nob 19 → Sabado, Nob 21, 2026 (check-out) · 2 gabi". The end date is
+  always `checkOut`; nights is always `checkOut − checkIn`. `resolveDates()`'s own result
+  now carries a `stayLabel`.
+- **`tools.ts`:** `check_availability`, `get_quote`, and `find_stay` each return a
+  `stayLabel` for the exact dates they were called with (`find_stay` once at the top
+  level, shared by every option).
+- **`chat-service.ts`:** `dateContextNote()`'s pre-resolution system-prompt note now
+  states the resolved range's `stayLabel` (en/tl) alongside the ISO dates.
+- **`system-prompt.ts`:** new hard rule — a stay's range always ends on the check-out
+  date, never the last occupied night; copy the `stayLabel` matching the reply language
+  verbatim instead of composing the range.
+- **`post-process.ts`:** new `fixStayRangeEndDate()` — the independent backstop. Whatever
+  English-worded date range the model composed itself, if its start matches this turn's
+  resolved/quoted stay's `checkIn` and its end matches the last occupied night
+  (`checkOut − 1`), the WHOLE matched range (plus any trailing "(N nights)"/"(N gabi)"
+  note) is replaced with the correct `stayLabel` — never just the end date. A correct
+  range and a per-night breakdown line are both left untouched.
+
+Tests: `dates.test.ts` (`buildStayLabel` — check-out end date, singular "night", month
+rollover, invalid/inverted range, parity with `resolveDates()`), `tools.test.ts`
+(`stayLabel` on `check_availability`/`get_quote`/`find_stay`), `post-process.test.ts`
+(`fixStayRangeEndDate` — the exact bad Batangueño/mixed string, an English variant, a
+correct range left untouched, a single-night stay, a month rollover, and a per-night
+breakdown line left untouched), `system-prompt.test.ts` (the new hard rule's wording).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR into `dev`.
+
+---
+
 ## 2026-10-15 — Haven AI: Welcome Book restaurants/things-to-do widened to global (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

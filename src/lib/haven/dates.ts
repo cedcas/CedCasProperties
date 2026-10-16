@@ -16,6 +16,65 @@ export interface ResolvedDates {
   checkOut: string; // YYYY-MM-DD
   /** Human-readable confirmation text, e.g. "Saturday, November 14, 2026 (1 night)". */
   interpreted: string;
+  /** The guest-facing stay range — see `buildStayLabel` below. */
+  stayLabel: StayLabel;
+}
+
+export interface StayLabel {
+  en: string;
+  tl: string;
+  /** Identical to `tl` — Batangueño flavor lives in surrounding prose, not the date range. */
+  btg: string;
+}
+
+const EN_WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const EN_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TL_WEEKDAYS_FULL = ["Linggo", "Lunes", "Martes", "Miyerkules", "Huwebes", "Biyernes", "Sabado"];
+const TL_MONTHS_SHORT = ["Ene", "Peb", "Mar", "Abr", "May", "Hun", "Hul", "Ago", "Set", "Okt", "Nob", "Dis"];
+
+function enDatePart(d: Date): string {
+  return `${EN_WEEKDAYS_SHORT[d.getUTCDay()]}, ${EN_MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function tlDatePart(d: Date): string {
+  return `${TL_WEEKDAYS_FULL[d.getUTCDay()]}, ${TL_MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * The guest-facing stay range, with the end date ALWAYS the check-out date, never the last
+ * occupied night (the live bug: a Thu check-in/Sat check-out, 2-night stay, got read back
+ * as "Thursday → Friday" — the last NIGHT, not the check-out date). `nights` is always
+ * `checkOut - checkIn`, matching get_quote/find_stay's own night count. See
+ * post-process.ts's `fixStayRangeEndDate` backstop and system-prompt.ts's "copy stayLabel
+ * verbatim" rule, which both depend on this being the single source of truth for how a
+ * stay's range is worded.
+ */
+function buildStayLabelFromDates(checkIn: Date, checkOut: Date): StayLabel {
+  const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000);
+  const ciYear = checkIn.getUTCFullYear();
+  const coYear = checkOut.getUTCFullYear();
+  const ciYearSuffix = ciYear !== coYear ? `, ${ciYear}` : "";
+
+  const en =
+    `${enDatePart(checkIn)}${ciYearSuffix} → ${enDatePart(checkOut)}, ${coYear} (check-out) · ` +
+    `${nights} night${nights === 1 ? "" : "s"}`;
+  const tl = `${tlDatePart(checkIn)}${ciYearSuffix} → ${tlDatePart(checkOut)}, ${coYear} (check-out) · ${nights} gabi`;
+
+  return { en, tl, btg: tl };
+}
+
+/**
+ * String-input wrapper for callers outside this module (tools.ts, chat-service.ts,
+ * post-process.ts) that only have YYYY-MM-DD checkIn/checkOut, not an already-parsed Date.
+ * Returns `null` for an invalid or inverted range rather than throwing — callers already
+ * validate checkIn/checkOut before reaching this point, so `null` is only ever a defensive
+ * fallback, never the expected path.
+ */
+export function buildStayLabel(checkIn: string, checkOut: string): StayLabel | null {
+  const ci = toUtcMidnight(checkIn);
+  const co = toUtcMidnight(checkOut);
+  if (isNaN(ci.getTime()) || isNaN(co.getTime()) || co <= ci) return null;
+  return buildStayLabelFromDates(ci, co);
 }
 
 // Tagalog/Batangueño weekday and month names alongside the English ones, so the same
@@ -114,18 +173,111 @@ function toResult(checkIn: Date, checkOut: Date): ResolvedDates {
     checkIn: utcDateKey(checkIn),
     checkOut: utcDateKey(checkOut),
     interpreted: formatInterpreted(checkIn, checkOut),
+    stayLabel: buildStayLabelFromDates(checkIn, checkOut),
   };
 }
 
 const MONTH_NAME_PATTERN = Object.keys(MONTHS).sort((a, b) => b.length - a.length).join("|");
 const WEEKDAY_NAME_PATTERN = Object.keys(WEEKDAYS).sort((a, b) => b.length - a.length).join("|");
 
-export function resolveDates(expression: string, now: Date = new Date()): ResolvedDates | null {
+/**
+ * Owner rule (Cedric, 2026-10-16): a bare day-of-month range with no month attached
+ * ("19 to 21", "19-21", "19 hanggang 21") should use the month most recently named in
+ * conversation history, not force the guest to repeat it. Scans `context` (recent prior
+ * turns, concatenated by the caller — see chat-service.ts) for every month-name occurrence
+ * and returns the one that appears LAST (closest to "now" in the conversation), or `null`
+ * if none is mentioned at all.
+ */
+export function findContextMonth(context: string): number | null {
+  const text = context.toLowerCase();
+  let lastIndex = -1;
+  let found: number | null = null;
+  const re = new RegExp(`\\b(${MONTH_NAME_PATTERN})\\b`, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    if (match.index >= lastIndex) {
+      lastIndex = match.index;
+      found = MONTHS[match[1]];
+    }
+  }
+  return found;
+}
+
+/**
+ * Resolves a bare day-of-month range against an explicit context month when one was found
+ * in recent history, else the next upcoming occurrence of the start day — this calendar
+ * month if the day hasn't passed yet (today counts as "not yet passed"), otherwise next
+ * month (rolling the year forward off December, same as every other resolver here).
+ */
+function resolveBareDayRange(
+  today: Date,
+  startDay: number,
+  endDay: number,
+  contextMonth: number | null
+): { checkIn: Date; checkOut: Date } | null {
+  let month: number;
+  let year = today.getUTCFullYear();
+
+  if (contextMonth !== null) {
+    month = contextMonth;
+    let checkIn = new Date(Date.UTC(year, month, startDay));
+    if (checkIn < today) checkIn = new Date(Date.UTC(year + 1, month, startDay));
+    let checkOut = new Date(Date.UTC(checkIn.getUTCFullYear(), month, endDay));
+    if (checkOut <= checkIn) checkOut = new Date(Date.UTC(checkIn.getUTCFullYear() + 1, month, endDay));
+    return checkOut > checkIn ? { checkIn, checkOut } : null;
+  }
+
+  month = today.getUTCMonth();
+  if (startDay < today.getUTCDate()) {
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+  const checkIn = new Date(Date.UTC(year, month, startDay));
+  let checkOut = new Date(Date.UTC(year, month, endDay));
+  if (checkOut <= checkIn) {
+    let nextMonth = month + 1;
+    let nextYear = year;
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    checkOut = new Date(Date.UTC(nextYear, nextMonth, endDay));
+  }
+  return checkOut > checkIn ? { checkIn, checkOut } : null;
+}
+
+/**
+ * A people-count noun (or "kami") right after the second number means this was never a
+ * date range at all — "4 to 5 guests" / "4-5 kami" — so the bare day-range fallback below
+ * must not mistake it for one.
+ */
+const PEOPLE_NOUN_AFTER_RE = String.raw`(?!\s*(?:na\s+)?(?:adults?|guests?|pax|persons?|people|bisita|matatanda|kids?|children|bata|tao|katao|kami)\b)`;
+
+/**
+ * Every word/symbol guests use to join a check-in phrase to a check-out phrase — English
+ * ("to", "until", "through", a hyphen/en dash) and Tagalog/Batangueño ("hanggang", "until"
+ * is also understood in Taglish). "hanggang" was missing here, so "Nobyembre 19 hanggang
+ * 21" fell through to the single-date pattern below and silently resolved to a 1-night
+ * stay (Nov 19 -> Nov 20) instead of the intended 2-night range (Nov 19 -> Nov 21) — the
+ * live regression this constant fixes. A leading "mula"/"from" before the check-in phrase
+ * needs no special handling: it's just unmatched prefix text, since none of these patterns
+ * anchor to the start of the expression.
+ */
+const RANGE_SEP = String.raw`(?:-|to|–|through|until|hanggang)`;
+
+export function resolveDates(
+  expression: string,
+  now: Date = new Date(),
+  context: string = ""
+): ResolvedDates | null {
   const expr = expression.trim().toLowerCase();
   const today = todayManila(now);
 
   // ISO range: "2026-12-24 to 2026-12-26" / "2026-12-24 - 2026-12-26"
-  let m = expr.match(/(\d{4}-\d{2}-\d{2})\s*(?:-|to|–|through)\s*(\d{4}-\d{2}-\d{2})/);
+  let m = expr.match(new RegExp(`(\\d{4}-\\d{2}-\\d{2})\\s*${RANGE_SEP}\\s*(\\d{4}-\\d{2}-\\d{2})`));
   if (m) {
     const checkIn = toUtcMidnight(m[1]);
     const checkOut = toUtcMidnight(m[2]);
@@ -172,7 +324,7 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   }
 
   // "next Friday to Sunday" (also "next Fri-Sun")
-  m = expr.match(new RegExp(`\\bnext\\s+(${WEEKDAY_NAME_PATTERN})\\s*(?:-|to|–|through)\\s*(${WEEKDAY_NAME_PATTERN})\\b`));
+  m = expr.match(new RegExp(`\\bnext\\s+(${WEEKDAY_NAME_PATTERN})\\s*${RANGE_SEP}\\s*(${WEEKDAY_NAME_PATTERN})\\b`));
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], true);
     const checkOut = nextOccurrence(checkIn, WEEKDAYS[m[2]], true);
@@ -189,7 +341,7 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   // "Dec 24-26" / "December 24 to 26" / "Dec 24 - Dec 26" / "Nov 30 to Dec 2"
   m = expr.match(
     new RegExp(
-      `\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*(?:-|to|–|through)\\s*(?:(${MONTH_NAME_PATTERN})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b`
+      `\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\s*${RANGE_SEP}\\s*(?:(${MONTH_NAME_PATTERN})\\.?\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\b`
     )
   );
   if (m) {
@@ -226,6 +378,23 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], false);
     return toResult(checkIn, addUtcDays(checkIn, 1));
+  }
+
+  // Bare day-of-month range, no month attached: "19 to 21" / "19-21" / "19 hanggang 21".
+  // Lowest-confidence fallback — only reached once every month-named pattern above has
+  // already missed — so a people-count phrase like "4 to 5 guests"/"4-5 kami" never gets
+  // mistaken for a date range (see PEOPLE_NOUN_AFTER_RE).
+  m = expr.match(
+    new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*${RANGE_SEP}\\s*(\\d{1,2})(?:st|nd|rd|th)?\\b${PEOPLE_NOUN_AFTER_RE}`)
+  );
+  if (m) {
+    const startDay = parseInt(m[1], 10);
+    const endDay = parseInt(m[2], 10);
+    if (startDay >= 1 && startDay <= 31 && endDay >= 1 && endDay <= 31) {
+      const contextMonth = context ? findContextMonth(context) : null;
+      const range = resolveBareDayRange(today, startDay, endDay, contextMonth);
+      if (range) return toResult(range.checkIn, range.checkOut);
+    }
   }
 
   return null;

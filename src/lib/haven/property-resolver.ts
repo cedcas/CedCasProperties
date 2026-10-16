@@ -187,6 +187,28 @@ export function resolveGuestPropertyMention(
   };
 }
 
+/**
+ * Owner rule (Cedric, 2026-10-16): a follow-up message carrying only dates/guest count
+ * ("Nobyembre 19 hanggang 21, 4 kami") must still resolve to the property named earlier in
+ * the conversation — either the guest's own prior message ("Magkano ga ang Spacious
+ * 2BR?") or a property Haven itself listed. The latest message always wins when it names
+ * one itself; history is only consulted when the latest message names none at all, most
+ * recent turn first.
+ */
+export function resolveGuestPropertyMentionAcrossTurns(
+  latestMessage: string,
+  listings: ResolvableListing[],
+  recentHistory: string[]
+): PropertyMentionResolution {
+  const direct = resolveGuestPropertyMention(latestMessage, listings);
+  if (direct.status !== "none") return direct;
+  for (let i = recentHistory.length - 1; i >= 0; i--) {
+    const fromHistory = resolveGuestPropertyMention(recentHistory[i], listings);
+    if (fromHistory.status !== "none") return fromHistory;
+  }
+  return { status: "none" };
+}
+
 export interface PropertyContextDates {
   checkIn?: string;
   checkOut?: string;
@@ -211,7 +233,7 @@ export function buildPropertyContextNote(
   if (resolution.status === "ambiguous") {
     const list = resolution.options.map((o) => `${o.label} (sleeps up to ${o.maxGuests})`).join("; ");
     return (
-      "\n\nContext (already detected by the system, not a guest claim): the guest's latest " +
+      "\n\nContext (already detected here, not a guest claim): the guest's latest " +
       `message could mean more than one property: ${list}. Ask the guest which one they mean, ` +
       "in their active language, naming these options — never say the property is unknown, " +
       "not in our system, or that you don't recognize it."
@@ -219,7 +241,7 @@ export function buildPropertyContextNote(
   }
 
   let note =
-    "\n\nContext (already resolved by the system, not a guest claim): the guest's latest " +
+    "\n\nContext (already resolved here, not a guest claim): the guest's latest " +
     `message refers to "${resolution.label}" (slug ${resolution.slug}). Use this exact slug ` +
     "for any tool call about this property this turn, and do not ask the guest to name or " +
     "confirm the property.";
