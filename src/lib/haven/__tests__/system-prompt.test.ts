@@ -187,4 +187,41 @@ describe("buildHavenSystemPrompt", () => {
       expect(prompt).toMatch(/never ask a guest what year they mean/i);
     });
   });
+
+  // Owner incident, 2026-10-16: Haven said "(provisional lang — tutuklasin ng tama sa
+  // checkout)" — banned outright in favor of plain, conversational Tagalog/Batangueño.
+  describe("plain-language rule / checkout caveat (Cedric, 2026-10-16)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("gives the standard provisional/checkout caveat per language", () => {
+      expect(prompt).toContain("This is provisional — confirmed at checkout.");
+      expect(prompt).toContain("Provisional lang ito, kukumpirmahin sa checkout.");
+    });
+
+    it("bans 'tutuklasin' and its forms outright, naming the plain replacement", () => {
+      expect(prompt).toMatch(/never say "tutuklasin", "tuklasin", or "matutuklasan"/i);
+      expect(prompt).toMatch(/banned entirely/i);
+      expect(prompt).toMatch(/kukumpirmahin/i);
+    });
+
+    it("instructs plain, conversational Tagalog/Batangueño and lists the other banned deep words", () => {
+      expect(prompt).toMatch(/plain, conversational Tagalog\/Batangueño/i);
+      expect(prompt).toMatch(/never deep or literary Tagalog/i);
+      expect(prompt).toMatch(/"sukatin"/i);
+      expect(prompt).toMatch(/"manatili"/i);
+      expect(prompt).toMatch(/"nawa"/i);
+      expect(prompt).toMatch(/"datapwat"\/"subalit"/i);
+      expect(prompt).toMatch(/"marapat"/i);
+      expect(prompt).toMatch(/"pagsapit"/i);
+      expect(prompt).toMatch(/"tunay na"/i);
+      expect(prompt).toMatch(/"maaari"\/"maaaring"/i);
+    });
+
+    it("the Batangueño few-shot block contains none of the banned deep words", () => {
+      const btgPrompt = buildHavenSystemPrompt("btg");
+      const fewshot = btgPrompt.slice(btgPrompt.indexOf("Example exchanges"), btgPrompt.indexOf("Owner-approved facts"));
+      expect(fewshot.length).toBeGreaterThan(0);
+      expect(fewshot).not.toMatch(/tuklas|sukatin|manatili|\bnawa\b|datapwat|subalit|marapat|pagsapit|tunay\s+na|maaari/i);
+    });
+  });
 });

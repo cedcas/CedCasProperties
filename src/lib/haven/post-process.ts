@@ -563,6 +563,68 @@ function cleanupStrippedPunctuation(text: string): string {
     .replace(/[ \t]+([.,!?;:])/g, "$1");
 }
 
+// ── Plain-language guard: banned deep/literary Tagalog words (Cedric, 2026-10-16) ──────
+
+/**
+ * The standard quote/checkout caveat, fixed per language (Cedric, 2026-10-16 plain-
+ * language pass) — the single source of truth both `replaceTuklasinFamily` below and
+ * system-prompt.ts's prompt text use, so the model is told to say exactly what the
+ * backstop would restate it as.
+ */
+export const PROVISIONAL_CAVEAT_EN = "This is provisional — confirmed at checkout.";
+export const PROVISIONAL_CAVEAT_TL = "Provisional lang ito, kukumpirmahin sa checkout.";
+
+/**
+ * Owner incident (2026-10-16): Haven qualified a quote as "(provisional lang — tutuklasin
+ * ng tama sa checkout)" — "tutuklasin" is deep, literary Tagalog no real local host would
+ * use for "we'll confirm it." Matches the whole "tuklas" root so every inflection
+ * (tutuklasin, tuklasin, matutuklasan, tinuklasan, natuklasan, …) is caught, not just the
+ * one the owner saw — every live occurrence of this root was this exact checkout caveat,
+ * so the WHOLE sentence/bullet line is swapped for the standard caveat above, never just
+ * the word.
+ */
+const TUKLAS_ROOT_RE = /\w*tuklas\w*/i;
+
+/** Independent backstop for the `PLAIN_LANGUAGE_RULE` instruction in system-prompt.ts. */
+export function replaceTuklasinFamily(text: string, isEnglish: boolean): string {
+  return replaceMatchingSentences(
+    text,
+    TUKLAS_ROOT_RE,
+    isEnglish ? PROVISIONAL_CAVEAT_EN : PROVISIONAL_CAVEAT_TL
+  );
+}
+
+/**
+ * Other deep/literary Tagalog words banned from Haven's plain, conversational voice (same
+ * owner pass, 2026-10-16) — a direct word-level swap for the everyday equivalent that
+ * keeps the surrounding sentence grammatical, independent of the same instruction in
+ * system-prompt.ts's `PLAIN_LANGUAGE_RULE`. "maaaring" (the "-ng" linker form of "maaari")
+ * is listed separately since `\bmaaari\b` doesn't match it — there's no word boundary
+ * between "maaari" and "ng".
+ */
+const DEEP_TAGALOG_WORDS: Record<string, string> = {
+  sukatin: "tingnan",
+  manatili: "mag-stay",
+  nawa: "sana",
+  datapwat: "pero",
+  subalit: "pero",
+  marapat: "dapat",
+  pagsapit: "pagdating",
+  maaaring: "pwedeng",
+  maaari: "pwede",
+};
+
+/** "Tunay na" is two words, so it can't live in the single-word `DEEP_TAGALOG_WORDS` map. */
+const TUNAY_NA_RE = /\btunay\s+na\b/gi;
+
+export function simplifyDeepTagalogWords(text: string): string {
+  let out = text;
+  for (const [word, replacement] of Object.entries(DEEP_TAGALOG_WORDS)) {
+    out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => capitalizeLike(match, replacement));
+  }
+  return out.replace(TUNAY_NA_RE, (match) => capitalizeLike(match, "talagang"));
+}
+
 // ── Batangueño marker check ──────────────────────────────────────────────────
 
 /**

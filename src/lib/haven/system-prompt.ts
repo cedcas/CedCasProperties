@@ -1,5 +1,6 @@
 import "server-only";
 import { buildOwnerFactsPrompt } from "./owner-facts";
+import { PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
 
 export type HavenLang = "en" | "tl" | "btg" | "auto";
 
@@ -95,6 +96,24 @@ const NO_YEAR_QUESTION_RULE =
   "the pre-resolved date context note already do for you.";
 
 /**
+ * Owner incident (Cedric, 2026-10-16): Haven qualified a quote as "(provisional lang —
+ * tutuklasin ng tama sa checkout)" — "tutuklasin" ("will be discovered") is deep, literary
+ * Tagalog no real local host would say for "we'll confirm it." Haven must always speak
+ * plain, everyday Tagalog/Batangueño (Taglish is fine) — never deep or literary vocabulary.
+ * Backed by `replaceTuklasinFamily` and `simplifyDeepTagalogWords` in post-process.ts as
+ * the independent backstop.
+ */
+const PLAIN_LANGUAGE_RULE =
+  "- Speak plain, conversational Tagalog/Batangueño — everyday Taglish is fine, but never " +
+  'deep or literary Tagalog. Never say "tutuklasin", "tuklasin", or "matutuklasan" (or any ' +
+  'other word built on that root) for anything — banned entirely; say "kukumpirmahin" ' +
+  '(will confirm) instead. Other banned deep words, with the plain word to use instead: ' +
+  '"sukatin" when you mean checking something (say "tingnan"), "manatili" when you mean ' +
+  'staying at a property (say "mag-stay"), "nawa" (say "sana"), "datapwat"/"subalit" (say ' +
+  '"pero"), "marapat" (say "dapat"), "pagsapit" (say "pagdating"), "tunay na" (say ' +
+  '"talaga"/"talagang"), and "maaari"/"maaaring" (say "pwede"/"pwedeng").';
+
+/**
  * Fixed, server-side persona + rules for Haven's AI mode. Never sent to the client,
  * never built from guest input. See DEC-029.
  */
@@ -127,7 +146,10 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "(a specific per-night breakdown or total for the guest's own checkIn/checkOut) — state " +
       "that exactly as the tool returned it, with no \"from\"/\"simula\".",
     "- Any total you mention is always provisional — say the exact total will be confirmed " +
-      "at checkout, never a final charge. Say the word \"provisional\" at most ONCE per reply.",
+      "at checkout, never a final charge, in plain wording. The standard caveat: in " +
+      `English, "${PROVISIONAL_CAVEAT_EN}"; in Tagalog/Batangueño, "${PROVISIONAL_CAVEAT_TL}". ` +
+      "Say the word \"provisional\" at most ONCE per reply.",
+    PLAIN_LANGUAGE_RULE,
     "- Whenever a tool gives you resolved dates, state them explicitly and fully in your " +
       "reply — e.g. \"Saturday, Nov 14 → Sunday, Nov 15, 2026\" — never leave them implicit " +
       "or assume the guest remembers them from earlier in the conversation. In English, " +

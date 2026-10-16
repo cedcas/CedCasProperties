@@ -18,6 +18,10 @@ import {
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
+  replaceTuklasinFamily,
+  simplifyDeepTagalogWords,
+  PROVISIONAL_CAVEAT_EN,
+  PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
   isEnglishContext,
   stripTagalogWordsInEnglish,
@@ -790,6 +794,56 @@ describe("fixDadalawPhrasing", () => {
   it("leaves text with no 'dadalaw' phrasing untouched", () => {
     const input = "Ilang guests kayo?";
     expect(fixDadalawPhrasing(input, "tl")).toBe(input);
+  });
+});
+
+describe("replaceTuklasinFamily (owner incident, 2026-10-16)", () => {
+  it("replaces the exact owner string with the plain Tagalog caveat", () => {
+    const input = "Ang total ninyo ay ₱10,525 (provisional lang — tutuklasin ng tama sa checkout).";
+    const result = replaceTuklasinFamily(input, false);
+    expect(result).not.toMatch(/tuklas/i);
+    expect(result).toContain(PROVISIONAL_CAVEAT_TL);
+  });
+
+  it("replaces an English occurrence with the English caveat", () => {
+    const input = "Your total is ₱10,525. It will be tutuklasin ng tama at checkout.";
+    const result = replaceTuklasinFamily(input, true);
+    expect(result).not.toMatch(/tuklas/i);
+    expect(result).toContain(PROVISIONAL_CAVEAT_EN);
+  });
+
+  it("catches other inflections sharing the 'tuklas' root, not just 'tutuklasin'", () => {
+    expect(replaceTuklasinFamily("Matutuklasan n'yo ang eksaktong halaga sa checkout.", false)).not.toMatch(/tuklas/i);
+    expect(replaceTuklasinFamily("Tinuklasan na namin ang totoong bayad.", false)).not.toMatch(/tuklas/i);
+  });
+
+  it("is a no-op when there's no 'tuklas' root present", () => {
+    const input = "Provisional lang ito, kukumpirmahin sa checkout.";
+    expect(replaceTuklasinFamily(input, false)).toBe(input);
+  });
+});
+
+describe("simplifyDeepTagalogWords (plain-language pass, 2026-10-16)", () => {
+  it("replaces each banned deep word with its plain conversational equivalent", () => {
+    expect(simplifyDeepTagalogWords("Sukatin ko muna ang petsa.")).toBe("Tingnan ko muna ang petsa.");
+    expect(simplifyDeepTagalogWords("Pwede kayong manatili dito.")).toBe("Pwede kayong mag-stay dito.");
+    expect(simplifyDeepTagalogWords("Nawa'y makatulong ako.")).toBe("Sana'y makatulong ako.");
+    expect(simplifyDeepTagalogWords("Datapwat kailangan muna naming kumpirmahin.")).toBe("Pero kailangan muna naming kumpirmahin.");
+    expect(simplifyDeepTagalogWords("Subalit may bakante kami.")).toBe("Pero may bakante kami.");
+    expect(simplifyDeepTagalogWords("Marapat na kumpirmahin muna.")).toBe("Dapat na kumpirmahin muna.");
+    expect(simplifyDeepTagalogWords("Pagsapit ng check-out, aalis na kayo.")).toBe("Pagdating ng check-out, aalis na kayo.");
+    expect(simplifyDeepTagalogWords("Tunay na maganda ang bahay.")).toBe("Talagang maganda ang bahay.");
+    expect(simplifyDeepTagalogWords("Maaari kayong mag-book.")).toBe("Pwede kayong mag-book.");
+    expect(simplifyDeepTagalogWords("Maaaring mag-book kayo.")).toBe("Pwedeng mag-book kayo.");
+  });
+
+  it("preserves capitalization when replacing a sentence-initial word", () => {
+    expect(simplifyDeepTagalogWords("Manatili kayo nang matagal.")).toBe("Mag-stay kayo nang matagal.");
+  });
+
+  it("is a no-op when there are no deep words", () => {
+    const input = "Pwede kayong mag-book. Sige po.";
+    expect(simplifyDeepTagalogWords(input)).toBe(input);
   });
 });
 

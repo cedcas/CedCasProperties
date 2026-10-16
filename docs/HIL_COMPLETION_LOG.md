@@ -4,6 +4,60 @@
 
 ---
 
+## 2026-10-16 — Haven AI: plain-language pass banning deep/literary Tagalog (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,873 tests).
+
+### Outcome
+Same branch as the entry below, later the same day. Owner incident (Cedric): Haven
+qualified a quote as "(provisional lang — tutuklasin ng tama sa checkout)" —
+"tutuklasin" ("will be discovered") is deep, literary Tagalog no real local host would
+use for "we'll confirm it." Haven must always speak plain, conversational Tagalog/
+Batangueño — everyday Taglish is fine, never deep or literary vocabulary. "Tutuklasin"
+and every other word on the "tuklas" root (tuklasin, matutuklasan, tinuklasan, …) are
+banned entirely — the standard quote/checkout caveat is now fixed per language: EN "This
+is provisional — confirmed at checkout.", TL/BTG "Provisional lang ito, kukumpirmahin sa
+checkout."
+
+Reviewing Haven's own fixed scripts and few-shot blocks (`system-prompt.ts`'s
+`BATANGUENO_FEWSHOT`, `owner-facts.ts`, `access-guard.ts`, `welcome-book.ts`, `dates.ts`)
+turned up no other instance of "tutuklasin" or the other deep words the Owner asked to
+be reviewed for ("sukatin", "manatili", "nawa", "datapwat", "subalit", "marapat",
+"pagsapit", "tunay na", "maaari") — they already used "pwede" and plain phrasing
+throughout. The guard below exists as a backstop against the model generating these
+words at runtime (what produced the Owner's live incident), not a fix to existing fixed
+text.
+
+### Material Changes
+- **`system-prompt.ts`:** new `PLAIN_LANGUAGE_RULE` instructs plain, conversational
+  Tagalog/Batangueño and bans the "tuklas" root entirely (say "kukumpirmahin" instead) plus
+  the other deep words, each with its plain replacement:
+  sukatin→tingnan, manatili→mag-stay, nawa→sana, datapwat/subalit→pero, marapat→dapat,
+  pagsapit→pagdating, tunay na→talagang, maaari/maaaring→pwede/pwedeng. The "provisional"
+  hard rule now states the standard caveat explicitly per language.
+- **`post-process.ts`:** `PROVISIONAL_CAVEAT_EN`/`PROVISIONAL_CAVEAT_TL` (the single source
+  of truth both the prompt and the backstop use — defined here, not `system-prompt.ts`, to
+  avoid a module import cycle through `owner-facts.ts`); `replaceTuklasinFamily(text,
+  isEnglish)` matches the whole "tuklas" root and swaps the WHOLE sentence/bullet line for
+  the standard caveat (never just the word, since every live occurrence of this root was
+  this exact checkout caveat); `simplifyDeepTagalogWords(text)` is a word-level,
+  capitalization-preserving swap for the rest of the banned words.
+- **`chat-service.ts`:** both run right after `fixDadalawPhrasing()`, before
+  `stripSystemMentions()`.
+
+Tests: `post-process.test.ts` (the exact Owner string → plain caveat, English-language
+variant, other "tuklas"-root inflections, each banned word replaced, no-op cases),
+`system-prompt.test.ts` (prompt states the per-language caveat and bans "tutuklasin" by
+name, lists the other banned words, and the Batangueño few-shot block contains none of
+them).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86.
+
+---
+
 ## 2026-10-16 — Haven AI: never re-question a resolved date range, bare day-of-month ranges, follow-up-turn property/date resolution (fix/haven-ai-checkout-date-101626)
 
 Area: Website

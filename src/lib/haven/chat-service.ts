@@ -27,6 +27,8 @@ import {
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
+  replaceTuklasinFamily,
+  simplifyDeepTagalogWords,
   stripSystemMentions,
   isEnglishContext,
   stripTagalogWordsInEnglish,
@@ -352,9 +354,14 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  // Owner incident (2026-10-16): ban deep/literary Tagalog ("tutuklasin ng tama sa
+  // checkout") in favor of Haven's plain, conversational voice — independent backstop for
+  // system-prompt.ts's PLAIN_LANGUAGE_RULE.
+  const tuklasinFixed = replaceTuklasinFamily(dadalawFixed, englishMode);
+  const plainLanguageFixed = simplifyDeepTagalogWords(tuklasinFixed);
   // Haven must never describe her own backend to a guest ("the system"/"ang system"/
   // "sa system"/"our system") — independent backstop for the rule in system-prompt.ts.
-  const systemMentionsStripped = stripSystemMentions(dadalawFixed);
+  const systemMentionsStripped = stripSystemMentions(plainLanguageFixed);
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
