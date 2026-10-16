@@ -216,11 +216,16 @@ const NUMBER_PEOPLE_RE = new RegExp(String.raw`(\d{1,3})\s*(?:na\s+)?${PEOPLE_NO
 /** "Kami ay 24" ("we are 24") — a common Tagalog group-count idiom with no trailing noun. */
 const KAMI_AY_RE = /\bkami\s+ay\s+(\d{1,3})\b/i;
 
+/** "4 kami" ("we're 4") — the same idiom with the number leading instead of after "ay",
+ * e.g. "Nobyembre 19 hanggang 21, 4 kami" (Owner fixture, 2026-10-16). */
+const NUMBER_KAMI_RE = /\b(\d{1,3})\s*(?:na\s+)?kami\b/i;
+
 /**
  * Parses a guest-count claim out of a free-text message, in English or Tagalog —
- * "24 people/pax/guests/adults", "kami ay 24", "24 na tao", "24 katao", or a split group
- * like "8 adults + 4 kids" (summed). A bare number next to a date, time, or price (no
- * people-noun adjacent) is never picked up. Returns `null` when no guest count is found.
+ * "24 people/pax/guests/adults", "kami ay 24", "4 kami", "24 na tao", "24 katao", or a
+ * split group like "8 adults + 4 kids" (summed). A bare number next to a date, time, or
+ * price (no people-noun adjacent) is never picked up. Returns `null` when no guest count
+ * is found.
  */
 export function parseGuestCount(message: string): number | null {
   const text = message.toLowerCase();
@@ -234,6 +239,12 @@ export function parseGuestCount(message: string): number | null {
   const kamiAy = text.match(KAMI_AY_RE);
   if (kamiAy) {
     const n = parseInt(kamiAy[1], 10);
+    return n > 0 ? n : null;
+  }
+
+  const numberKami = text.match(NUMBER_KAMI_RE);
+  if (numberKami) {
+    const n = parseInt(numberKami[1], 10);
     return n > 0 ? n : null;
   }
 

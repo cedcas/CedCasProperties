@@ -6,8 +6,12 @@ import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
-import { resolveDates, buildStayLabel } from "./dates";
-import { buildPropertyContextNote, dropUnknownPropertyClaims, resolveGuestPropertyMention } from "./property-resolver";
+import { resolveDates, buildStayLabel, type ResolvedDates } from "./dates";
+import {
+  buildPropertyContextNote,
+  dropUnknownPropertyClaims,
+  resolveGuestPropertyMentionAcrossTurns,
+} from "./property-resolver";
 import {
   extractAllowedLinks,
   collectToolAmounts,
@@ -29,6 +33,8 @@ import {
   firstResolvedDateRange,
   ensureDatesStated,
   fixStayRangeEndDate,
+  dropDateReconfirmationQuestions,
+  dropWhatYearQuestions,
   needsAmenityHandoff,
   stripBatanguenoFromTagalog,
   MESSENGER_HREF,
@@ -191,6 +197,18 @@ function largeGroupHandoffResult(
 }
 
 /**
+ * Most recent prior turns (both roles), oldest first, excluding the guest's latest
+ * message — the "recent conversation context" the Owner's rules 2 and 3 (2026-10-16) ask
+ * Haven to fall back on: a month name mentioned earlier (for a bare day-range like "19 to
+ * 21") and a property named earlier (for a follow-up turn carrying only dates/guests).
+ */
+const HISTORY_LOOKBACK_TURNS = 6;
+
+function recentHistoryMessages(messages: ChatRequestBody["messages"]): string[] {
+  return messages.slice(0, -1).slice(-HISTORY_LOOKBACK_TURNS).map((m) => m.content);
+}
+
+/**
  * Runs the same server-side date resolver the `resolve_dates` tool uses (dates.ts) on the
  * guest's latest message BEFORE the model is called. The model is instructed to always call
  * `resolve_dates` itself, but live testing showed it sometimes skips that and asks the guest
@@ -198,8 +216,7 @@ function largeGroupHandoffResult(
  * hands the model the answer directly, so it never needs to ask for the year at all (a
  * detected phrase always resolves to the next upcoming occurrence, never the past).
  */
-function dateContextNote(latestUserMessage: string, now: Date): string {
-  const resolved = resolveDates(latestUserMessage, now);
+function dateContextNote(resolved: ResolvedDates | null): string {
   if (!resolved) return "";
   return (
     "\n\nContext (already resolved here, not a guest claim): the guest's most " +
@@ -259,16 +276,24 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   } catch {
     publicListings = [];
   }
-  const propertyResolution = resolveGuestPropertyMention(
+  const recentHistory = recentHistoryMessages(body.messages);
+  // Owner rule 3 (2026-10-16): a follow-up turn carrying only dates/guests ("Nobyembre 19
+  // hanggang 21, 4 kami") still resolves against a property named earlier — either the
+  // guest's own prior message or one Haven itself listed — instead of asking again.
+  const propertyResolution = resolveGuestPropertyMentionAcrossTurns(
     latestMessage,
-    Array.isArray(publicListings) ? publicListings : []
+    Array.isArray(publicListings) ? publicListings : [],
+    recentHistory
   );
-  const resolvedDates = resolveDates(latestMessage, now);
+  // Owner rule 2 (2026-10-16): a bare day-range with no month attached ("19 to 21") uses
+  // the month most recently named in conversation history when the latest message doesn't
+  // carry one itself.
+  const resolvedDates = resolveDates(latestMessage, now, recentHistory.join(" "));
   const guestCount = parseGuestCount(latestMessage);
 
   const system =
     buildHavenSystemPrompt(lang) +
-    dateContextNote(latestMessage, now) +
+    dateContextNote(resolvedDates) +
     buildCapacityContextNote(latestMessage) +
     buildPropertyContextNote(propertyResolution, {
       checkIn: resolvedDates?.checkIn,
@@ -346,7 +371,14 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // the model composed itself, if its end date matches the last occupied night instead of
   // the check-out date, swap the whole range for the correct stayLabel (see post-process.ts).
   const rangeFixed = fixStayRangeEndDate(termsChecked, resolvedRange, stayLabel, englishMode);
-  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(rangeFixed);
+  // Owner rule 1 (2026-10-16): never let Haven re-question nights/dates the server already
+  // resolved, whether that resolution came from a tool call this turn (resolvedRange) or
+  // the pre-resolved date context note from the guest's own latest message (resolvedDates).
+  const effectiveStayLabel = stayLabel ?? resolvedDates?.stayLabel ?? null;
+  const datesResolvedThisTurn = Boolean(resolvedDates) || Boolean(resolvedRange);
+  const reconfirmFixed = dropDateReconfirmationQuestions(rangeFixed, datesResolvedThisTurn, effectiveStayLabel, englishMode);
+  const yearQuestionFixed = dropWhatYearQuestions(reconfirmFixed);
+  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(yearQuestionFixed);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
   const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
   const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);

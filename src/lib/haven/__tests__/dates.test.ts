@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDates, buildStayLabel } from "../dates";
+import { resolveDates, buildStayLabel, findContextMonth } from "../dates";
 
 // Reference "today": Wednesday, 2026-10-14 (the date this feature was built), at a time
 // safely before the Manila-midnight UTC boundary (16:00 UTC).
@@ -161,6 +161,48 @@ describe("resolveDates", () => {
     });
   });
 
+  describe("bare day-of-month range, no month attached (Owner rules 2, 2026-10-16)", () => {
+    // Manila "today" = 2026-10-16, matching the Owner's own test dates.
+    const OCT_16 = new Date("2026-10-16T04:00:00Z");
+
+    it("rolls a named-month range into next year when that date has already passed this year ('Jan 5 to 7')", () => {
+      const result = resolveDates("Jan 5 to 7", OCT_16);
+      expect(result!.checkIn).toBe("2027-01-05");
+      expect(result!.checkOut).toBe("2027-01-07");
+    });
+
+    it("keeps a named-month range in the current year when it hasn't passed yet ('Nov 19-21')", () => {
+      const result = resolveDates("Nov 19-21", OCT_16);
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("uses a month mentioned earlier in conversation history for a bare '19 to 21'", () => {
+      const result = resolveDates("19 to 21", OCT_16, "Magkano ga ang Spacious 2BR sa November?");
+      expect(result).not.toBeNull();
+      expect(result!.checkIn).toBe("2026-11-19");
+      expect(result!.checkOut).toBe("2026-11-21");
+    });
+
+    it("falls back to the next upcoming occurrence of the day when no month is in context ('19 to 21' on Oct 16 -> Oct 19-21)", () => {
+      const result = resolveDates("19 to 21", OCT_16);
+      expect(result!.checkIn).toBe("2026-10-19");
+      expect(result!.checkOut).toBe("2026-10-21");
+    });
+
+    it("rolls into next month when the bare day has already passed this month", () => {
+      // Today is the 16th; "5-7" has already passed in October, so it means November.
+      const result = resolveDates("5-7", OCT_16);
+      expect(result!.checkIn).toBe("2026-11-05");
+      expect(result!.checkOut).toBe("2026-11-07");
+    });
+
+    it("never mistakes a guest-count range for a date range ('4 to 5 guests', '4-5 kami')", () => {
+      expect(resolveDates("4 to 5 guests", OCT_16)).toBeNull();
+      expect(resolveDates("4-5 kami", OCT_16)).toBeNull();
+    });
+  });
+
   describe("bare weekday", () => {
     it("resolves to the nearest future occurrence", () => {
       const result = resolveDates("Saturday", NOW);
@@ -244,5 +286,23 @@ describe("buildStayLabel", () => {
   it("is included on every resolve_dates result, matching checkIn/checkOut", () => {
     const resolved = resolveDates("Dec 24-26", NOW);
     expect(resolved!.stayLabel).toEqual(buildStayLabel(resolved!.checkIn, resolved!.checkOut));
+  });
+});
+
+describe("findContextMonth", () => {
+  it("returns null when no month is mentioned", () => {
+    expect(findContextMonth("Do you have WiFi and parking?")).toBeNull();
+  });
+
+  it("finds a month name regardless of case", () => {
+    expect(findContextMonth("Magkano ga ang Spacious 2BR sa November?")).toBe(10); // 0-indexed
+  });
+
+  it("returns the LAST mentioned month when more than one appears", () => {
+    expect(findContextMonth("Not October, I meant November actually.")).toBe(10);
+  });
+
+  it("understands Tagalog/Batangueño month names", () => {
+    expect(findContextMonth("Baka sa Nobyembre kami pupunta")).toBe(10);
   });
 });

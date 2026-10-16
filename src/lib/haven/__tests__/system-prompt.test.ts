@@ -167,4 +167,24 @@ describe("buildHavenSystemPrompt", () => {
       expect(fewshot).not.toMatch(/₱\d/);
     });
   });
+
+  // Owner rules 1 & 2, 2026-10-16: never re-question a resolved date range, never ask
+  // what year.
+  describe("date range confirmation / year-question rules", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("forbids re-confirming nights or re-asking which dates were meant once resolved", () => {
+      expect(prompt).toMatch(/never\s+ask the guest to confirm the number of nights/i);
+      expect(prompt).toMatch(/never re-ask which dates they meant/i);
+      expect(prompt).toMatch(/never contradict that range/i);
+    });
+
+    it("states that a range means check-in the first date, check-out the second", () => {
+      expect(prompt).toMatch(/check-in on the FIRST date and check-out on the SECOND/i);
+    });
+
+    it("forbids asking what year a guest means", () => {
+      expect(prompt).toMatch(/never ask a guest what year they mean/i);
+    });
+  });
 });

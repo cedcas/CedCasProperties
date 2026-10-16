@@ -670,7 +670,7 @@ const SYSTEM_MENTION_RE = /\b(?:the|our)\s+system\b|\bang\s+system\b|\bsa\s+syst
 const EMPTY_BULLET_LINE = /^\s*(?:[-*•]|\d+[.)])\s*$/;
 
 /** Tidies the whitespace/blank lines a dropped sentence or bullet line leaves behind. */
-function tidyAfterSentenceDrop(text: string): string {
+export function tidyAfterSentenceDrop(text: string): string {
   return text
     .replace(/[ \t]{2,}/g, " ")
     .replace(/[ \t]+([.,!?;:])/g, "$1")
@@ -852,4 +852,66 @@ export function fixStayRangeEndDate(
       return startMatches && endMatches ? label : match;
     }
   );
+}
+
+// ── Date/nights re-confirmation guard (Owner rule, Cedric 2026-10-16) ──────────
+
+/**
+ * Industry standard: a range like "Nov 19 to 21", "Nov 19-21", or "Nobyembre 19 hanggang
+ * 21" always means check-in the FIRST date, check-out the SECOND (nights = the
+ * difference) — Haven must never re-question that once the server has already resolved a
+ * range this turn. Live bug (dev, pre-#86): guest said "Nobyembre 19 hanggang 21, 4 kami"
+ * and Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) —
+ * contradicting the range it had just correctly parsed. Each alternative below targets
+ * one phrasing of that same mistake, in English or Tagalog/Batangueño. The "did you mean"
+ * alternative is scoped to a sentence that ALSO mentions nights/dates, so it never
+ * clobbers property-resolver.ts's own (legitimate) "Did you mean <property>?" question.
+ */
+const DATE_RECONFIRMATION_RE = new RegExp(
+  [
+    String.raw`\bjust to confirm\b`,
+    String.raw`\bis that\s+\d+\s+nights?\s+or\s+\d+\b`,
+    String.raw`\bdo you want\s+\d+\s+nights?\b`,
+    String.raw`(?=.*\bdid you mean\b)(?=.*\b(?:nights?|dates?|check-?in|check-?out)\b)`,
+    String.raw`\btotoo\s+(?:ba|ga)\s+na\s+isang\s+gabi\b`,
+    String.raw`\bisang\s+gabi\s+lang\s+(?:ba|ga)\b`,
+    String.raw`\bilang\s+gabi\b`,
+    String.raw`\bsigurado\s+(?:ba|ga)\s+kayo\b`,
+    String.raw`\b[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\s+o\s+[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\b`,
+  ].join("|"),
+  "i"
+);
+
+/**
+ * Drops any sentence/bullet line re-questioning the guest's nights or dates, whenever a
+ * date range was already resolved this turn (a `resolve_dates`/tool result, or the
+ * pre-resolved date context note — see chat-service.ts). If dropping leaves the reply
+ * completely empty (the live bug's reply was ENTIRELY this kind of question), restate the
+ * resolved stayLabel with a booking nudge instead of sending a blank message.
+ */
+export function dropDateReconfirmationQuestions(
+  text: string,
+  datesResolvedThisTurn: boolean,
+  stayLabel: StayLabel | null,
+  isEnglish: boolean
+): string {
+  if (!datesResolvedThisTurn) return text;
+  const dropped = tidyAfterSentenceDrop(replaceMatchingSentences(text, DATE_RECONFIRMATION_RE, ""));
+  if (dropped.length > 0 || !stayLabel) return dropped;
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+  return isEnglish ? `${label} — want me to help you book it?` : `${label} — gusto n'yo na bang i-book?`;
+}
+
+// ── "What year" guard ────────────────────────────────────────────────────────
+
+/**
+ * Haven must never ask a guest what year they mean — a detected date phrase always
+ * resolves to the next upcoming occurrence (see dates.ts), so the question never needed
+ * answering in the first place. Independent backstop for the same instruction in
+ * system-prompt.ts and the per-turn date context note (chat-service.ts).
+ */
+const WHAT_YEAR_RE = /\bwhat year\b|\bwhich year\b|\banong\s+taon\b|\banong\s+year\b/i;
+
+export function dropWhatYearQuestions(text: string): string {
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, WHAT_YEAR_RE, ""));
 }

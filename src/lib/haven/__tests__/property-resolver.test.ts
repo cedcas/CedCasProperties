@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   resolvePropertyMatch,
   resolveGuestPropertyMention,
+  resolveGuestPropertyMentionAcrossTurns,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
 } from "../property-resolver";
@@ -136,6 +137,40 @@ describe("resolveGuestPropertyMention", () => {
 
   it("returns none for an unrelated message", () => {
     expect(resolveGuestPropertyMention("What time is checkout?", LISTINGS)).toEqual({ status: "none" });
+  });
+});
+
+// Owner rule 3, 2026-10-16: a follow-up message carrying only dates/guests must still
+// resolve to a property named earlier in the conversation.
+describe("resolveGuestPropertyMentionAcrossTurns", () => {
+  it("prefers a property named in the latest message itself over anything in history", () => {
+    const result = resolveGuestPropertyMentionAcrossTurns("Cozy 1BR po", LISTINGS, [
+      "Magkano ga ang Spacious 2BR?",
+    ]);
+    expect(result).toEqual({ status: "unique", slug: "cozy-1-bedroom", label: "Cozy 1BR Haven" });
+  });
+
+  it("falls back to the most recent property-naming message in history when the latest message names none", () => {
+    const result = resolveGuestPropertyMentionAcrossTurns("Nobyembre 19 hanggang 21, 4 kami", LISTINGS, [
+      "Magkano ga ang Spacious 2BR?",
+    ]);
+    expect(result).toEqual({ status: "unique", slug: "spacious-2-bedroom", label: "Spacious 2BR Haven" });
+  });
+
+  it("scans history most-recent-first", () => {
+    const result = resolveGuestPropertyMentionAcrossTurns("Nov 19 to 21, we are 4", LISTINGS, [
+      "Magkano ga ang Spacious 2BR?",
+      "Ay ga, pwede namán! Ilan po kayo at anong petsa?",
+      "Actually, Cozy 1BR nalang",
+    ]);
+    expect(result).toEqual({ status: "unique", slug: "cozy-1-bedroom", label: "Cozy 1BR Haven" });
+  });
+
+  it("returns none when neither the latest message nor history names a property", () => {
+    const result = resolveGuestPropertyMentionAcrossTurns("Nov 19 to 21, we are 4", LISTINGS, [
+      "Do you have a pool?",
+    ]);
+    expect(result).toEqual({ status: "none" });
   });
 });
 

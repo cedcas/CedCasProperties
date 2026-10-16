@@ -187,6 +187,28 @@ export function resolveGuestPropertyMention(
   };
 }
 
+/**
+ * Owner rule (Cedric, 2026-10-16): a follow-up message carrying only dates/guest count
+ * ("Nobyembre 19 hanggang 21, 4 kami") must still resolve to the property named earlier in
+ * the conversation — either the guest's own prior message ("Magkano ga ang Spacious
+ * 2BR?") or a property Haven itself listed. The latest message always wins when it names
+ * one itself; history is only consulted when the latest message names none at all, most
+ * recent turn first.
+ */
+export function resolveGuestPropertyMentionAcrossTurns(
+  latestMessage: string,
+  listings: ResolvableListing[],
+  recentHistory: string[]
+): PropertyMentionResolution {
+  const direct = resolveGuestPropertyMention(latestMessage, listings);
+  if (direct.status !== "none") return direct;
+  for (let i = recentHistory.length - 1; i >= 0; i--) {
+    const fromHistory = resolveGuestPropertyMention(recentHistory[i], listings);
+    if (fromHistory.status !== "none") return fromHistory;
+  }
+  return { status: "none" };
+}
+
 export interface PropertyContextDates {
   checkIn?: string;
   checkOut?: string;

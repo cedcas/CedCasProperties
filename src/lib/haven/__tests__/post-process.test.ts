@@ -25,6 +25,8 @@ import {
   formatDateRangeArrow,
   ensureDatesStated,
   fixStayRangeEndDate,
+  dropDateReconfirmationQuestions,
+  dropWhatYearQuestions,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
@@ -983,5 +985,93 @@ describe("fixStayRangeEndDate (DEC-029: end date must be check-out, never the la
   it("is a no-op when nothing was resolved this turn", () => {
     const input = "Thursday, November 19 to Friday, November 20.";
     expect(fixStayRangeEndDate(input, null, stayLabel, true)).toBe(input);
+  });
+});
+
+describe("dropDateReconfirmationQuestions (Owner rule 1, 2026-10-16)", () => {
+  // 2-night stay: Thu Nov 19 check-in, Sat Nov 21 check-out.
+  const resolved = { checkIn: "2026-11-19", checkOut: "2026-11-21" };
+  const stayLabel = buildStayLabel(resolved.checkIn, resolved.checkOut)!;
+
+  it("fixes the exact Owner screenshot of the live bad reply (dev, pre-#86)", () => {
+    const input =
+      "Ala eh, Teka lang — mukhang ang system ay nag-interpret ng Nobyembre 19 hanggang 21 " +
+      "bilang isang gabi lang (Nov 19–20). Totoo ba na isang gabi lang ang gusto n'yo, o " +
+      "dalawang gabi (Nov 19–21) ang plan?";
+    // The full pipeline runs stripSystemMentions BEFORE this guard (see chat-service.ts),
+    // so the first ("ang system") sentence is already gone by the time this guard sees it
+    // — composing both here mirrors production and leaves only the actual re-question.
+    const result = dropDateReconfirmationQuestions(stripSystemMentions(input), true, stayLabel, false);
+    expect(result).not.toMatch(/totoo ba/i);
+    expect(result).not.toMatch(/dalawang gabi/i);
+    expect(result).not.toMatch(/ang plan\?/i);
+    // The whole reply was this kind of question, so it must fall back to a restatement
+    // instead of going blank.
+    expect(result.trim().length).toBeGreaterThan(0);
+    expect(result).toContain(stayLabel.tl);
+  });
+
+  it("is a no-op when nothing was resolved this turn", () => {
+    const input = "Totoo ba na isang gabi lang ang gusto n'yo?";
+    expect(dropDateReconfirmationQuestions(input, false, stayLabel, false)).toBe(input);
+  });
+
+  it('drops an English "just to confirm" re-question, leaving the rest of the reply intact', () => {
+    const input = "Just to confirm, is that 1 night or 2? We have availability either way.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, true);
+    expect(result).not.toMatch(/just to confirm/i);
+    expect(result).toContain("We have availability either way.");
+  });
+
+  it('drops "do you want 1 night" without touching an unrelated sentence', () => {
+    const input = "Do you want 1 night? Let me know and I'll send the quote.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, true);
+    expect(result).not.toMatch(/do you want 1 night/i);
+    expect(result).toContain("Let me know and I'll send the quote.");
+  });
+
+  it('drops "ilang gabi" once dates are already resolved', () => {
+    const input = "Ilang gabi ba ang gusto n'yo?";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, false);
+    expect(result).not.toMatch(/ilang gabi/i);
+  });
+
+  it('drops "sigurado ga kayo" re-questioning the parsed range', () => {
+    const input = "Sigurado ga kayo na Nov 19–20 o Nov 19–21 ang gusto n'yo?";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, false);
+    expect(result).not.toMatch(/sigurado ga kayo/i);
+  });
+
+  it('never clobbers property-resolver.ts\'s legitimate "Did you mean <property>?" question', () => {
+    const input = "Did you mean Mickey in Lipa — Full Family House?";
+    expect(dropDateReconfirmationQuestions(input, true, stayLabel, true)).toBe(input);
+  });
+
+  it('drops an English "did you mean" only when nights/dates are named in the same sentence', () => {
+    const input = "Did you mean 1 night or 2 nights? Either way we have availability.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, true);
+    expect(result).not.toMatch(/did you mean/i);
+    expect(result).toContain("Either way we have availability.");
+  });
+});
+
+describe("dropWhatYearQuestions (Owner rule 2, 2026-10-16)", () => {
+  it('drops "what year" in English', () => {
+    const input = "What year do you mean? We'll check availability once I know.";
+    const result = dropWhatYearQuestions(input);
+    expect(result).not.toMatch(/what year/i);
+    expect(result).toContain("We'll check availability once I know.");
+  });
+
+  it('drops "anong taon" in Tagalog/Batangueño', () => {
+    const input = "Anong taon ang gusto n'yo? Sabihin n'yo lang po.";
+    const result = dropWhatYearQuestions(input);
+    expect(result).not.toMatch(/anong taon/i);
+    expect(result).toContain("Sabihin n'yo lang po.");
+  });
+
+  it("is a no-op when no year question is present", () => {
+    const input = "We have availability for those dates.";
+    expect(dropWhatYearQuestions(input)).toBe(input);
   });
 });

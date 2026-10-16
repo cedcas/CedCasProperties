@@ -4,6 +4,65 @@
 
 ---
 
+## 2026-10-16 — Haven AI: never re-question a resolved date range, bare day-of-month ranges, follow-up-turn property/date resolution (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,840 tests).
+
+### Outcome
+Same branch as the two entries below, later the same day — three Owner rules (Cedric,
+2026-10-16), using the Owner's own dev screenshot as a test fixture:
+1. **Never re-question a resolved date range:** guest said "Nobyembre 19 hanggang 21, 4
+   kami" and Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) —
+   contradicting the range it had just correctly parsed. A parsed range always means
+   check-in the first date, check-out the second; Haven must never ask the guest to
+   confirm the number of nights, re-ask which dates were meant, or contradict the range.
+2. **Never ask what year:** always the current year in Asia/Manila, or next year if that
+   date already passed. Also: a bare day-of-month range with no month attached ("19 to
+   21", "19-21") now resolves against a month named earlier in the conversation, or the
+   next upcoming occurrence of that day otherwise.
+3. **Follow-up-turn resolution:** a message carrying only dates/guest count ("Nobyembre 19
+   hanggang 21, 4 kami"), sent after an earlier message naming a property ("Magkano ga ang
+   Spacious 2BR?") or after Haven listed options, now resolves the property from recent
+   history instead of asking again.
+
+### Material Changes
+- **`dates.ts`:** `resolveDates()` gained a third optional `context` parameter and a bare
+  day-of-month-range fallback (lowest priority, guarded against a guest-count phrase like
+  "4 to 5 guests" via a trailing people-noun exclusion); new `findContextMonth(context)`
+  export returns the last month name mentioned in recent history, English or
+  Tagalog/Batangueño.
+- **`owner-facts.ts`:** `parseGuestCount()` gained the number-leading "4 kami"/"4 na kami"
+  idiom (alongside the existing "kami ay 4"), needed to parse the Owner's exact fixture.
+- **`property-resolver.ts`:** new `resolveGuestPropertyMentionAcrossTurns(latestMessage,
+  listings, recentHistory)` — tries the latest message first, then scans the last 6 prior
+  turns (either role), most recent first, only when the latest message names no property.
+- **`post-process.ts`:** new `dropDateReconfirmationQuestions()` (drops any
+  nights/date-reconfirmation sentence in English or Tagalog/Batangueño whenever a range
+  was resolved this turn; falls back to restating `stayLabel` with a booking nudge if
+  dropping would leave the reply empty) and `dropWhatYearQuestions()` (unconditional
+  "what year"/"anong taon" drop).
+- **`system-prompt.ts`:** two new hard rules matching the backstops above.
+- **`chat-service.ts`:** new `recentHistoryMessages()` (last 6 prior turns) feeds both
+  `resolveGuestPropertyMentionAcrossTurns()` and `resolveDates()`'s `context` argument;
+  `dateContextNote()` no longer re-runs `resolveDates()` itself, taking the already-
+  resolved object instead so it's computed once and shared with the property note and the
+  new post-process guards, which run right after `fixStayRangeEndDate()`.
+
+Tests: `dates.test.ts` (bare day-range cases incl. year rollover, history month context,
+guest-count false-positive guard, `findContextMonth`), `owner-facts.test.ts` ("4 kami"/"4
+na kami"), `property-resolver.test.ts` (`resolveGuestPropertyMentionAcrossTurns`),
+`post-process.test.ts` (the exact Owner screenshot fixture, English/Tagalog/Batangueño
+re-question phrasings, the "did you mean" property-disambiguation carve-out,
+`dropWhatYearQuestions`), `chat-service.test.ts` (2-turn property+dates/guests flow, btg
+and English), `system-prompt.test.ts` (new hard-rule text).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
 ## 2026-10-16 — Haven AI: `hanggang`/`until` date-range regression, doubled date header, "the system" guard (fix/haven-ai-checkout-date-101626)
 
 Area: Website

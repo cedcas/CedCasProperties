@@ -73,6 +73,28 @@ const DADALAW_RULE =
   'kayo?" or "Ilang guests kayo?" (Batangueño: "Ilan ga kayo?").';
 
 /**
+ * Owner rules 1 & 2 (Cedric, 2026-10-16). A date range is industry-standard parsed —
+ * first date is check-in, second is check-out — and the server already resolves it
+ * (resolve_dates, or the pre-resolved date context note) before Haven ever needs to ask
+ * anything. Live bug (dev, pre-#86): guest said "Nobyembre 19 hanggang 21, 4 kami" and
+ * Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) — contradicting
+ * the range it had just correctly parsed. Backed by `dropDateReconfirmationQuestions` and
+ * `dropWhatYearQuestions` in post-process.ts as an independent backstop.
+ */
+const DATE_RANGE_CONFIRMATION_RULE =
+  'A date range — "Nov 19 to 21", "Nov 19-21", "Nobyembre 19 hanggang 21", "19 to 21" — ' +
+  "always means check-in on the FIRST date and check-out on the SECOND; nights = the " +
+  "difference. Once a range is resolved this turn (a tool result, or the pre-resolved " +
+  "date context note) — or it's already clear from earlier in the conversation — NEVER " +
+  "ask the guest to confirm the number of nights, never re-ask which dates they meant, " +
+  "and never contradict that range. State it (copy stayLabel verbatim) and move on.";
+
+const NO_YEAR_QUESTION_RULE =
+  "Never ask a guest what year they mean. Always assume the current year in Asia/Manila, " +
+  "or next year if that calendar date has already passed — exactly what resolve_dates and " +
+  "the pre-resolved date context note already do for you.";
+
+/**
  * Fixed, server-side persona + rules for Haven's AI mode. Never sent to the client,
  * never built from guest input. See DEC-029.
  */
@@ -119,6 +141,8 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "(the btg variant is identical to tl) instead of composing the range yourself. A " +
       "per-night price breakdown is unaffected by this — those rows correctly list each " +
       "occupied night, including the last one.",
+    DATE_RANGE_CONFIRMATION_RULE,
+    NO_YEAR_QUESTION_RULE,
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     DADALAW_RULE,

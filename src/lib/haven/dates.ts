@@ -181,6 +181,82 @@ const MONTH_NAME_PATTERN = Object.keys(MONTHS).sort((a, b) => b.length - a.lengt
 const WEEKDAY_NAME_PATTERN = Object.keys(WEEKDAYS).sort((a, b) => b.length - a.length).join("|");
 
 /**
+ * Owner rule (Cedric, 2026-10-16): a bare day-of-month range with no month attached
+ * ("19 to 21", "19-21", "19 hanggang 21") should use the month most recently named in
+ * conversation history, not force the guest to repeat it. Scans `context` (recent prior
+ * turns, concatenated by the caller — see chat-service.ts) for every month-name occurrence
+ * and returns the one that appears LAST (closest to "now" in the conversation), or `null`
+ * if none is mentioned at all.
+ */
+export function findContextMonth(context: string): number | null {
+  const text = context.toLowerCase();
+  let lastIndex = -1;
+  let found: number | null = null;
+  const re = new RegExp(`\\b(${MONTH_NAME_PATTERN})\\b`, "g");
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text))) {
+    if (match.index >= lastIndex) {
+      lastIndex = match.index;
+      found = MONTHS[match[1]];
+    }
+  }
+  return found;
+}
+
+/**
+ * Resolves a bare day-of-month range against an explicit context month when one was found
+ * in recent history, else the next upcoming occurrence of the start day — this calendar
+ * month if the day hasn't passed yet (today counts as "not yet passed"), otherwise next
+ * month (rolling the year forward off December, same as every other resolver here).
+ */
+function resolveBareDayRange(
+  today: Date,
+  startDay: number,
+  endDay: number,
+  contextMonth: number | null
+): { checkIn: Date; checkOut: Date } | null {
+  let month: number;
+  let year = today.getUTCFullYear();
+
+  if (contextMonth !== null) {
+    month = contextMonth;
+    let checkIn = new Date(Date.UTC(year, month, startDay));
+    if (checkIn < today) checkIn = new Date(Date.UTC(year + 1, month, startDay));
+    let checkOut = new Date(Date.UTC(checkIn.getUTCFullYear(), month, endDay));
+    if (checkOut <= checkIn) checkOut = new Date(Date.UTC(checkIn.getUTCFullYear() + 1, month, endDay));
+    return checkOut > checkIn ? { checkIn, checkOut } : null;
+  }
+
+  month = today.getUTCMonth();
+  if (startDay < today.getUTCDate()) {
+    month += 1;
+    if (month > 11) {
+      month = 0;
+      year += 1;
+    }
+  }
+  const checkIn = new Date(Date.UTC(year, month, startDay));
+  let checkOut = new Date(Date.UTC(year, month, endDay));
+  if (checkOut <= checkIn) {
+    let nextMonth = month + 1;
+    let nextYear = year;
+    if (nextMonth > 11) {
+      nextMonth = 0;
+      nextYear += 1;
+    }
+    checkOut = new Date(Date.UTC(nextYear, nextMonth, endDay));
+  }
+  return checkOut > checkIn ? { checkIn, checkOut } : null;
+}
+
+/**
+ * A people-count noun (or "kami") right after the second number means this was never a
+ * date range at all — "4 to 5 guests" / "4-5 kami" — so the bare day-range fallback below
+ * must not mistake it for one.
+ */
+const PEOPLE_NOUN_AFTER_RE = String.raw`(?!\s*(?:na\s+)?(?:adults?|guests?|pax|persons?|people|bisita|matatanda|kids?|children|bata|tao|katao|kami)\b)`;
+
+/**
  * Every word/symbol guests use to join a check-in phrase to a check-out phrase — English
  * ("to", "until", "through", a hyphen/en dash) and Tagalog/Batangueño ("hanggang", "until"
  * is also understood in Taglish). "hanggang" was missing here, so "Nobyembre 19 hanggang
@@ -192,7 +268,11 @@ const WEEKDAY_NAME_PATTERN = Object.keys(WEEKDAYS).sort((a, b) => b.length - a.l
  */
 const RANGE_SEP = String.raw`(?:-|to|–|through|until|hanggang)`;
 
-export function resolveDates(expression: string, now: Date = new Date()): ResolvedDates | null {
+export function resolveDates(
+  expression: string,
+  now: Date = new Date(),
+  context: string = ""
+): ResolvedDates | null {
   const expr = expression.trim().toLowerCase();
   const today = todayManila(now);
 
@@ -298,6 +378,23 @@ export function resolveDates(expression: string, now: Date = new Date()): Resolv
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], false);
     return toResult(checkIn, addUtcDays(checkIn, 1));
+  }
+
+  // Bare day-of-month range, no month attached: "19 to 21" / "19-21" / "19 hanggang 21".
+  // Lowest-confidence fallback — only reached once every month-named pattern above has
+  // already missed — so a people-count phrase like "4 to 5 guests"/"4-5 kami" never gets
+  // mistaken for a date range (see PEOPLE_NOUN_AFTER_RE).
+  m = expr.match(
+    new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s*${RANGE_SEP}\\s*(\\d{1,2})(?:st|nd|rd|th)?\\b${PEOPLE_NOUN_AFTER_RE}`)
+  );
+  if (m) {
+    const startDay = parseInt(m[1], 10);
+    const endDay = parseInt(m[2], 10);
+    if (startDay >= 1 && startDay <= 31 && endDay >= 1 && endDay <= 31) {
+      const contextMonth = context ? findContextMonth(context) : null;
+      const range = resolveBareDayRange(today, startDay, endDay, contextMonth);
+      if (range) return toResult(range.checkIn, range.checkOut);
+    }
   }
 
   return null;

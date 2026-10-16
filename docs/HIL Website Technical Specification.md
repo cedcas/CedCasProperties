@@ -1,6 +1,37 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-16 (Haven AI: date-range `hanggang`/`until` regression, doubled
+> **Last updated:** 2026-10-16 (Haven AI: never re-question a resolved date range or ask
+> what year, bare day-of-month ranges, and follow-up-turn property/date resolution, same
+> branch `fix/haven-ai-checkout-date-101626`: [Haven AI Chat](#haven-ai-chat) — three Owner
+> rules (Cedric): (1) a parsed range ("Nov 19 to 21", "Nobyembre 19 hanggang 21") always
+> means check-in the first date, check-out the second — Haven must never ask the guest to
+> confirm the number of nights or re-question which dates were meant. New
+> `system-prompt.ts` hard rule plus an independent `post-process.ts` backstop,
+> `dropDateReconfirmationQuestions()`, drops any sentence matching that mistake in English
+> ("just to confirm", "is that 1 night or 2", a "did you mean" scoped to a night/date
+> mention so it never clobbers `property-resolver.ts`'s own legitimate "Did you mean
+> <property>?" question) or Tagalog/Batangueño ("totoo ba/ga na isang gabi", "isang gabi
+> lang ba", "ilang gabi", "sigurado ga kayo", two date ranges joined by "o") — if dropping
+> empties the reply entirely (the Owner's dev screenshot: the ENTIRE bad reply was this
+> kind of question), it falls back to restating the resolved `stayLabel` with a booking
+> nudge instead of going blank; (2) Haven must never ask what year a guest means —
+> `dropWhatYearQuestions()` is the matching backstop ("what year"/"anong taon"). `dates.ts`
+> now also resolves a bare day-of-month range with no month attached ("19 to 21", "19-21",
+> "19 hanggang 21") via a new `findContextMonth()` export — the month most recently named
+> in conversation history if one was mentioned, else the next upcoming occurrence of that
+> day (this calendar month if it hasn't passed yet, otherwise next month), guarded against
+> a guest-count phrase ("4 to 5 guests") via a trailing people-noun exclusion; (3) a
+> follow-up turn carrying only dates/guest count ("Nobyembre 19 hanggang 21, 4 kami") now
+> resolves against a property named earlier in the conversation instead of asking again —
+> `property-resolver.ts`'s new `resolveGuestPropertyMentionAcrossTurns()` tries the latest
+> message first, then scans the last 6 prior turns (either role), most recent first;
+> `chat-service.ts` feeds it the same recent-history window it now also passes to
+> `resolveDates()` for month context. `owner-facts.ts`'s `parseGuestCount()` gained the
+> number-leading Tagalog idiom "4 kami" (alongside the existing "kami ay 4") to make the
+> live fixture's exact guest-count phrasing parse. See `dates.ts`, `owner-facts.ts`,
+> `property-resolver.ts`, `post-process.ts`, `chat-service.ts`, and `system-prompt.ts`
+> sections below.
+> Prior, same day (Haven AI: date-range `hanggang`/`until` regression, doubled
 > date header, and a "the system" guard, same branch `fix/haven-ai-checkout-date-101626`:
 > [Haven AI Chat](#haven-ai-chat) — three fixes: (1) `dates.ts`'s month-day/weekday/ISO
 > range separator (`RANGE_SEP`) was missing "hanggang" and "until" — "Nobyembre 19 hanggang
@@ -1952,7 +1983,18 @@ buttons and "Talk to a Human" link are unaffected either way.
   silently resolved to a 1-night stay (Nov 19 → Nov 20) instead of the intended 2-night
   range (Nov 19 → Nov 21) — Haven then asked the guest to confirm the wrong, pre-resolved
   dates. A leading "mula"/"from" needs no special handling, since none of these patterns
-  anchor to the start of the expression.
+  anchor to the start of the expression. `resolveDates()` gained a third optional
+  `context` parameter and a bare day-of-month-range fallback *(added 2026-10-16, Owner
+  rule, same branch)*: "19 to 21"/"19-21"/"19 hanggang 21" with no month attached resolves
+  against a month found in `context` (recent prior turns — see `findContextMonth(context)`,
+  a new export returning the LAST month name mentioned, English or Tagalog/Batangueño) or,
+  with no month in context either, the next upcoming occurrence of the start day — this
+  calendar month if it hasn't passed yet (today counts as not yet passed), otherwise next
+  month. Lowest-confidence fallback, reached only once every month-named pattern above has
+  already missed, and guarded by a trailing people-noun/kami exclusion so a guest-count
+  phrase like "4 to 5 guests"/"4-5 kami" is never mistaken for a date range.
+  `chat-service.ts` passes it the same last-6-prior-turns window (`recentHistoryMessages()`)
+  it also uses for cross-turn property resolution (see `property-resolver.ts` below).
 - `owner-facts.ts` *(added 2026-10-14, owner-guardrails pass)* — the single server-side
   source of Owner-confirmed facts (Cedric, 2026-10-14): `buildOwnerFactsPrompt()` is
   injected into `system-prompt.ts`'s prompt and states the 24-guest combined capacity cap
@@ -1995,9 +2037,11 @@ buttons and "Talk to a Human" link are unaffected either way.
   toward capacity, squeezing in extra people, or an extra bed/mattress) and
   `ensureCapacityHandoffLink()` force the Messenger button on regardless of what the
   model's own text says. `parseGuestCount()` *(added 2026-10-14, preview-retest pass)* is a
-  language-agnostic guest-count parser — "24 people/pax/guests/adults", "kami ay 24", "24
-  na tao", "24 katao", or a split group like "8 adults + 4 kids" (summed) — scoped to a
-  number sitting next to a people-noun so a date/time/price number is never picked up
+  language-agnostic guest-count parser — "24 people/pax/guests/adults", "kami ay 24", "4
+  kami"/"4 na kami" (number-leading idiom, added 2026-10-16 to parse the Owner's exact
+  "Nobyembre 19 hanggang 21, 4 kami" fixture), "24 na tao", "24 katao", or a split group
+  like "8 adults + 4 kids" (summed) — scoped to a number sitting next to a people-noun (or
+  "kami") so a date/time/price number is never picked up
   (fixes an owner-reported miss: "Kami ay 24 na tao sa ikalawang Sabado ng Nobyembre. Saan
   kami pwede?" got a "how many nights?" follow-up instead of a handoff, since the old check
   only looked at tool-call arguments). `buildCapacityContextNote()` *(same pass)* injects a
@@ -2129,7 +2173,16 @@ buttons and "Talk to a Human" link are unaffected either way.
   line claiming the property is unknown/not in the system ("hindi ko alam ang property",
   "not in our system", "isn't coming up", "don't recognize") with a "did you mean ...?"
   question instead, run in `chat-service.ts`'s post-process pipeline right after
-  `shortenPropertyNamesInText()`.
+  `shortenPropertyNamesInText()`. **Follow-up-turn resolution** *(added 2026-10-16, Owner
+  rule 3)*: `resolveGuestPropertyMentionAcrossTurns(latestMessage, listings,
+  recentHistory)` — a follow-up message carrying only dates/guest count ("Nobyembre 19
+  hanggang 21, 4 kami") sent after an earlier message naming a property (e.g. "Magkano ga
+  ang Spacious 2BR?") or after Haven listed options must still resolve the property
+  instead of asking again. Tries `resolveGuestPropertyMention()` on the latest message
+  first (a same-turn mention always wins); only when that comes back `none` does it fall
+  back to `recentHistory` (the caller's last 6 prior turns, either role), most recent
+  first. `chat-service.ts` calls this instead of the plain `resolveGuestPropertyMention()`
+  for its property pre-resolution.
 - `system-prompt.ts` — the fixed, server-side persona (a warm, chatty Batangueña host) and
   hard rules (facts only from this turn's tool results, except the owner-approved facts
   above; totals "confirmed at checkout" and the word "provisional" at most once per reply;
@@ -2166,7 +2219,18 @@ buttons and "Talk to a Human" link are unaffected either way.
   per-night breakdown is unaffected, since each row correctly lists its own occupied night
   *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626 — fixes a live bug where a Thu
   check-in/Sat check-out 2-night stay was read back as "Thursday → Friday"; independent
-  backstop below)*. Haven must never say she's checking/looking something up in "the
+  backstop below)*. A date range ("Nov 19 to 21", "Nobyembre 19 hanggang 21") always means
+  check-in the first date, check-out the second; once resolved this turn or already clear
+  from earlier in the conversation, Haven must never ask the guest to confirm the number
+  of nights, re-ask which dates were meant, or contradict that range — state it (copying
+  `stayLabel` verbatim) and move on. Haven must never ask a guest what year they mean —
+  always the current year in Asia/Manila, or next year if that date has already passed,
+  exactly what `resolve_dates`/the date context note already do *(both rules added
+  2026-10-16, Owner rules 1 & 2, same branch — fixes a live bug where Haven asked a guest
+  to confirm whether a correctly-parsed "Nobyembre 19 hanggang 21" meant 1 night or 2,
+  contradicting the range it had just parsed; independent backstops
+  `post-process.ts`'s `dropDateReconfirmationQuestions()`/`dropWhatYearQuestions()`,
+  above)*. Haven must never say she's checking/looking something up in "the
   system"/"ang system"/"sa system"/"our system" — a real host, not software describing its
   own backend; say what she's actually doing in plain terms instead ("let me check that for
   you", "tinitingnan ko muna") *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626;
@@ -2330,7 +2394,21 @@ buttons and "Talk to a Human" link are unaffected either way.
   never caught. Independent backstop for the matching `system-prompt.ts` rule below; the
   `BATANGUENO_FEWSHOT` example that used to say "...sa system, tapos sasabihin ko..." was
   also corrected, since the few-shot's own wording was teaching the model the exact phrase
-  this guard now bans.
+  this guard now bans. `dropDateReconfirmationQuestions(text, datesResolvedThisTurn,
+  stayLabel, isEnglish)` and `dropWhatYearQuestions(text)` *(added 2026-10-16, Owner rules
+  1 & 2, same branch)* are the independent backstops for "never re-question a resolved
+  date range" and "never ask what year": the first drops any sentence/bullet line asking
+  to confirm the number of nights or re-asking which dates were meant (EN: "just to
+  confirm", "is that N nights or N", "do you want N nights", a "did you mean" scoped by a
+  same-sentence night/date lookahead so it never clobbers `property-resolver.ts`'s own
+  legitimate "Did you mean <property>?"; TL/BTG: "totoo ba/ga na isang gabi", "isang gabi
+  lang ba/ga", "ilang gabi", "sigurado ba/ga kayo", two date ranges joined by "o") whenever
+  a date range was resolved this turn (a tool result or the pre-resolved date context
+  note) — if dropping leaves the reply completely empty (the Owner's dev screenshot: the
+  ENTIRE bad reply was this kind of question), it falls back to restating the resolved
+  `stayLabel` with a booking nudge rather than sending a blank message; the second
+  unconditionally drops "what year"/"anong taon". Both run in `chat-service.ts` right
+  after `fixStayRangeEndDate()`, before the model's markdown links are extracted.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);
@@ -2389,6 +2467,17 @@ buttons and "Talk to a Human" link are unaffected either way.
   (before `stripBudgetQuestions()` — ordering matters, see `owner-facts.ts` above) and
   `scrubAccessLeak()`/`ensureAccessHandoffLink()` (detected on the pre-scrub text so the
   Messenger button can still be forced on after the scrub runs) on the model's reply.
+  *(Added 2026-10-16, Owner rules 1–3):* `recentHistoryMessages()` returns the last 6
+  prior turns (either role, excluding the guest's own latest message) — `runToolLoop()`
+  now calls `resolveGuestPropertyMentionAcrossTurns()` (property-resolver.ts, above) with
+  this window instead of the plain per-turn resolver, and passes it joined as `resolveDates()`'s
+  new `context` argument for bare day-range month lookup (dates.ts, above). `dateContextNote()`
+  no longer re-runs `resolveDates()` itself — it now takes the already-resolved object so
+  the one call (with its history context) is shared with the property note and the
+  post-process guards. The post-process pipeline runs `dropDateReconfirmationQuestions()`
+  (gated on either this turn's tool-resolved range or the pre-resolved date context note)
+  then `dropWhatYearQuestions()` (unconditional) right after `fixStayRangeEndDate()`,
+  before the model's markdown links are extracted.
 - `retention.ts` — `purgeExpiredHavenData()`, driven by the daily cron (see Cron Jobs
   above): deletes `HavenChatTranscript` rows older than 90 days and `HavenChatUsage` rows
   older than 13 months.
