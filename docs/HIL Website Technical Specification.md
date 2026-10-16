@@ -1,6 +1,21 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-15 (Haven AI: Owner override widens the Welcome Book's
+> **Last updated:** 2026-10-16 (Haven AI: stay ranges now always end on the check-out
+> date, `fix/haven-ai-checkout-date-101626`: [Haven AI Chat](#haven-ai-chat) — live bug:
+> Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday, November 19
+> hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied NIGHT
+> (Friday) as the range's end instead of the check-out date (Saturday). Fixed three ways:
+> (1) `dates.ts` gained `buildStayLabel(checkIn, checkOut)`, returning `{en, tl, btg}` —
+> e.g. EN "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights" — now surfaced by
+> `resolveDates()`'s own result, `get_quote`/`find_stay`/`check_availability` (`tools.ts`),
+> and `dateContextNote()`'s system-prompt note; (2) `system-prompt.ts` gained a hard rule
+> to copy the `stayLabel` matching the reply language verbatim instead of composing a
+> range itself; (3) `post-process.ts`'s new `fixStayRangeEndDate()` is the independent
+> backstop — whatever range the model composed, if its end date matches the stay's last
+> occupied night it's replaced whole with the correct `stayLabel`, leaving a per-night
+> breakdown line untouched. See `dates.ts`, `tools.ts`, and the `post-process.ts` sections
+> below.
+> Prior: 2026-10-15 (Haven AI: Owner override widens the Welcome Book's
 > restaurants/things-to-do lists from B34-only to global, same branch
 > `fix/haven-ai-freetext-reset-101526`: [Haven AI Chat](#haven-ai-chat) — Cedric amended
 > the same-day Welcome Book decision below: the 10 restaurants and 13 attractions now
@@ -1901,7 +1916,18 @@ buttons and "Talk to a Human" link are unaffected either way.
   context note with the resolved `checkIn`/`checkOut` (ISO + the human `interpreted` form)
   instructing the model to use those exact dates and never ask what year is meant — live
   testing had shown the model sometimes skipping its own `resolve_dates` call and asking
-  "2024 o 2025?" instead *(same pass)*.
+  "2024 o 2025?" instead *(same pass)*. `buildStayLabel(checkIn, checkOut)` *(added
+  2026-10-16, fix/haven-ai-checkout-date-101626)* — the single source of truth for how a
+  stay's range is worded, fixing a live bug where Haven read a Thu check-in/Sat check-out
+  2-night stay back as "Thursday → Friday" (the last occupied NIGHT, not the check-out
+  date). Returns `{en, tl, btg}` (`btg` identical to `tl`), e.g. EN "Thu, Nov 19 → Sat, Nov
+  21, 2026 (check-out) · 2 nights", TL/BTG "Huwebes, Nob 19 → Sabado, Nob 21, 2026
+  (check-out) · 2 gabi" — the end date is always `checkOut`, nights is always `checkOut −
+  checkIn`. `resolveDates()`'s own result now carries a `stayLabel`, as do `get_quote`,
+  `find_stay`, and `check_availability` (`tools.ts`, below) and `dateContextNote()`'s
+  system-prompt note — every surface that states a stay's range pulls from this one
+  function. See `system-prompt.ts`'s "copy stayLabel verbatim" hard rule and
+  `post-process.ts`'s `fixStayRangeEndDate()` backstop, below.
 - `owner-facts.ts` *(added 2026-10-14, owner-guardrails pass)* — the single server-side
   source of Owner-confirmed facts (Cedric, 2026-10-14): `buildOwnerFactsPrompt()` is
   injected into `system-prompt.ts`'s prompt and states the 24-guest combined capacity cap
@@ -1980,7 +2006,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   single properties that fit or combinations whose summed `maxGuests` covers the group —
   `findStayCombinations`/`splitGuestsAcrossCombo` are pure and never pair two properties
   sharing an inventory group, i.e. two configurations of the same physical house, DEC-001),
-  and `get_faq` (keyword search over `src/lib/faqs.ts`). Booking links are built
+  and `get_faq` (keyword search over `src/lib/faqs.ts`). `check_availability`, `get_quote`,
+  and `find_stay` each also return a `stayLabel` *(added 2026-10-16,
+  fix/haven-ai-checkout-date-101626)* — `dates.ts`'s `buildStayLabel(checkIn, checkOut)` for
+  the exact range the tool was called with, so Haven can copy the correctly-worded range
+  (end date = check-out, never the last night) instead of composing it itself; `find_stay`
+  returns one `stayLabel` at the top level, shared by every option, since every option is
+  for the same dates. Booking links are built
   server-side as `/properties/{slug}/book?checkIn=…&checkOut=…&guests=…`. `get_quote` also
   returns the property's `name` (for booking-link labels) and `get_property_details`
   returns a structured, numeric `fees` object (`extraGuestFeePerNight` plus the published
@@ -2102,7 +2134,14 @@ buttons and "Talk to a Human" link are unaffected either way.
   rundown) must always read "from ₱X/night" (Tagalog/Batangueño: "simula ₱X kada gabi"),
   never a bare number, since rates can change — explicitly carved out from an exact dated
   `get_quote`/`find_stay` quote line, which is stated exactly as the tool returned it *(rule
-  added 2026-10-15, Cedric; independent backstop below)*. Language
+  added 2026-10-15, Cedric; independent backstop below)*. A stay's date range always ends
+  on the check-out date, never the last occupied night — when stating a range, the model
+  must copy the `stayLabel` matching its reply language (en/tl, `btg` reuses `tl`)
+  verbatim from whichever tool gave it one, rather than composing the range itself; a
+  per-night breakdown is unaffected, since each row correctly lists its own occupied night
+  *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626 — fixes a live bug where a Thu
+  check-in/Sat check-out 2-night stay was read back as "Thursday → Friday"; independent
+  backstop below)*. Language
   mode (`en`/`tl`/`btg`/`auto`) is a parameter, not a separate prompt per language.
   **Terms of address** *(policy added 2026-10-14)*: "partner"/"pare"/"bro"/"sis"/"dude" are
   banned unless the guest used that exact word first; "parekoy" (male) / "marekoy" (female)
@@ -2228,7 +2267,18 @@ buttons and "Talk to a Human" link are unaffected either way.
   tool results/inputs (`resolve_dates`'s own result, or any other tool's date-bearing
   input); `ensureDatesStated()` prepends "For `formatDateRangeArrow()`:" (e.g. "For
   Saturday, November 14 → Sunday, November 15, 2026:") to an English reply that resolved
-  dates this turn but doesn't already state the check-in month/day. `needsAmenityHandoff()`
+  dates this turn but doesn't already state the check-in month/day. `fixStayRangeEndDate()`
+  *(added 2026-10-16, fix/haven-ai-checkout-date-101626)* is the independent backstop for
+  the live bug where Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday,
+  November 19 hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied
+  night (Friday) as the range's end instead of the check-out date (Saturday). Whatever
+  English-worded date range the model composed itself, if its start-date mention matches
+  this turn's resolved/quoted stay's `checkIn` AND its end-date mention matches the last
+  occupied night (`checkOut − 1`), `chat-service.ts` replaces the WHOLE matched range
+  (including any trailing "(N nights)"/"(N gabi)" note) with `dates.ts`'s `buildStayLabel()`
+  output for the current reply language — never just the end date, so no dangling
+  night-count note is left paired with a now-wrong end date. A correct range, or a
+  per-night breakdown line (one date, no range separator), is never touched. `needsAmenityHandoff()`
   *(added 2026-10-14, preview-retest pass)* is true whenever a `find_amenity` call this
   turn came back `found: false`, forcing the Messenger button on the same way
   `needsCapacityHandoff()` does. `stripBatanguenoFromTagalog()` *(same pass)* converts a

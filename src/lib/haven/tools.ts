@@ -8,7 +8,7 @@ import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
 import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
-import { resolveDates } from "./dates";
+import { resolveDates, buildStayLabel } from "./dates";
 import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
 import { shortPropertyLabels } from "./post-process";
 import { getWelcomeBook, isWelcomeBookSlug } from "./welcome-book";
@@ -302,6 +302,10 @@ const checkAvailabilityTool: HavenToolSpec<z.infer<typeof checkAvailabilitySchem
     return {
       available: conflicts.length === 0,
       conflicts: conflicts.map(formatConflictRange),
+      // The guest-facing range for this exact checkIn/checkOut — see dates.ts. The end date
+      // is always the check-out date; copy it verbatim rather than restating the range
+      // yourself (see system-prompt.ts).
+      stayLabel: buildStayLabel(checkIn, checkOut),
     };
   },
 };
@@ -362,6 +366,10 @@ const getQuoteTool: HavenToolSpec<z.infer<typeof getQuoteSchema>> = {
       // multiply/sum these rows yourself (see system-prompt.ts).
       perNight: dailyRateBreakdown(quote.dailyRates),
       bookingLink: bookingLink(slug, checkIn, checkOut, guests),
+      // The guest-facing range for this exact checkIn/checkOut — see dates.ts. The end date
+      // is always the check-out date; copy it verbatim rather than restating the range
+      // yourself (see system-prompt.ts).
+      stayLabel: buildStayLabel(checkIn, checkOut),
     };
   },
 };
@@ -507,9 +515,10 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
         groupKey: groupOf.has(p.id) ? `group-${groupOf.get(p.id)}` : `listing-${p.slug}`,
       }));
 
+    const stayLabel = buildStayLabel(checkIn, checkOut);
     const combos = findStayCombinations(available, guests);
     if (combos.length === 0) {
-      return { options: [], message: "Nothing fits that group size on those dates across our properties." };
+      return { options: [], stayLabel, message: "Nothing fits that group size on those dates across our properties." };
     }
 
     const options = await Promise.all(
@@ -544,7 +553,13 @@ const findStayTool: HavenToolSpec<z.infer<typeof findStaySchema>> = {
       })
     );
 
-    return { options };
+    return {
+      options,
+      // The guest-facing range for this exact checkIn/checkOut, shared by every option
+      // above — see dates.ts. The end date is always the check-out date; copy it verbatim
+      // rather than restating the range yourself (see system-prompt.ts).
+      stayLabel,
+    };
   },
 };
 

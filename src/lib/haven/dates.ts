@@ -16,6 +16,65 @@ export interface ResolvedDates {
   checkOut: string; // YYYY-MM-DD
   /** Human-readable confirmation text, e.g. "Saturday, November 14, 2026 (1 night)". */
   interpreted: string;
+  /** The guest-facing stay range — see `buildStayLabel` below. */
+  stayLabel: StayLabel;
+}
+
+export interface StayLabel {
+  en: string;
+  tl: string;
+  /** Identical to `tl` — Batangueño flavor lives in surrounding prose, not the date range. */
+  btg: string;
+}
+
+const EN_WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const EN_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const TL_WEEKDAYS_FULL = ["Linggo", "Lunes", "Martes", "Miyerkules", "Huwebes", "Biyernes", "Sabado"];
+const TL_MONTHS_SHORT = ["Ene", "Peb", "Mar", "Abr", "May", "Hun", "Hul", "Ago", "Set", "Okt", "Nob", "Dis"];
+
+function enDatePart(d: Date): string {
+  return `${EN_WEEKDAYS_SHORT[d.getUTCDay()]}, ${EN_MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+function tlDatePart(d: Date): string {
+  return `${TL_WEEKDAYS_FULL[d.getUTCDay()]}, ${TL_MONTHS_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}`;
+}
+
+/**
+ * The guest-facing stay range, with the end date ALWAYS the check-out date, never the last
+ * occupied night (the live bug: a Thu check-in/Sat check-out, 2-night stay, got read back
+ * as "Thursday → Friday" — the last NIGHT, not the check-out date). `nights` is always
+ * `checkOut - checkIn`, matching get_quote/find_stay's own night count. See
+ * post-process.ts's `fixStayRangeEndDate` backstop and system-prompt.ts's "copy stayLabel
+ * verbatim" rule, which both depend on this being the single source of truth for how a
+ * stay's range is worded.
+ */
+function buildStayLabelFromDates(checkIn: Date, checkOut: Date): StayLabel {
+  const nights = Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000);
+  const ciYear = checkIn.getUTCFullYear();
+  const coYear = checkOut.getUTCFullYear();
+  const ciYearSuffix = ciYear !== coYear ? `, ${ciYear}` : "";
+
+  const en =
+    `${enDatePart(checkIn)}${ciYearSuffix} → ${enDatePart(checkOut)}, ${coYear} (check-out) · ` +
+    `${nights} night${nights === 1 ? "" : "s"}`;
+  const tl = `${tlDatePart(checkIn)}${ciYearSuffix} → ${tlDatePart(checkOut)}, ${coYear} (check-out) · ${nights} gabi`;
+
+  return { en, tl, btg: tl };
+}
+
+/**
+ * String-input wrapper for callers outside this module (tools.ts, chat-service.ts,
+ * post-process.ts) that only have YYYY-MM-DD checkIn/checkOut, not an already-parsed Date.
+ * Returns `null` for an invalid or inverted range rather than throwing — callers already
+ * validate checkIn/checkOut before reaching this point, so `null` is only ever a defensive
+ * fallback, never the expected path.
+ */
+export function buildStayLabel(checkIn: string, checkOut: string): StayLabel | null {
+  const ci = toUtcMidnight(checkIn);
+  const co = toUtcMidnight(checkOut);
+  if (isNaN(ci.getTime()) || isNaN(co.getTime()) || co <= ci) return null;
+  return buildStayLabelFromDates(ci, co);
 }
 
 // Tagalog/Batangueño weekday and month names alongside the English ones, so the same
@@ -114,6 +173,7 @@ function toResult(checkIn: Date, checkOut: Date): ResolvedDates {
     checkIn: utcDateKey(checkIn),
     checkOut: utcDateKey(checkOut),
     interpreted: formatInterpreted(checkIn, checkOut),
+    stayLabel: buildStayLabelFromDates(checkIn, checkOut),
   };
 }
 

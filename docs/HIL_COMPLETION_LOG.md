@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-16 — Haven AI: stay ranges now always end on the check-out date (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,702 tests).
+
+### Outcome
+Live bug: Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday, November
+19 hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied NIGHT
+(Friday) as the range's end instead of the check-out date (Saturday). Fixed with a single
+source of truth for how a stay's range is worded, enforced at three independent layers
+(DEC-029's usual pattern: a tool-surfaced fact, a prompt rule, and an independent
+post-generation backstop).
+
+### Material Changes
+- **`dates.ts`:** new `buildStayLabel(checkIn, checkOut)` returns `{en, tl, btg}` (`btg`
+  identical to `tl`) — e.g. EN "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights",
+  TL/BTG "Huwebes, Nob 19 → Sabado, Nob 21, 2026 (check-out) · 2 gabi". The end date is
+  always `checkOut`; nights is always `checkOut − checkIn`. `resolveDates()`'s own result
+  now carries a `stayLabel`.
+- **`tools.ts`:** `check_availability`, `get_quote`, and `find_stay` each return a
+  `stayLabel` for the exact dates they were called with (`find_stay` once at the top
+  level, shared by every option).
+- **`chat-service.ts`:** `dateContextNote()`'s pre-resolution system-prompt note now
+  states the resolved range's `stayLabel` (en/tl) alongside the ISO dates.
+- **`system-prompt.ts`:** new hard rule — a stay's range always ends on the check-out
+  date, never the last occupied night; copy the `stayLabel` matching the reply language
+  verbatim instead of composing the range.
+- **`post-process.ts`:** new `fixStayRangeEndDate()` — the independent backstop. Whatever
+  English-worded date range the model composed itself, if its start matches this turn's
+  resolved/quoted stay's `checkIn` and its end matches the last occupied night
+  (`checkOut − 1`), the WHOLE matched range (plus any trailing "(N nights)"/"(N gabi)"
+  note) is replaced with the correct `stayLabel` — never just the end date. A correct
+  range and a per-night breakdown line are both left untouched.
+
+Tests: `dates.test.ts` (`buildStayLabel` — check-out end date, singular "night", month
+rollover, invalid/inverted range, parity with `resolveDates()`), `tools.test.ts`
+(`stayLabel` on `check_availability`/`get_quote`/`find_stay`), `post-process.test.ts`
+(`fixStayRangeEndDate` — the exact bad Batangueño/mixed string, an English variant, a
+correct range left untouched, a single-night stay, a month rollover, and a per-night
+breakdown line left untouched), `system-prompt.test.ts` (the new hard rule's wording).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR into `dev`.
+
+---
+
 ## 2026-10-15 — Haven AI: Welcome Book restaurants/things-to-do widened to global (fix/haven-ai-freetext-reset-101526)
 
 Area: Website

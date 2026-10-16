@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDates } from "../dates";
+import { resolveDates, buildStayLabel } from "../dates";
 
 // Reference "today": Wednesday, 2026-10-14 (the date this feature was built), at a time
 // safely before the Manila-midnight UTC boundary (16:00 UTC).
@@ -163,6 +163,7 @@ describe("resolveDates", () => {
         checkIn: "2026-12-24",
         checkOut: "2026-12-26",
         interpreted: result!.interpreted,
+        stayLabel: result!.stayLabel,
       });
     });
 
@@ -171,5 +172,38 @@ describe("resolveDates", () => {
       expect(result!.checkIn).toBe("2026-12-24");
       expect(result!.checkOut).toBe("2026-12-25");
     });
+  });
+});
+
+describe("buildStayLabel", () => {
+  it("ends the range on the check-out date, never the last occupied night (DEC-029)", () => {
+    // Thu, Nov 19 -> Sat, Nov 21, 2026: 2 nights (Thu, Fri), check-out Saturday.
+    const label = buildStayLabel("2026-11-19", "2026-11-21");
+    expect(label).toEqual({
+      en: "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights",
+      tl: "Huwebes, Nob 19 → Sabado, Nob 21, 2026 (check-out) · 2 gabi",
+      btg: "Huwebes, Nob 19 → Sabado, Nob 21, 2026 (check-out) · 2 gabi",
+    });
+  });
+
+  it("singularizes 'night' for a one-night stay", () => {
+    const label = buildStayLabel("2026-11-14", "2026-11-15"); // Sat -> Sun
+    expect(label!.en).toBe("Sat, Nov 14 → Sun, Nov 15, 2026 (check-out) · 1 night");
+    expect(label!.tl).toBe("Sabado, Nob 14 → Linggo, Nob 15, 2026 (check-out) · 1 gabi");
+  });
+
+  it("handles a month rollover (Nov 30 -> Dec 2)", () => {
+    const label = buildStayLabel("2026-11-30", "2026-12-02");
+    expect(label!.en).toBe("Mon, Nov 30 → Wed, Dec 2, 2026 (check-out) · 2 nights");
+  });
+
+  it("returns null for an inverted or invalid range", () => {
+    expect(buildStayLabel("2026-11-21", "2026-11-19")).toBeNull();
+    expect(buildStayLabel("not-a-date", "2026-11-19")).toBeNull();
+  });
+
+  it("is included on every resolve_dates result, matching checkIn/checkOut", () => {
+    const resolved = resolveDates("Dec 24-26", NOW);
+    expect(resolved!.stayLabel).toEqual(buildStayLabel(resolved!.checkIn, resolved!.checkOut));
   });
 });

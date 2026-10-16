@@ -1,8 +1,9 @@
 import "server-only";
-import { formatStayRangeShort, toUtcMidnight } from "@/lib/dates";
+import { formatStayRangeShort, toUtcMidnight, addUtcDays } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
 import type { HavenLang } from "./system-prompt";
+import type { StayLabel } from "./dates";
 
 /**
  * Guardrails applied to the model's text AFTER it's generated, on every turn — the model's
@@ -740,4 +741,71 @@ export function ensureDatesStated(
   const ci = toUtcMidnight(resolved.checkIn);
   if (isNaN(ci.getTime()) || text.toLowerCase().includes(monthDay(ci).toLowerCase())) return text;
   return `For ${formatDateRangeArrow(resolved.checkIn, resolved.checkOut)}:\n\n${text}`;
+}
+
+// ── Stay-range end-date guard (DEC-029: end date must be check-out, never the last night) ──
+
+const EN_MONTH_FULL_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+const EN_WEEKDAY_FULL_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+const DATE_MENTION_SOURCE = String.raw`(?:(?:${EN_WEEKDAY_FULL_NAMES.join("|")}),?\s+)?(${EN_MONTH_FULL_NAMES.join(
+  "|"
+)})\s+(\d{1,2})(?:,\s*(\d{4}))?`;
+const RANGE_SEP_SOURCE = String.raw`(?:→|-|–|\bto\b|\bhanggang\b)`;
+const NIGHT_SUFFIX_SOURCE = String.raw`(?:\s*\(\s*\d+\s*(?:nights?|gabi)\s*\))?`;
+
+/** Two English-worded date mentions joined by a range separator, with an optional trailing
+ * "(N nights/gabi)" note absorbed into the match so it's replaced along with the range. */
+const STAY_RANGE_RE = new RegExp(
+  `${DATE_MENTION_SOURCE}\\s*${RANGE_SEP_SOURCE}\\s*${DATE_MENTION_SOURCE}${NIGHT_SUFFIX_SOURCE}`,
+  "gi"
+);
+
+/**
+ * Independent backstop for the live bug: Haven stated a Thu check-in/Sat check-out,
+ * 2-night stay as "Thursday, November 19 hanggang Friday, November 20, 2026 (2 nights)" —
+ * reading the LAST NIGHT (Friday) as the range's end instead of the check-out date
+ * (Saturday). Whatever date-range text the model composed itself, if its end-date mention
+ * matches this turn's resolved/quoted stay's last occupied night (checkOut − 1) AND its
+ * start-date mention matches that stay's checkIn, the whole matched range (plus any
+ * trailing night-count note) is replaced with the correct `stayLabel` — never just the
+ * end date, so no dangling "(2 nights)" is left paired with the wrong end date. A per-night
+ * breakdown line (one date, no range separator) never matches this pattern, so it's
+ * untouched. English month/weekday words only — the only form the live bug ever produced,
+ * including inside an otherwise Tagalog/Batangueño reply.
+ */
+export function fixStayRangeEndDate(
+  text: string,
+  resolved: { checkIn: string; checkOut: string } | null,
+  stayLabel: StayLabel | null,
+  isEnglish: boolean
+): string {
+  if (!resolved || !stayLabel) return text;
+  const checkIn = toUtcMidnight(resolved.checkIn);
+  const checkOut = toUtcMidnight(resolved.checkOut);
+  if (isNaN(checkIn.getTime()) || isNaN(checkOut.getTime())) return text;
+  const lastNight = addUtcDays(checkOut, -1);
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+
+  return text.replace(
+    STAY_RANGE_RE,
+    (match: string, startMonth: string, startDay: string, startYear: string | undefined, endMonth: string, endDay: string, endYear: string | undefined) => {
+      const startMonthIdx = EN_MONTH_FULL_NAMES.indexOf(startMonth);
+      const endMonthIdx = EN_MONTH_FULL_NAMES.indexOf(endMonth);
+
+      const startMatches =
+        startMonthIdx === checkIn.getUTCMonth() &&
+        Number(startDay) === checkIn.getUTCDate() &&
+        (!startYear || Number(startYear) === checkIn.getUTCFullYear());
+      const endMatches =
+        endMonthIdx === lastNight.getUTCMonth() &&
+        Number(endDay) === lastNight.getUTCDate() &&
+        (!endYear || Number(endYear) === lastNight.getUTCFullYear());
+
+      return startMatches && endMatches ? label : match;
+    }
+  );
 }

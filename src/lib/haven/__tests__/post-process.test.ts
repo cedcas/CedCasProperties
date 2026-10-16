@@ -23,12 +23,14 @@ import {
   firstResolvedDateRange,
   formatDateRangeArrow,
   ensureDatesStated,
+  fixStayRangeEndDate,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
   MESSENGER_HREF,
   type ToolExchange,
 } from "../post-process";
+import { buildStayLabel } from "../dates";
 
 describe("isAllowedHref", () => {
   it("allows a relative site path", () => {
@@ -874,5 +876,62 @@ describe("ensureDatesStated", () => {
   it("leaves the reply untouched when no dates were resolved this turn", () => {
     const input = "We have availability for that stay.";
     expect(ensureDatesStated(input, null, true)).toBe(input);
+  });
+});
+
+describe("fixStayRangeEndDate (DEC-029: end date must be check-out, never the last night)", () => {
+  // Thu check-in, Sat check-out, 2 nights — the exact live-bug stay.
+  const resolved = { checkIn: "2026-11-19", checkOut: "2026-11-21" };
+  const stayLabel = buildStayLabel(resolved.checkIn, resolved.checkOut)!;
+
+  it("fixes the exact bad Batangueño/mixed string from the live bug", () => {
+    const input =
+      "Ala eh, ganito po: Thursday, November 19 hanggang Friday, November 20, 2026 (2 nights) — gusto n'yo na ga i-book?";
+    const result = fixStayRangeEndDate(input, resolved, stayLabel, false);
+    expect(result).toBe(`Ala eh, ganito po: ${stayLabel.tl} — gusto n'yo na ga i-book?`);
+    expect(result).not.toContain("Friday, November 20");
+  });
+
+  it("fixes an English variant with no year and no night-count suffix", () => {
+    const input = "Your stay is Thursday, November 19 to Friday, November 20.";
+    const result = fixStayRangeEndDate(input, resolved, stayLabel, true);
+    expect(result).toBe(`Your stay is ${stayLabel.en}.`);
+    expect(result).not.toContain("Friday, November 20");
+  });
+
+  it("leaves an already-correct range (ending on the check-out date) untouched", () => {
+    const input = "Your stay is Thursday, November 19 to Saturday, November 21, 2026 (2 nights).";
+    expect(fixStayRangeEndDate(input, resolved, stayLabel, true)).toBe(input);
+  });
+
+  it("is a no-op for a single-night stay whose correct range already ends on check-out", () => {
+    const singleNight = { checkIn: "2026-11-14", checkOut: "2026-11-15" }; // Sat -> Sun
+    const label = buildStayLabel(singleNight.checkIn, singleNight.checkOut)!;
+    const input = "Your stay is Saturday, November 14 to Sunday, November 15, 2026 (1 night).";
+    expect(fixStayRangeEndDate(input, singleNight, label, true)).toBe(input);
+  });
+
+  it("fixes a single-night stay wrongly stated as the same day twice (start == last night)", () => {
+    const singleNight = { checkIn: "2026-11-14", checkOut: "2026-11-15" }; // Sat -> Sun
+    const label = buildStayLabel(singleNight.checkIn, singleNight.checkOut)!;
+    const input = "Your stay is Saturday, November 14 to Saturday, November 14.";
+    expect(fixStayRangeEndDate(input, singleNight, label, true)).toBe(`Your stay is ${label.en}.`);
+  });
+
+  it("handles a month-rollover stay (Nov 30 -> Dec 2) ending on the last night (Dec 1)", () => {
+    const rollover = { checkIn: "2026-11-30", checkOut: "2026-12-02" };
+    const label = buildStayLabel(rollover.checkIn, rollover.checkOut)!;
+    const input = "Your stay is Monday, November 30 to Tuesday, December 1, 2026 (2 nights).";
+    expect(fixStayRangeEndDate(input, rollover, label, true)).toBe(`Your stay is ${label.en}.`);
+  });
+
+  it("never touches a per-night breakdown line (a single date, no range)", () => {
+    const input = "- Thursday, November 19: ₱2,800\n- Friday, November 20: ₱3,500";
+    expect(fixStayRangeEndDate(input, resolved, stayLabel, true)).toBe(input);
+  });
+
+  it("is a no-op when nothing was resolved this turn", () => {
+    const input = "Thursday, November 19 to Friday, November 20.";
+    expect(fixStayRangeEndDate(input, null, stayLabel, true)).toBe(input);
   });
 });

@@ -110,6 +110,15 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "reply — e.g. \"Saturday, Nov 14 → Sunday, Nov 15, 2026\" — never leave them implicit " +
       "or assume the guest remembers them from earlier in the conversation. In English, " +
       "always spell out the resolved dates in that reply.",
+    "- A stay's date range ALWAYS ends on the check-out date — NEVER on the last occupied " +
+      "night (e.g. a Thursday check-in/Saturday check-out, 2-night stay must read " +
+      "\"Thursday → Saturday\", never \"Thursday → Friday\", even though Friday is the last " +
+      "night). resolve_dates, get_quote, find_stay, check_availability, and the pre-resolved " +
+      "date context note all give you a `stayLabel` (en/tl/btg) for exactly this — when " +
+      "stating a stay's range, copy the stayLabel matching your reply language verbatim " +
+      "(the btg variant is identical to tl) instead of composing the range yourself. A " +
+      "per-night price breakdown is unaffected by this — those rows correctly list each " +
+      "occupied night, including the last one.",
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     DADALAW_RULE,

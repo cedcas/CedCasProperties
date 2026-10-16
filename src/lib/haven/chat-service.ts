@@ -6,7 +6,7 @@ import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
-import { resolveDates } from "./dates";
+import { resolveDates, buildStayLabel } from "./dates";
 import { buildPropertyContextNote, dropUnknownPropertyClaims, resolveGuestPropertyMention } from "./property-resolver";
 import {
   extractAllowedLinks,
@@ -27,6 +27,7 @@ import {
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
   ensureDatesStated,
+  fixStayRangeEndDate,
   needsAmenityHandoff,
   stripBatanguenoFromTagalog,
   MESSENGER_HREF,
@@ -205,7 +206,10 @@ function dateContextNote(latestUserMessage: string, now: Date): string {
     `checkOut=${resolved.checkOut} (${resolved.interpreted}). If this is the date range the ` +
     "guest means, use these exact dates for any tool call or reply about this request " +
     "instead of asking again. These are already the next upcoming occurrence of that phrase " +
-    "— never ask the guest what year they mean."
+    "— never ask the guest what year they mean. If you state this range, copy it verbatim " +
+    `from stayLabel — English: "${resolved.stayLabel.en}"; Tagalog/Batangueño: ` +
+    `"${resolved.stayLabel.tl}" — the end date is always the check-out date, never the last ` +
+    "occupied night."
   );
 }
 
@@ -332,9 +336,15 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
   const fromPrefixed = ensureFromPrefix(priceChecked, basePrices, datedAmounts, englishMode);
   const termsChecked = enforceTermsOfAddress(fromPrefixed, guestMessages, lang);
-  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(termsChecked);
+  const resolvedRange = firstResolvedDateRange(toolExchangesThisTurn);
+  const stayLabel = resolvedRange ? buildStayLabel(resolvedRange.checkIn, resolvedRange.checkOut) : null;
+  // Independent backstop for the DEC-029 "Thu→Sat read back as Thu→Fri" bug: whatever range
+  // the model composed itself, if its end date matches the last occupied night instead of
+  // the check-out date, swap the whole range for the correct stayLabel (see post-process.ts).
+  const rangeFixed = fixStayRangeEndDate(termsChecked, resolvedRange, stayLabel, englishMode);
+  const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(rangeFixed);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
-  const datesStated = ensureDatesStated(englishClean, firstResolvedDateRange(toolExchangesThisTurn), englishMode);
+  const datesStated = ensureDatesStated(englishClean, resolvedRange, englishMode);
   const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);
   const reply = lang === "btg" ? ensureBatanguenoMarker(batanguenoFixed) : batanguenoFixed;
 

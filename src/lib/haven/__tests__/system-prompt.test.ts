@@ -56,6 +56,17 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  describe("stay-range end-date guard (DEC-029)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("instructs the model to copy stayLabel verbatim, ending on the check-out date", () => {
+      expect(prompt).toMatch(/always ends on the check-out date/i);
+      expect(prompt).toMatch(/never.*on the last occupied\s*night/i);
+      expect(prompt).toMatch(/stayLabel/);
+      expect(prompt).toMatch(/copy the stayLabel matching your reply language verbatim/i);
+    });
+  });
+
   describe("local places / how things work (Cedric, 2026-10-15)", () => {
     const prompt = buildHavenSystemPrompt("en");
 
