@@ -2700,7 +2700,7 @@ The `haven-pulse` keyframes in [globals.css](../src/app/globals.css) animate `tr
 ### Accessibility patterns
 
 - Form fields in [ContactForm.tsx](../src/components/sections/ContactForm.tsx) use explicit `id` + `htmlFor` pairs (`contact-name`, `contact-email`, `contact-phone`, `contact-subject`, `contact-message`).
-- Social-media link icons (Facebook / Instagram / TikTok / Airbnb) carry `aria-label` props — the visible content is an icon-only `<i>` element.
+- Social-media link icons (Facebook / Instagram / TikTok / YouTube / Airbnb) carry `aria-label` props — the visible content is an icon-only `<i>` element. The first four are sourced from one shared constant, `src/lib/social-links.ts` (`SOCIAL_LINKS`); Airbnb is appended separately wherever the icon row renders, since it isn't one of the owner's four confirmed social profiles. `aria-label` on those four reads `"Haven in Lipa on {Platform}"` (2026-10-16).
 - Property card "View Details" links carry `aria-label={`View details for ${property.name}`}` so screen readers can distinguish otherwise-identical links.
 - Heading hierarchy on the homepage: `h1` (Hero) → `h2` (each top-level section) → `h3` (sub-sections and footer columns). **Do not introduce `h4`** without an intervening `h3` in the same section.
 - Footer body text uses `text-white/70` and secondary text `text-white/55` on `bg-[#1c1c1c]` to meet WCAG AA contrast; hover state is `text-white/85`.

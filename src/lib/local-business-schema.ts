@@ -20,6 +20,8 @@
  * was expected, since every `LocalBusiness` property is inherited.
  */
 
+import { SOCIAL_LINK_URLS } from "./social-links";
+
 export const BUSINESS_BASE_URL = process.env.NEXTAUTH_URL || "https://haveninlipa.com";
 
 export const BUSINESS_PHONE = "+639066554415";
@@ -31,17 +33,16 @@ export const GBP_MAP_URL =
 export const GBP_GEO = { latitude: 13.9050606, longitude: 121.1687456 };
 
 /**
- * Matches the blog's Organization `sameAs` (`hil-seo` 1.1.8,
- * content/seo/runs/100426/hil-seo-plugin/includes/schema.php) for Facebook,
- * Instagram and TikTok. The Airbnb listing link is kept as-is pending an
- * explicit Owner decision (see docs/HIL_COMPLETION_LOG.md, 2026-10-10 entry)
- * — the blog's Organization graph does not carry it, so the two sites are
- * NOT yet fully aligned on this one entry.
+ * Sourced from src/lib/social-links.ts (the owner-approved Facebook,
+ * Instagram, TikTok, YouTube profiles — confirmed by Cedric, 2026-10-16),
+ * plus the Airbnb listing link, kept as-is pending an explicit Owner
+ * decision (see docs/HIL_COMPLETION_LOG.md, 2026-10-10 entry). The blog's
+ * Organization `sameAs` (`hil-seo` plugin) was aligned on Facebook/Instagram/
+ * TikTok as of v1.1.8 but needs its own separate update to add YouTube and
+ * fix TikTok — it does not auto-follow this file.
  */
 export const BUSINESS_SAME_AS: readonly string[] = [
-  "https://www.facebook.com/haveninlipa",
-  "https://www.instagram.com/haven_inlipa/",
-  "https://www.tiktok.com/@haven_inlipa",
+  ...SOCIAL_LINK_URLS,
   "https://airbnb.com/h/fullhousebellavita",
 ];
 

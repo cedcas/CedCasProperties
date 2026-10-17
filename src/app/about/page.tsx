@@ -5,6 +5,7 @@ import Footer from "@/components/layout/Footer";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
 import { socialMetadata } from "@/lib/seo-metadata";
 import { buildShortNames, getPublicListingCount, getPublicListings, numberWord, plural } from "@/lib/listings";
+import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 
 const BASE_URL = process.env.NEXTAUTH_URL || "https://www.haveninlipa.com";
 
@@ -98,8 +99,7 @@ const personJsonLd = {
   knowsLanguage: ["en", "fil"],
   sameAs: [
     "https://airbnb.com/h/fullhousebellavita",
-    "https://www.facebook.com/haveninlipa",
-    "https://www.instagram.com/haven_inlipa/",
+    ...SOCIAL_LINK_URLS,
   ],
 };
 
@@ -297,7 +297,7 @@ export default async function AboutPage() {
                 <li>
                   <strong>Messenger:</strong>{" "}
                   <a
-                    href="https://www.facebook.com/haveninlipa"
+                    href={SOCIAL_LINKS.find((s) => s.name === "Facebook")!.url}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-forest hover:underline"

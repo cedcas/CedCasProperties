@@ -349,7 +349,8 @@ export const chatTree: Record<string, ChatNode> = {
       "Follow us and send a message on any of our social channels:\n\n" +
       "• **Facebook** — facebook.com/haveninlipa\n" +
       "• **Instagram** — @haven_inlipa\n" +
-      "• **TikTok** — @haven_inlipa",
+      "• **TikTok** — @haven.in.lipa\n" +
+      "• **YouTube** — @Haven-in-Lipa",
     options: [
       { label: "Email us",         nodeId: "contact-email" },
       { label: "← Back to topics", nodeId: "root" },
