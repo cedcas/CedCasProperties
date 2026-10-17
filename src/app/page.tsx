@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { socialMetadata } from "@/lib/seo-metadata";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 export const metadata: Metadata = {
   title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
@@ -117,18 +118,16 @@ export default async function Home() {
             <div className="flex justify-center gap-4">
               {(
                 [
-                  ["fa-facebook-f", "Facebook",  "https://www.facebook.com/haveninlipa"],
-                  ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
-                  ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
-                  ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],
-                ] as [string, string, string][]
-              ).map(([icon, label, href]) => (
+                  ...SOCIAL_LINKS.map(({ icon, name, url }) => [icon, name, url, `Haven in Lipa on ${name}`]),
+                  ["fa-airbnb", "Airbnb", "https://airbnb.com/h/fullhousebellavita", "Airbnb"],
+                ] as [string, string, string, string][]
+              ).map(([icon, label, href, ariaLabel]) => (
                 <a
                   key={label}
                   href={href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={label}
+                  aria-label={ariaLabel}
                   className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#FF5371] hover:border-[#FF5371] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
                   style={{ background: "rgba(255,255,255,.08)" }}
                 >

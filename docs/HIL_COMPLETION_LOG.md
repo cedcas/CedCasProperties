@@ -4,6 +4,54 @@
 
 ---
 
+## 2026-10-16 — Social links consolidated into one constant; YouTube added, TikTok URL fixed (content/social-links-youtube-101626)
+
+Area: Website | SEO
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 198 files / 3,675 tests). Not yet merged.
+
+### Outcome
+Owner-approved (Cedric, 2026-10-16) the four official social profiles: Facebook, Instagram,
+TikTok (`@haven.in.lipa` — the code had carried the wrong handle, `@haven_inlipa`, since the
+page was first built), and a new YouTube channel (`@Haven-in-Lipa`). All four now live in one
+place, `src/lib/social-links.ts` (`SOCIAL_LINKS` / `SOCIAL_LINK_URLS`), and every surface that
+renders a social icon or link reads from it instead of repeating the URLs.
+
+### Material Changes
+- **New:** `src/lib/social-links.ts` — the shared constant (name, url, Font Awesome
+  `fa-brands` icon class per platform).
+- **`src/lib/local-business-schema.ts`:** `BUSINESS_SAME_AS` now spreads
+  `SOCIAL_LINK_URLS` plus the pre-existing Airbnb listing link (kept as-is — Airbnb is not
+  one of the owner's four confirmed social profiles, and its `sameAs` inclusion was already
+  a separate open question, see the 2026-10-10 entry below).
+- **`src/app/about/page.tsx`:** the `Person` JSON-LD `sameAs` now spreads
+  `SOCIAL_LINK_URLS` (previously missing TikTok entirely); the "Messenger" contact link
+  now sources its URL from `SOCIAL_LINKS` instead of a hardcoded string.
+- **`src/app/page.tsx` / `src/components/sections/ContactForm.tsx`:** the social-icon rows
+  now map over `SOCIAL_LINKS` (plus Airbnb, appended separately since it isn't in the
+  constant); `aria-label` changed from the bare platform name to `"Haven in Lipa on
+  {Platform}"` for the four owner-approved profiles (Airbnb's `aria-label` left unchanged).
+- **`src/lib/chat/chat-tree.ts`:** the `contact-social` chat-tree node gained a YouTube
+  line and the TikTok handle was corrected to `@haven.in.lipa`.
+- **Not changed:** `src/components/layout/Footer.tsx` has no existing social-icon area (only
+  address/phone/email under "Get in Touch"), so none was added — out of scope for a link-URL
+  fix. `src/lib/faqs.ts`'s FAQ answer only names Facebook (not a multi-platform list), so it
+  was left as-is.
+- **Blog NOT updated by this change** — the `hil-seo` plugin's own `Organization` `sameAs`
+  (`content/seo/runs/.../hil-seo-plugin/includes/schema.php`) is a separate WordPress-side
+  artifact that still needs its own update to add YouTube and fix the TikTok handle; it does
+  not read from this repo's constant.
+
+Tests: `src/lib/__tests__/local-business-schema.test.ts` updated (TikTok URL, +YouTube).
+New `src/lib/__tests__/social-links.test.ts` pins `SOCIAL_LINK_URLS`/`SOCIAL_LINKS` names,
+checks `BUSINESS_SAME_AS` and the about-page `sameAs` wiring, and scans `src/` to confirm no
+stale `tiktok.com/@haven_inlipa` URL remains.
+
+### References
+Branch `content/social-links-youtube-101626`, PR pending against `dev`.
+
+---
+
 ## 2026-10-16 — Haven AI: plain-language pass banning deep/literary Tagalog (fix/haven-ai-checkout-date-101626)
 
 Area: Website
