@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-10-16 — `hil-seo` 1.1.9 built: social `sameAs` + blog theme social-link fix (content/hil-seo-1.1.9-social-101626)
+
+Area: Blog / SEO
+
+Status: Artifact built, `php -l` clean, standalone PHP test passing. **Not yet uploaded to
+WordPress** — this is a plugin artifact in the repo, per the standing rule that Claude
+never calls the WordPress API or touches the live blog directly (SEO-DEC-009).
+
+### Outcome
+Owner-approved (Cedric, 2026-10-16): built on the live v1.1.8 source
+(`content/seo/runs/100426/hil-seo-plugin/`), copied to
+`content/seo/runs/101626/hil-seo-plugin/` with the plugin folder/slug unchanged so
+WordPress can upgrade in place. Two independent fixes, both about the same four social
+profiles: (1) the Organization schema's `sameAs` had a TikTok handle that was never live
+and no YouTube entry; (2) the `haveninlipa-blog` theme's own hardcoded CTA/footer social
+icons had three wrong hrefs and no YouTube icon at all (confirmed against a live capture
+of the blog homepage, `/workspace/hil-blog-social/live-home.html`).
+
+### Material Changes
+- **`includes/schema.php`:** Organization `sameAs` is now `facebook.com/haveninlipa`,
+  `instagram.com/haven_inlipa`, `tiktok.com/@haven.in.lipa` (corrected from
+  `@haven_inlipa`), `youtube.com/@Haven-in-Lipa` (new), `haveninlipa.com` (unchanged
+  position, after the socials).
+- **New file, `includes/social-links.php`:** front-end-only output-buffer module
+  (`template_redirect`, HTML responses only; skips `wp-admin`, REST, AJAX, cron, feeds),
+  gated by its own filter (`hil_seo_fix_social_links`, default on, independent of the
+  Yoast-cutover flags). Corrects the theme's hardcoded Instagram/TikTok/Facebook hrefs and
+  inserts a YouTube anchor immediately after each TikTok anchor, cloned from that anchor's
+  own markup (picks up the footer's `class="social-link"` without needing to know which
+  container it's in). Idempotent — a non-greedy-regex bug that let a second pass triple the
+  YouTube icon was caught by the test harness and fixed with a tempered-greedy-token
+  pattern before shipping.
+- **Version bump:** plugin header, `HIL_SEO_VERSION`, and `readme.txt` stable tag/changelog
+  all to 1.1.9; module load order in `hil-seo.php` gains `social-links`.
+- **Test harness:** `content/seo/runs/101626/tests/test-social-links.php` — standalone PHP
+  script (no WordPress required; stubs `add_action`/`apply_filters`/`is_admin`/`is_feed`)
+  asserting the rewrite against the two live markup snippets (CTA section + footer),
+  including idempotency on a second pass. All 18 assertions pass.
+- **Build artifacts:** `content/seo/runs/101626/hil-seo-plugin.zip` (folder `hil-seo-plugin/`
+  at the zip root, matching the v1.1.8 layout) and a copy at
+  `/workspace/hil-blog-social/hil-seo-1.1.9.zip`.
+- **Known, documented gap (not fixed here):** the main app's `src/lib/local-business-schema.ts`
+  still carries the old TikTok URL and no YouTube entry — already flagged there as not
+  fully aligned with the blog's Organization graph (Airbnb-entry gap, see this file's
+  2026-10-10 entry below). This build widens that gap by one more field; fixing it is a
+  separate, Owner-approved app-side change.
+
+### Deploy note
+`content/seo/runs/101626/HIL_SEO_v1.1.9_Deploy_Note.md` — upload steps, verification
+checklist, and rollback (re-upload the 1.1.8 zip in `runs/100426/`).
+
+---
+
 ## 2026-10-16 — Haven AI: plain-language pass banning deep/literary Tagalog (fix/haven-ai-checkout-date-101626)
 
 Area: Website
