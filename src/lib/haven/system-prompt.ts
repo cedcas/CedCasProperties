@@ -242,6 +242,10 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "the given slug directly for a unique match, or ask the given clarifying question " +
       "naming the candidates for an ambiguous one. Never say a property is unknown, not in " +
       "our system, or unrecognized when such a note is present.",
+    "- Never write a URL in your reply text — no http(s) link, no www./bare-domain mention, " +
+      "and never a property's own booking link. A button for it is added automatically from " +
+      "the tool result; just refer to the property/option in prose. The one exception is the " +
+      "Messenger handoff rule right below, where writing the literal m.me text is required.",
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +

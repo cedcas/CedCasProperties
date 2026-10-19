@@ -8,7 +8,9 @@ import type { StayLabel } from "./dates";
 /**
  * Guardrails applied to the model's text AFTER it's generated, on every turn — the model's
  * own instructions (system-prompt.ts) are not trusted alone. Independent checks:
- *   1. Link allowlist — only relative site paths, haveninlipa.com, or m.me/haveninlipa survive.
+ *   1. Link allowlist — only relative site paths, haveninlipa.com, or m.me/haveninlipa survive
+ *      a markdown link; a bare (non-markdown) URL is stripped from prose entirely, allowlisted
+ *      or not, since a legitimate link always already has its own button (see `stripBareUrls`).
  *   2. Price post-check — any ₱/PHP amount not traceable to a tool result this turn causes the
  *      WHOLE sentence/bullet line containing it to be replaced, never just the number.
  *   3. Booking-link collection — a link button for every booking link a tool actually produced
@@ -67,6 +69,66 @@ export function dedupeLinks(links: LinkButton[]): LinkButton[] {
     out.push(link);
   }
   return out;
+}
+
+// ── Bare URL guard — a raw URL outside markdown syntax slips past extractAllowedLinks ──
+
+/**
+ * A lead-in phrase immediately before a bare URL, in any of the phrasings seen so far
+ * (live bug, EN/TL/btg) — removed together with the URL so no dangling "Ari ang link:" /
+ * "Here's the link:" is left behind.
+ */
+const BARE_URL_LEAD_IN_SOURCE =
+  String.raw`(?:\b(?:ari|heto|eto)\s+(?:po\s+)?ang\s+link\b|\bhere'?s\s+the\s+link\b)\s*:?\s*`;
+
+/**
+ * `https://…`/`www.…`, or a bare `domain.tld/path` — at least one dot, a letters-only final
+ * label (so a decimal amount like "4,500.75/night" never matches a digit-only "TLD"), and a
+ * required trailing "/" so an ordinary domain mention with nothing after it isn't swept up
+ * too. Deliberately NOT gated on `isAllowedHref`: an invented domain (the live bug's
+ * "haven.com.ph") must be caught precisely because it would fail that allowlist, and a real
+ * haveninlipa.com URL is removed from prose anyway (its button already carries it).
+ */
+const BARE_URL_SOURCE =
+  String.raw`(?:https?:\/\/|www\.)\S+|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}\/\S+`;
+
+const BARE_URL_WITH_LEAD_IN_RE = new RegExp(`(?:${BARE_URL_LEAD_IN_SOURCE})?(${BARE_URL_SOURCE})`, "gi");
+
+/** Trailing punctuation that reads as the SENTENCE's, not the URL's — kept in place when
+ * the URL ahead of it is removed (e.g. the "." closing "...book her now." stays). */
+const URL_TRAILING_PUNCT_RE = /[.,;:!?)\]'"]+$/;
+
+/**
+ * True for the Messenger handoff href specifically (scheme optional) — the one bare URL
+ * Haven is deliberately told to write out in full (system-prompt.ts's off-topic/handoff
+ * rule, and the access-leak guardrail's fallback text in owner-facts.ts), because
+ * `ensureHandoffLink`'s button-safety-net and these fixed fallback sentences both depend on
+ * the guest seeing the literal text, not just a button.
+ */
+function isMessengerUrl(urlToken: string): boolean {
+  return MESSENGER_HREF_RE.test(urlToken.replace(/^https?:\/\//i, ""));
+}
+
+/**
+ * Removes every other bare (non-markdown) URL from the reply text, together with a lead-in
+ * phrase immediately before it — independent of whether its host would pass `isAllowedHref`.
+ * Run AFTER `extractAllowedLinks` so a markdown link's visible label text (which can itself
+ * be a raw URL, e.g. `[https://x](https://x)`) is also caught. The booking-link buttons
+ * (`collectBookingLinks`) and any markdown link already converted to a button carry the
+ * real links — the reply text itself should never carry one, with the single Messenger
+ * exception above.
+ */
+export function stripBareUrls(text: string): string {
+  const stripped = text.replace(BARE_URL_WITH_LEAD_IN_RE, (match, urlPart: string) => {
+    const trailing = urlPart.match(URL_TRAILING_PUNCT_RE)?.[0] ?? "";
+    const core = trailing ? urlPart.slice(0, -trailing.length) : urlPart;
+    if (isMessengerUrl(core)) return match;
+    return trailing;
+  });
+  return cleanupStrippedPunctuation(stripped)
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** Every numeric value in this turn's tool results, as plain numbers (peso amounts live among them). */

@@ -6,6 +6,7 @@ import {
   collectDatedQuoteAmounts,
   ensureFromPrefix,
   extractAllowedLinks,
+  stripBareUrls,
   isAllowedHref,
   normalizeHref,
   dedupeLinks,
@@ -94,6 +95,66 @@ describe("extractAllowedLinks", () => {
   it("normalizes a scheme-less m.me markdown link to the https form", () => {
     const { links } = extractAllowedLinks("[Message us](m.me/haveninlipa) any time.");
     expect(links).toEqual([{ label: "Message us", href: MESSENGER_HREF }]);
+  });
+});
+
+describe("stripBareUrls (live bug: a bare URL, including an invented domain, slips past extractAllowedLinks)", () => {
+  it("removes an invented-domain booking link and its Batangueño lead-in phrase", () => {
+    const text =
+      "Gusto n'yo na ga i-book? Ari ang link: " +
+      "https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4";
+    expect(stripBareUrls(text)).toBe("Gusto n'yo na ga i-book?");
+  });
+
+  it("removes an invented-domain booking link and its English lead-in phrase", () => {
+    const text =
+      "Want me to help you book it? Here's the link: " +
+      "https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4";
+    expect(stripBareUrls(text)).toBe("Want me to help you book it?");
+  });
+
+  it("removes an invented-domain booking link and its 'Heto ang link' lead-in phrase", () => {
+    const text =
+      "Gusto n'yo na bang i-book? Heto ang link: " +
+      "https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4";
+    expect(stripBareUrls(text)).toBe("Gusto n'yo na bang i-book?");
+  });
+
+  it("removes an invented-domain booking link and its 'Eto po ang link' lead-in phrase", () => {
+    const text =
+      "Gusto n'yo na po bang i-book? Eto po ang link: " +
+      "https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4";
+    expect(stripBareUrls(text)).toBe("Gusto n'yo na po bang i-book?");
+  });
+
+  it("removes a bare, allowlisted haveninlipa.com URL from the prose too, since its button already carries it", () => {
+    const text = "You can also check https://haveninlipa.com/properties for more options.";
+    expect(stripBareUrls(text)).toBe("You can also check for more options.");
+  });
+
+  it("removes a bare www.haveninlipa.com mention with no scheme", () => {
+    const text = "Visit www.haveninlipa.com/contact kung may tanong pa kayo.";
+    expect(stripBareUrls(text)).toBe("Visit kung may tanong pa kayo.");
+  });
+
+  it("leaves text with no bare URL untouched", () => {
+    const text = "Gusto n'yo na bang i-book? Just tap the button above.";
+    expect(stripBareUrls(text)).toBe(text);
+  });
+
+  it("does not touch a plain email address with no path", () => {
+    const text = "Email us at customerservice@haveninlipa.com kung may tanong.";
+    expect(stripBareUrls(text)).toBe(text);
+  });
+
+  it("leaves the Messenger handoff URL in place — it's deliberately written out, not just a button", () => {
+    const text = `We don't have a documented age policy for that — our team will confirm directly, message us at ${MESSENGER_HREF}.`;
+    expect(stripBareUrls(text)).toBe(text);
+  });
+
+  it("leaves a scheme-less bare m.me/haveninlipa mention in place", () => {
+    const text = "Message us at m.me/haveninlipa, or use the contact page.";
+    expect(stripBareUrls(text)).toBe(text);
   });
 });
 

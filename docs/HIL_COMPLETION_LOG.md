@@ -53,6 +53,23 @@ only when a date phrase was independently detected.
   Haven AI Chat section updated (`dates.ts`/`post-process.ts`/`system-prompt.ts`
   sub-sections, pipeline-order note).
 
+### Follow-up: bare-URL leak past the link allowlist (same branch, 2026-10-19)
+Preview retest found a second live bug: a Batangueño reply ended "...Ari ang link:
+https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4"
+— `extractAllowedLinks`'s markdown-link allowlist (`isAllowedHref`) never ran, because the
+URL wasn't written as a markdown link, and `haven.com.ph` isn't even a real HIL domain.
+New `stripBareUrls()` in `src/lib/haven/post-process.ts` removes any bare `http(s)://`,
+`www.`, or `domain.tld/path` URL from the reply text — allowlisted or not, since a
+legitimate link already has its own button — together with a lead-in phrase ("Ari ang
+link:", "Here's the link:", "Heto ang link:", "Eto po ang link:"), with one exception: the
+Messenger handoff URL (`m.me/haveninlipa`) is left in place, since `ensureHandoffLink`'s
+button safety-net and the fixed owner-facts.ts fallback sentences both depend on the guest
+seeing that literal text. Wired into `chat-service.ts`'s post-process pipeline right after
+`extractAllowedLinks`. `system-prompt.ts` gained a new hard rule telling the model never to
+write a URL in reply text (booking buttons are automatic), carving out the existing
+Messenger-handoff instruction as the one exception. Tests added for the exact bad string,
+EN/TL/btg lead-in variants, and an allowlisted-URL case (`post-process.test.ts`).
+
 ### Deploy note
 Committed to `fix/haven-ai-numeric-dates-101926` (cut from `main` @ 69af104); not merged —
 the base branch is being restored by the Owner first. Not yet live; no schema change, no

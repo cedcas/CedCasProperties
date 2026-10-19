@@ -14,6 +14,7 @@ import {
 } from "./property-resolver";
 import {
   extractAllowedLinks,
+  stripBareUrls,
   collectToolAmounts,
   enforcePriceClaims,
   collectBasePrices,
@@ -389,7 +390,10 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const reconfirmFixed = dropDateReconfirmationQuestions(rangeFixed, datesResolvedThisTurn, effectiveStayLabel, englishMode);
   const yearQuestionFixed = dropWhatYearQuestions(reconfirmFixed, manilaYear(now));
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(yearQuestionFixed);
-  const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
+  // A bare (non-markdown) URL the model wrote straight into prose slips past
+  // extractAllowedLinks entirely — including an invented domain (see post-process.ts).
+  const bareUrlsStripped = stripBareUrls(strippedReply);
+  const englishClean = englishMode ? stripTagalogWordsInEnglish(bareUrlsStripped) : bareUrlsStripped;
   const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
   // Owner rule (2026-10-16 / 2026-10-19): once dates are resolved this turn, never let a
   // single-date default (e.g. "10/24") get re-questioned as "1 night lang ba?" — and always
