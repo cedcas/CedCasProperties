@@ -1,6 +1,9 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-10-04 (GA4 Internal Traffic and Developer-Traffic data filters confirmed Active by the Owner — open question closed). Prior: 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
+> **Last updated:** 2026-10-16 (§9 — `hil-seo` v1.1.9 artifact built: Organization `sameAs`
+> gains YouTube and corrects the TikTok handle; new front-end `social-links` module fixes
+> the blog theme's hardcoded social hrefs; artifact in `content/seo/runs/101626/`, pending
+> Owner upload). Prior: 2026-10-04 (GA4 Internal Traffic and Developer-Traffic data filters confirmed Active by the Owner — open question closed). Prior: 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
 > `seo/weddings-accommodation-rework`, PR against `dev`, **not merged or deployed**; `SEO-DEC-030`). Earlier the same day: (§13/§14 — GA4 gating DEC-021, `stay_match_click` finding, `stay_match_arrival`, open GA4-UI steps; PR #25, merged into `dev`); (§4 `SEO-DEC-029` scheduling rule for Owner-approved batches;
 > §12 `SEO-DEC-006` freeze detail; §15 GSC status reconciled with `HIL_PROJECT_STATUS.md`;
 > cross-links now point at the layered docs in `docs/`). Prior stamp: 2026-09-19 end of day
@@ -259,6 +262,19 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   quality (`DEC-009`) — investment here targets GSC hygiene, not a rich card.
 - Blog schema now renders from `hil-seo`'s schema module once on; not independently
   detailed beyond the parity-check summary in §5.
+- **2026-10-16, `hil-seo` v1.1.9 (artifact built, `content/seo/runs/101626/`, pending
+  Owner upload):** the Organization `sameAs` gains the YouTube channel
+  (`youtube.com/@Haven-in-Lipa`) and corrects the TikTok entry, which was never a live
+  handle (`@haven_inlipa` → `@haven.in.lipa`). A new, independent front-end module
+  (`includes/social-links.php`, filter `hil_seo_fix_social_links`) also corrects three
+  wrong hardcoded social hrefs in the `haveninlipa-blog` theme's CTA section and footer
+  and inserts a matching YouTube icon — output-buffer based, theme files untouched. Detail:
+  [HIL Blog Technical Specification.md](HIL%20Blog%20Technical%20Specification.md).
+  **Known gap, not fixed by this artifact:** the main site's own `LocalBusiness` schema
+  (`src/lib/local-business-schema.ts`) still carries the old TikTok URL and no YouTube
+  entry — already documented there as not fully aligned with the blog's Organization
+  graph (Airbnb-entry gap, `HIL_COMPLETION_LOG.md` 2026-10-10 entry); this widens that gap
+  by one more field pending a separate, Owner-approved app-side change.
 
 ### Durable decision (this migration)
 - Schema ownership boundaries above are **unchanged**. `content/seo/schema/` (new, empty

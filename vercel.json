@@ -1,6 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/checkout-abandonment", "schedule": "*/5 * * * *" },
-    { "path": "/api/cron/booking-requests", "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/booking-requests", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/haven-retention", "schedule": "0 17 * * *" }
   ]
 }

@@ -803,6 +803,180 @@ None. Amends DEC-002 (meaning of `pending`).
 
 ---
 
+## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
+
+Date: 2026-10-14
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, and again 2026-10-15 on `fix/haven-ai-freetext-reset-101526` (not new decisions — see notes below).
+Area: Website
+
+### Implementation note (2026-10-15 owner-guardrails pass)
+Cedric (the Owner) approved two more guardrails, closed without changing the decision
+itself — same philosophy as the 2026-10-14 pass below: a prompt instruction alone is
+guidance, not an enforcement boundary, so each gets an independent post-processing check
+too:
+- **Base/listing rates always read "from ₱X/night."** Whenever Haven states a base or
+  listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+  property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X kada
+  gabi"), never a bare number, because rates can change. `system-prompt.ts` carries the
+  rule; `post-process.ts`'s new `ensureFromPrefix()` is the independent backstop, using
+  `collectBasePrices()` (every `pricePerNight` value in this turn's tool results) and
+  `collectDatedQuoteAmounts()` (every other tool-result number) to tell a bare base rate
+  apart from an exact `get_quote`/`find_stay` quote line that happens to equal it — the
+  latter is always left exactly as the tool returned it, never prefixed.
+- **Local places / how things work point to the printed Welcome Book.** For restaurants,
+  food, groceries, nearby places, or how an appliance/house thing works, Haven points the
+  guest to the printed "Welcome Book" in each house rather than answering from general
+  knowledge — she never looks up or invents a named place online, though a tool result's
+  own `neighborhoodPlaces` data may still be used when present. `owner-facts.ts` gained a
+  dated fact bullet (Cedric, 2026-10-15) with two fixed facts Haven may state directly: an
+  Alfamart right outside the subdivision, plus minimarts around the property.
+
+### Implementation note (2026-10-15 owner-guardrails pass, part 2)
+Cedric (the Owner) approved three more guardrails on the same `fix/haven-ai-freetext-reset-101526`
+branch, closed without changing the decision itself:
+- **Banned "can you afford it" phrasing → booking nudge.** Haven must never ask or imply
+  anything that reads as questioning whether a guest can afford a stay — "Kaya mo na ba?",
+  "Kaya n'yo ba?", "Can you afford it?", "within your budget", "kaya ba ng budget", and
+  reorderings of the same Tagalog idiom are banned. `system-prompt.ts` carries the rule and
+  names the required close after a quote: "Want me to help you book it?" (Tagalog: "Gusto
+  n'yo na bang i-book?"; Batangueño: "Gusto n'yo na ga i-book?"). `owner-facts.ts`'s new
+  `replaceBannedAffordPhrasing()` is the independent backstop, replacing a whole matching
+  sentence/bullet with the booking nudge in the active language rather than leaving it in
+  or silently dropping it — it runs in `chat-service.ts` BEFORE `stripBudgetQuestions()`,
+  since "within your budget"/"kaya ba ng budget" would otherwise also match that guard's
+  broader `budget` regex and get dropped instead of replaced.
+- **B34 Welcome Book, scoped per property.** An owner-provided, already-sanitized excerpt
+  of the B34 house manual ("BV-B34L21 House Manual v020325") is now a typed server-only
+  module, `src/lib/haven/welcome-book.ts`, keyed by slug and returning content ONLY for the
+  two B34 listings — Cozy 1BR Haven (`cozy-1-bedroom`) and Spacious 2BR Getaway
+  (`spacious-2-bedroom`) — never the Mickey in Lipa (B38) listings. It's exposed read-only
+  via `get_property_details`'s new `welcomeBook` field and a new `get_local_guide(slug?)`
+  tool (`tools.ts`); both resolve an informal property name through the existing fuzzy
+  fallback and never block the conversation on an unresolved slug. **Owner decision,
+  2026-10-15:** Haven may recommend the Welcome Book's 10 restaurants and 13 attractions by
+  name to B34 guests — a narrower exception to the 2026-10-14 "never invent a place" rule
+  above, not a repeal of it; Haven still never looks up or invents a place beyond this
+  fixed list, and the excerpt's own exclusions stay out of what Haven can ever say: no
+  address, staff phone numbers/emails, the host family bio, the dialect page, or the bars
+  list. For a B38 listing, or when no property is known yet, Haven still only points to the
+  printed Welcome Book in each house plus the Alfamart/minimart owner facts, and must never
+  generalize the B34 list to B38.
+- **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password, or a
+  door/gate/lock/keybox code or other access detail, under any circumstance — even asked
+  directly, even if one somehow appeared in a tool result or the model's own text.
+  `src/lib/haven/access-guard.ts` is two independent layers, same tool-only-facts
+  philosophy as the rest of this decision: (1) `isWifiOrAccessRequest` detects a direct
+  ask in the guest's latest message (English, Tagalog, and Batangueño wording, e.g. "susi"
+  for key) and `chat-service.ts` returns a deterministic safe reply with a Messenger button
+  — the same skip-the-model pattern as the 24+ guest handoff — without ever calling the
+  model; (2) `scrubAccessLeak` is a post-generation backstop that replaces any whole
+  sentence reading like a leaked SSID/password/door-code with the same safe sentence,
+  regardless of how it got into the model's reply, and forces the Messenger button on when
+  it fires. `system-prompt.ts` and `owner-facts.ts` both carry the prompt-level rule too.
+  `welcome-book.test.ts` and `access-guard.test.ts` assert the welcome-book content and
+  every guarded tool output stay free of "wifi", "password", phone numbers, and emails.
+
+### Implementation note (2026-10-15 owner-guardrails pass, part 3 — amends part 2's Welcome Book scoping)
+Later the same day, Cedric (the Owner) overrode the Welcome Book scoping decided in part 2
+above — same day, same branch, closed without changing the decision itself:
+- **Restaurants and things-to-do are now global, not B34-only.** The Welcome Book's 10
+  restaurants and 13 attractions apply to EVERY public listing, including the Mickey in
+  Lipa (B38) houses — Haven says these are "from our Welcome Book" and may combine them
+  with a listing's own `neighborhoodPlaces` tool data when present. `welcome-book.ts`'s
+  `getWelcomeBook(slug)` now always returns these two lists, for any slug (even one that
+  doesn't resolve), instead of returning `null` outside the B34 pair.
+- **House rules, how-tos, and check-out steps stay B34-only.** These three fields remain
+  `null` for every listing except the two B34 slugs (`cozy-1-bedroom`, `spacious-2-bedroom`)
+  — never generalized to a B38/Mickey listing or any other property, per the excerpt's own
+  scope. `get_local_guide`'s messaging and `owner-facts.ts`'s prompt bullet were both
+  updated to state the lists/house-info split explicitly; the excerpt's exclusions (no
+  address, phone numbers, emails, bars list, dialect page) are unchanged.
+
+### Implementation note (2026-10-14 owner-guardrails pass)
+Cedric (the Owner) reviewed H1's live behavior and approved a set of additional facts and
+guardrails, closed without changing the decision itself — see `src/lib/haven/owner-facts.ts`
+for the single server-side source of these facts, sourced and dated "Cedric, 2026-10-14":
+- **Never ask the guest's budget.** Prompt rule plus `stripBudgetQuestions()` drops any
+  sentence asking it regardless.
+- **Capacity is 24 guests combined, across both houses, and counts adults.** There is no
+  documented age policy for kids/babies — Haven must never claim they're free or don't
+  count, and must never promise flexibility for a 24+ guest group, squeezing in extra
+  people, or an extra bed/mattress. `needsCapacityHandoff()`/`ensureCapacityHandoffLink()`
+  force the Messenger button on for any of those triggers, independent of the model's own
+  wording; `removeKidsFreeClaims()` replaces a wrongful "kids are free/uncounted" claim
+  with a Messenger-confirmation sentence.
+- **Full payment is due at booking** — no half payment, no deposit-to-reserve. Stated
+  directly from the owner-facts prompt block, the same tool-only-facts exception the price
+  guard now carries for exactly one other number (below).
+- **Early check-in/late checkout is ₱200/hour, every listing, subject to availability.**
+  `OWNER_FACT_ALLOWED_AMOUNTS` (`{200}`) is merged into the price guard's allowlist in
+  `chat-service.ts` so this fact can be stated even without a tool call this turn. A new
+  read-only tool, `check_early_late(slug, date, kind)`, answers a date-specific question
+  from `getInventoryScopeConflicts()` — the same commit-time availability check the
+  booking flow uses — returning `likely_possible`/`not_possible`/`unknown`; Haven is
+  instructed to never treat `likely_possible` as a promise.
+- **Quiet hours (10 PM–8 AM) and the other house rules that are identical everywhere** (no
+  pets, no smoking inside, no parties/events without approval) get a direct general answer
+  instead of "which house?" — only a genuinely differing rule (e.g. check-in time) still
+  names the difference per listing.
+- **Karaoke/equipment questions answer only from `amenities`/`amenityDetails`** — marketing
+  copy (e.g. "a karaoke-and-lechon dinner" in `bestForSegments`, which `get_property_details`
+  never exposes to the model) must never be read as a confirmed-equipment claim.
+- Two Tagalog/Batangueño language fixes: never ask "ilang guests ang dadalaw" (dadalaw =
+  "to visit", confusing for a staying headcount) — `fixDadalawPhrasing()` rewrites it to
+  "Ilang guests kayo?"/"Ilan ga kayo?" — and an English reply must never mix in a stray
+  Tagalog word (`isEnglishContext()`/`stripTagalogWordsInEnglish()`).
+- Two reply-quality fixes carried over from the same review: `shortenPropertyNamesInText()`
+  applies the existing link-label name shortener to reply **text**, not just link labels;
+  `firstResolvedDateRange()`/`ensureDatesStated()` make an English reply state its resolved
+  dates explicitly even when the model's own prose omits them.
+
+### Implementation note (2026-10-14 polish pass)
+Live dev testing of H0+H1 surfaced three implementation gaps in the guardrails this decision
+already calls for, closed without changing the decision itself:
+- `enforcePriceClaims()` (`src/lib/haven/post-process.ts`) now replaces the **whole sentence
+  or bullet line** containing an unverified ₱/PHP amount, not just the number — the old
+  substring replacement could leave a grammatically broken fragment (e.g. a dangling
+  "/hour"). The replacement text is now fee-vs-total aware: a rate/fee context ("/hour",
+  "fee", "charge") gets "For that fee, please ask us via Messenger (m.me/haveninlipa)."; a
+  stay total gets the original "You'll see the exact total at checkout." `get_quote` and
+  `get_property_details` (`src/lib/haven/tools.ts`) were extended with `name` and a
+  structured `fees` object respectively so a real fee number is traceable through the same
+  allowlist whenever one exists.
+- Booking links a tool actually produced (`get_quote`, `find_stay`) are now always returned
+  as link buttons (`collectBookingLinks()`), independent of whether the model formatted one
+  as a markdown link in its prose — the prior implementation only ever surfaced a link the
+  model itself wrote out. Same with the Messenger handoff (`ensureHandoffLink()`): any
+  mention of m.me/haveninlipa, however phrased, now always produces a button.
+- `system-prompt.ts`'s Batangueño (`btg`) mode gained a placeholder-only few-shot block
+  (no real prices/dates, so an example can never leak as a fact) and the hard rules gained
+  explicit-date, neutral-address, and "provisional"-once instructions, the last backed by a
+  post-process dedupe (`limitToOneProvisional()`).
+
+### Decision
+- **Off by default, two independent switches.** `HAVEN_AI_ENABLED` must read exactly `"true"` to turn Haven's AI mode on anywhere; anything else (unset, `"false"`, a typo) is OFF and the chat widget behaves exactly as it did before this decision — the static `chat-tree.ts` flow, unchanged. `HAVEN_AI_KILL=true` forces static even when enabled, for an incident with no deploy. Both are read in `src/lib/haven/config.ts`.
+- **Tool-only facts.** The model (`src/lib/haven/system-prompt.ts`) is instructed to state a price, date, or availability only from a tool result returned that same turn, and two independent server-side checks enforce it regardless of what the model actually says: `src/lib/haven/post-process.ts` replaces any ₱/PHP amount not present in that turn's tool outputs with "You'll see the exact total at checkout," and strips any link that isn't a relative site path, `haveninlipa.com`, or `m.me/haveninlipa`. Every tool in `src/lib/haven/tools.ts` calls an existing service (`computeBookingQuote`, `getPropertyConflicts`, `getPublicListings`, …) — nothing in the AI path computes a price or availability decision itself, so it can never drift from the booking path ([DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount)).
+- **Provider adapter, not a hard Anthropic dependency.** `src/lib/haven/provider.ts` is a small `fetch`-based adapter (no SDK dependency) behind `HAVEN_AI_PROVIDER` (`anthropic` default, `openai` alternative) and `HAVEN_AI_MODEL` (defaults to a current Claude Haiku model — cheap enough that the per-guest-message cost stays well under the rate limits below).
+- **Spend cap and durable rate limits, enforced in the database, not in memory.** `HavenChatUsage` holds one row per guest message (summed across any internal tool-call rounds), so a plain row count under a window IS the message count the limiter checks: 20/10 min and 100/day per hashed IP, 600/hour globally (`src/lib/haven/rate-limit.ts`). A running monthly total (Asia/Manila calendar month) against `HAVEN_AI_MONTHLY_CAP_USD` (default $20) falls back to static with `reason: "cap"` once exceeded, and sends **at most one** admin alert per month (a zero-cost marker row prevents a resend without a second table).
+- **Transcripts are masked before they are ever written, and expire.** `HavenChatTranscript` stores the guest/Haven turns for product improvement, but `src/lib/haven/masking.ts` strips emails, PH phone numbers, and card-like digit runs from the text *before* the `INSERT` — the raw guest message never reaches the database. `/api/cron/haven-retention` (daily, Vercel Cron) deletes transcripts older than 90 days and usage rows older than 13 months.
+- **Language is explicit, not inferred from the request's `Accept-Language`.** The guest (or `auto`, mirroring their own words including Taglish) picks `en` / `tl` / `btg` from a toggle in the widget; `btg` is Tagalog with Batangueño expressions, not a separate translation pipeline.
+- **The route never 500s to the guest.** `POST /api/haven/chat` degrades to `{mode: "static"}` (optionally with a `reason`) on a disabled flag, a validation failure, a rate limit, the monthly cap, a provider error, or a timeout — the widget's existing static tree is always a safe fallback, never an error state the guest sees.
+
+### Reason
+Adding a free-text LLM surface to a live booking site risks three distinct failure modes if left unconstrained: a hallucinated price or date reaching a guest, an unbounded API bill, and guest PII sitting in a database indefinitely. Each got its own independent, server-side control rather than relying on prompting alone — a system prompt is guidance, not an enforcement boundary, and the post-processing/rate-limit/masking layers in this decision hold even if the model ignores its instructions. Haiku (not a larger model) was chosen because this is a chat-widget FAQ/availability surface, not a reasoning-heavy task, and the cost difference compounds directly against the monthly cap. `fetch` over either vendor SDK was chosen so one file covers both wire formats without taking on two SDKs' update cadence for a flag that defaults off.
+
+### Implications
+- Any future Haven AI tool must call an existing service function, never compute a number itself — extending `src/lib/haven/tools.ts` means adding a thin, zod-validated wrapper, not new pricing/availability logic.
+- A new payment, booking-creation, Stripe, or admin write path must never be exposed as a tool — H1 is read-only by design; see Next steps below for the planned H2 scope.
+- Changing the default model or provider is an env var change (`HAVEN_AI_MODEL`, `HAVEN_AI_PROVIDER`), not a code change, but the per-model price map in `src/lib/haven/config.ts` must be kept current or the monthly cap accounting silently uses the wrong rate.
+- `HavenChatUsage`/`HavenChatTranscript` are additive tables (migration `20261014120000_add_haven_chat_ai`) — ships migrate-first per [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate). The Vercel build's release gate fails until an operator applies it (see the runbook).
+- Turning the feature on in production is an Owner action: set `HAVEN_AI_ENABLED=true` plus the provider's API key in Vercel env vars. `HAVEN_AI_KILL=true` is the fastest incident response — no deploy, just an env var flip (Vercel env changes still need a redeploy to take effect for this Node-runtime route, so this is "fast," not "instant").
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

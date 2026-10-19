@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { track } from "@/lib/analytics";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 const SUBJECTS = [
   "Booking Inquiry",
@@ -92,10 +93,8 @@ export default function ContactForm() {
                 <div className="font-semibold text-charcoal text-[14px] mb-3">Find Us Online</div>
                 <div className="flex gap-3">
                   {[
-                    ["fa-facebook-f", "Facebook",  "https://www.facebook.com/haveninlipa"],
-                    ["fa-instagram",  "Instagram", "https://www.instagram.com/haven_inlipa/"],
-                    ["fa-tiktok",     "TikTok",    "https://www.tiktok.com/@haven_inlipa"],
-                    ["fa-airbnb",     "Airbnb",    "https://airbnb.com/h/fullhousebellavita"],
+                    ...SOCIAL_LINKS.map(({ icon, name, url }) => [icon, `Haven in Lipa on ${name}`, url]),
+                    ["fa-airbnb", "Airbnb", "https://airbnb.com/h/fullhousebellavita"],
                   ].map(([icon, label, href]) => (
                     <a key={icon} href={href} aria-label={label} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
                       <i className={`fa-brands ${icon}`} />

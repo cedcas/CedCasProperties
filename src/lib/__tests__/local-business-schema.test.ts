@@ -27,11 +27,12 @@ describe("buildLocalBusinessJsonLd", () => {
     expect(schema.contactPoint.telephone).toBe(BUSINESS_PHONE);
   });
 
-  it("sameAs includes the blog's Organization profiles (Facebook, Instagram, TikTok)", () => {
+  it("sameAs includes the owner-approved social profiles (Facebook, Instagram, TikTok, YouTube)", () => {
     expect(schema.sameAs).toEqual(expect.arrayContaining([
       "https://www.facebook.com/haveninlipa",
       "https://www.instagram.com/haven_inlipa/",
-      "https://www.tiktok.com/@haven_inlipa",
+      "https://www.tiktok.com/@haven.in.lipa",
+      "https://www.youtube.com/@Haven-in-Lipa",
     ]));
   });
 

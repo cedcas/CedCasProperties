@@ -24,7 +24,7 @@ export default function PrivacyPage() {
       <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-3xl mx-auto px-6">
           <h1 className="font-serif font-semibold text-charcoal text-[2rem] mb-2">Privacy Policy</h1>
-          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: April 11, 2026</p>
+          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: October 14, 2026</p>
 
           <div className="prose-custom space-y-8 text-[14.5px] text-charcoal/75 leading-[1.85]">
             <section>
@@ -74,7 +74,18 @@ export default function PrivacyPage() {
             </section>
 
             <section>
-              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">5. Data Retention</h2>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">5. Haven, Our Chat Assistant</h2>
+              <p>
+                The chat widget on this site (&ldquo;Haven&rdquo;) can run in an AI-assisted mode. When it does, the
+                messages you send and Haven&rsquo;s replies are saved for 90 days to help us improve the service,
+                with phone numbers, email addresses, and card-like numbers automatically hidden before anything is
+                stored. Haven answers from our own listing, pricing, and availability data — please don&rsquo;t share
+                payment details in the chat; booking payment always happens through the site&rsquo;s own booking flow.
+              </p>
+            </section>
+
+            <section>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">6. Data Retention</h2>
               <p>
                 We retain booking records and contact messages for as long as necessary to fulfill our business and legal obligations.
                 If you would like your data removed, please contact us and we will process your request within a reasonable timeframe.
@@ -82,14 +93,14 @@ export default function PrivacyPage() {
             </section>
 
             <section>
-              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">6. Data Security</h2>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">7. Data Security</h2>
               <p>
                 We take reasonable measures to protect your personal information. Passwords are encrypted, card payments are handled by Stripe (PCI-compliant), and access to booking data is restricted to authorized administrators.
               </p>
             </section>
 
             <section>
-              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">7. Your Rights</h2>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">8. Your Rights</h2>
               <p>You have the right to:</p>
               <ul className="list-disc pl-5 space-y-1 mt-2">
                 <li>Request a copy of the personal data we hold about you</li>
@@ -103,14 +114,14 @@ export default function PrivacyPage() {
             </section>
 
             <section>
-              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">8. Changes to This Policy</h2>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">9. Changes to This Policy</h2>
               <p>
                 We may update this privacy policy from time to time. Any changes will be posted on this page with an updated &ldquo;Last updated&rdquo; date.
               </p>
             </section>
 
             <section>
-              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">9. Contact Us</h2>
+              <h2 className="font-serif font-semibold text-charcoal text-[1.15rem] mb-3">10. Contact Us</h2>
               <p>
                 If you have any questions about this privacy policy, please reach out:
               </p>

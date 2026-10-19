@@ -4,6 +4,984 @@
 
 ---
 
+## 2026-10-16 — `hil-seo` 1.1.9 built: social `sameAs` + blog theme social-link fix (content/hil-seo-1.1.9-social-101626)
+
+Area: Blog / SEO
+
+Status: Artifact built, `php -l` clean, standalone PHP test passing. **Not yet uploaded to
+WordPress** — this is a plugin artifact in the repo, per the standing rule that Claude
+never calls the WordPress API or touches the live blog directly (SEO-DEC-009).
+
+### Outcome
+Owner-approved (Cedric, 2026-10-16): built on the live v1.1.8 source
+(`content/seo/runs/100426/hil-seo-plugin/`), copied to
+`content/seo/runs/101626/hil-seo-plugin/` with the plugin folder/slug unchanged so
+WordPress can upgrade in place. Two independent fixes, both about the same four social
+profiles: (1) the Organization schema's `sameAs` had a TikTok handle that was never live
+and no YouTube entry; (2) the `haveninlipa-blog` theme's own hardcoded CTA/footer social
+icons had three wrong hrefs and no YouTube icon at all (confirmed against a live capture
+of the blog homepage, `/workspace/hil-blog-social/live-home.html`).
+
+### Material Changes
+- **`includes/schema.php`:** Organization `sameAs` is now `facebook.com/haveninlipa`,
+  `instagram.com/haven_inlipa`, `tiktok.com/@haven.in.lipa` (corrected from
+  `@haven_inlipa`), `youtube.com/@Haven-in-Lipa` (new), `haveninlipa.com` (unchanged
+  position, after the socials).
+- **New file, `includes/social-links.php`:** front-end-only output-buffer module
+  (`template_redirect`, HTML responses only; skips `wp-admin`, REST, AJAX, cron, feeds),
+  gated by its own filter (`hil_seo_fix_social_links`, default on, independent of the
+  Yoast-cutover flags). Corrects the theme's hardcoded Instagram/TikTok/Facebook hrefs and
+  inserts a YouTube anchor immediately after each TikTok anchor, cloned from that anchor's
+  own markup (picks up the footer's `class="social-link"` without needing to know which
+  container it's in). Idempotent — a non-greedy-regex bug that let a second pass triple the
+  YouTube icon was caught by the test harness and fixed with a tempered-greedy-token
+  pattern before shipping.
+- **Version bump:** plugin header, `HIL_SEO_VERSION`, and `readme.txt` stable tag/changelog
+  all to 1.1.9; module load order in `hil-seo.php` gains `social-links`.
+- **Test harness:** `content/seo/runs/101626/tests/test-social-links.php` — standalone PHP
+  script (no WordPress required; stubs `add_action`/`apply_filters`/`is_admin`/`is_feed`)
+  asserting the rewrite against the two live markup snippets (CTA section + footer),
+  including idempotency on a second pass. All 18 assertions pass.
+- **Build artifacts:** `content/seo/runs/101626/hil-seo-plugin.zip` (folder `hil-seo-plugin/`
+  at the zip root, matching the v1.1.8 layout) and a copy at
+  `/workspace/hil-blog-social/hil-seo-1.1.9.zip`.
+- **Known, documented gap (not fixed here):** the main app's `src/lib/local-business-schema.ts`
+  still carries the old TikTok URL and no YouTube entry — already flagged there as not
+  fully aligned with the blog's Organization graph (Airbnb-entry gap, see this file's
+  2026-10-10 entry below). This build widens that gap by one more field; fixing it is a
+  separate, Owner-approved app-side change.
+
+### Deploy note
+`content/seo/runs/101626/HIL_SEO_v1.1.9_Deploy_Note.md` — upload steps, verification
+checklist, and rollback (re-upload the 1.1.8 zip in `runs/100426/`).
+
+---
+
+## 2026-10-16 — Social links consolidated into one constant; YouTube added, TikTok URL fixed (content/social-links-youtube-101626)
+
+Area: Website | SEO
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 198 files / 3,675 tests). Not yet merged.
+
+### Outcome
+Owner-approved (Cedric, 2026-10-16) the four official social profiles: Facebook, Instagram,
+TikTok (`@haven.in.lipa` — the code had carried the wrong handle, `@haven_inlipa`, since the
+page was first built), and a new YouTube channel (`@Haven-in-Lipa`). All four now live in one
+place, `src/lib/social-links.ts` (`SOCIAL_LINKS` / `SOCIAL_LINK_URLS`), and every surface that
+renders a social icon or link reads from it instead of repeating the URLs.
+
+### Material Changes
+- **New:** `src/lib/social-links.ts` — the shared constant (name, url, Font Awesome
+  `fa-brands` icon class per platform).
+- **`src/lib/local-business-schema.ts`:** `BUSINESS_SAME_AS` now spreads
+  `SOCIAL_LINK_URLS` plus the pre-existing Airbnb listing link (kept as-is — Airbnb is not
+  one of the owner's four confirmed social profiles, and its `sameAs` inclusion was already
+  a separate open question, see the 2026-10-10 entry below).
+- **`src/app/about/page.tsx`:** the `Person` JSON-LD `sameAs` now spreads
+  `SOCIAL_LINK_URLS` (previously missing TikTok entirely); the "Messenger" contact link
+  now sources its URL from `SOCIAL_LINKS` instead of a hardcoded string.
+- **`src/app/page.tsx` / `src/components/sections/ContactForm.tsx`:** the social-icon rows
+  now map over `SOCIAL_LINKS` (plus Airbnb, appended separately since it isn't in the
+  constant); `aria-label` changed from the bare platform name to `"Haven in Lipa on
+  {Platform}"` for the four owner-approved profiles (Airbnb's `aria-label` left unchanged).
+- **`src/lib/chat/chat-tree.ts`:** the `contact-social` chat-tree node gained a YouTube
+  line and the TikTok handle was corrected to `@haven.in.lipa`.
+- **Not changed:** `src/components/layout/Footer.tsx` has no existing social-icon area (only
+  address/phone/email under "Get in Touch"), so none was added — out of scope for a link-URL
+  fix. `src/lib/faqs.ts`'s FAQ answer only names Facebook (not a multi-platform list), so it
+  was left as-is.
+- **Blog NOT updated by this change** — the `hil-seo` plugin's own `Organization` `sameAs`
+  (`content/seo/runs/.../hil-seo-plugin/includes/schema.php`) is a separate WordPress-side
+  artifact that still needs its own update to add YouTube and fix the TikTok handle; it does
+  not read from this repo's constant.
+
+Tests: `src/lib/__tests__/local-business-schema.test.ts` updated (TikTok URL, +YouTube).
+New `src/lib/__tests__/social-links.test.ts` pins `SOCIAL_LINK_URLS`/`SOCIAL_LINKS` names,
+checks `BUSINESS_SAME_AS` and the about-page `sameAs` wiring, and scans `src/` to confirm no
+stale `tiktok.com/@haven_inlipa` URL remains.
+
+### References
+Branch `content/social-links-youtube-101626`, PR pending against `dev`.
+
+---
+
+## 2026-10-16 — Haven AI: plain-language pass banning deep/literary Tagalog (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,873 tests).
+
+### Outcome
+Same branch as the entry below, later the same day. Owner incident (Cedric): Haven
+qualified a quote as "(provisional lang — tutuklasin ng tama sa checkout)" —
+"tutuklasin" ("will be discovered") is deep, literary Tagalog no real local host would
+use for "we'll confirm it." Haven must always speak plain, conversational Tagalog/
+Batangueño — everyday Taglish is fine, never deep or literary vocabulary. "Tutuklasin"
+and every other word on the "tuklas" root (tuklasin, matutuklasan, tinuklasan, …) are
+banned entirely — the standard quote/checkout caveat is now fixed per language: EN "This
+is provisional — confirmed at checkout.", TL/BTG "Provisional lang ito, kukumpirmahin sa
+checkout."
+
+Reviewing Haven's own fixed scripts and few-shot blocks (`system-prompt.ts`'s
+`BATANGUENO_FEWSHOT`, `owner-facts.ts`, `access-guard.ts`, `welcome-book.ts`, `dates.ts`)
+turned up no other instance of "tutuklasin" or the other deep words the Owner asked to
+be reviewed for ("sukatin", "manatili", "nawa", "datapwat", "subalit", "marapat",
+"pagsapit", "tunay na", "maaari") — they already used "pwede" and plain phrasing
+throughout. The guard below exists as a backstop against the model generating these
+words at runtime (what produced the Owner's live incident), not a fix to existing fixed
+text.
+
+### Material Changes
+- **`system-prompt.ts`:** new `PLAIN_LANGUAGE_RULE` instructs plain, conversational
+  Tagalog/Batangueño and bans the "tuklas" root entirely (say "kukumpirmahin" instead) plus
+  the other deep words, each with its plain replacement:
+  sukatin→tingnan, manatili→mag-stay, nawa→sana, datapwat/subalit→pero, marapat→dapat,
+  pagsapit→pagdating, tunay na→talagang, maaari/maaaring→pwede/pwedeng. The "provisional"
+  hard rule now states the standard caveat explicitly per language.
+- **`post-process.ts`:** `PROVISIONAL_CAVEAT_EN`/`PROVISIONAL_CAVEAT_TL` (the single source
+  of truth both the prompt and the backstop use — defined here, not `system-prompt.ts`, to
+  avoid a module import cycle through `owner-facts.ts`); `replaceTuklasinFamily(text,
+  isEnglish)` matches the whole "tuklas" root and swaps the WHOLE sentence/bullet line for
+  the standard caveat (never just the word, since every live occurrence of this root was
+  this exact checkout caveat); `simplifyDeepTagalogWords(text)` is a word-level,
+  capitalization-preserving swap for the rest of the banned words.
+- **`chat-service.ts`:** both run right after `fixDadalawPhrasing()`, before
+  `stripSystemMentions()`.
+
+Tests: `post-process.test.ts` (the exact Owner string → plain caveat, English-language
+variant, other "tuklas"-root inflections, each banned word replaced, no-op cases),
+`system-prompt.test.ts` (prompt states the per-language caveat and bans "tutuklasin" by
+name, lists the other banned words, and the Batangueño few-shot block contains none of
+them).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86.
+
+---
+
+## 2026-10-16 — Haven AI: never re-question a resolved date range, bare day-of-month ranges, follow-up-turn property/date resolution (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,840 tests).
+
+### Outcome
+Same branch as the two entries below, later the same day — three Owner rules (Cedric,
+2026-10-16), using the Owner's own dev screenshot as a test fixture:
+1. **Never re-question a resolved date range:** guest said "Nobyembre 19 hanggang 21, 4
+   kami" and Haven asked whether that meant 1 night (Nov 19–20) or 2 nights (Nov 19–21) —
+   contradicting the range it had just correctly parsed. A parsed range always means
+   check-in the first date, check-out the second; Haven must never ask the guest to
+   confirm the number of nights, re-ask which dates were meant, or contradict the range.
+2. **Never ask what year:** always the current year in Asia/Manila, or next year if that
+   date already passed. Also: a bare day-of-month range with no month attached ("19 to
+   21", "19-21") now resolves against a month named earlier in the conversation, or the
+   next upcoming occurrence of that day otherwise.
+3. **Follow-up-turn resolution:** a message carrying only dates/guest count ("Nobyembre 19
+   hanggang 21, 4 kami"), sent after an earlier message naming a property ("Magkano ga ang
+   Spacious 2BR?") or after Haven listed options, now resolves the property from recent
+   history instead of asking again.
+
+### Material Changes
+- **`dates.ts`:** `resolveDates()` gained a third optional `context` parameter and a bare
+  day-of-month-range fallback (lowest priority, guarded against a guest-count phrase like
+  "4 to 5 guests" via a trailing people-noun exclusion); new `findContextMonth(context)`
+  export returns the last month name mentioned in recent history, English or
+  Tagalog/Batangueño.
+- **`owner-facts.ts`:** `parseGuestCount()` gained the number-leading "4 kami"/"4 na kami"
+  idiom (alongside the existing "kami ay 4"), needed to parse the Owner's exact fixture.
+- **`property-resolver.ts`:** new `resolveGuestPropertyMentionAcrossTurns(latestMessage,
+  listings, recentHistory)` — tries the latest message first, then scans the last 6 prior
+  turns (either role), most recent first, only when the latest message names no property.
+- **`post-process.ts`:** new `dropDateReconfirmationQuestions()` (drops any
+  nights/date-reconfirmation sentence in English or Tagalog/Batangueño whenever a range
+  was resolved this turn; falls back to restating `stayLabel` with a booking nudge if
+  dropping would leave the reply empty) and `dropWhatYearQuestions()` (unconditional
+  "what year"/"anong taon" drop).
+- **`system-prompt.ts`:** two new hard rules matching the backstops above.
+- **`chat-service.ts`:** new `recentHistoryMessages()` (last 6 prior turns) feeds both
+  `resolveGuestPropertyMentionAcrossTurns()` and `resolveDates()`'s `context` argument;
+  `dateContextNote()` no longer re-runs `resolveDates()` itself, taking the already-
+  resolved object instead so it's computed once and shared with the property note and the
+  new post-process guards, which run right after `fixStayRangeEndDate()`.
+
+Tests: `dates.test.ts` (bare day-range cases incl. year rollover, history month context,
+guest-count false-positive guard, `findContextMonth`), `owner-facts.test.ts` ("4 kami"/"4
+na kami"), `property-resolver.test.ts` (`resolveGuestPropertyMentionAcrossTurns`),
+`post-process.test.ts` (the exact Owner screenshot fixture, English/Tagalog/Batangueño
+re-question phrasings, the "did you mean" property-disambiguation carve-out,
+`dropWhatYearQuestions`), `chat-service.test.ts` (2-turn property+dates/guests flow, btg
+and English), `system-prompt.test.ts` (new hard-rule text).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
+## 2026-10-16 — Haven AI: `hanggang`/`until` date-range regression, doubled date header, "the system" guard (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,744 tests).
+
+### Outcome
+Same branch as the stay-range entry below, later the same day — three more live-preview
+bugs fixed:
+1. **Date-range regression:** "Magkano ga ang Spacious 2BR sa Nobyembre 19 hanggang 21
+   para sa 4?" (and any other "X hanggang Y"/"X until Y" phrasing) wasn't recognized as a
+   date range at all — `dates.ts`'s separator (previously only `-`/`to`/`–`/`through`)
+   didn't include "hanggang"/"until", so the expression fell through to the single-date
+   pattern and silently resolved to a 1-night stay (Nov 19 → Nov 20) instead of the
+   intended 2-night range (Nov 19 → Nov 21), with Haven then asking the guest to confirm
+   the wrong, pre-resolved dates.
+2. **Doubled date header:** an English reply already correctly stating a stay's range via
+   `stayLabel` (e.g. "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights") still got a
+   redundant "For Thursday, November 19 → Saturday, November 21, 2026:" header prepended
+   on top — `ensureDatesStated()`'s "already stated?" check only recognized the full month
+   name ("November 19"), never the abbreviated form `stayLabel` actually uses ("Nov 19").
+3. **"The system" leak:** Haven must never tell a guest she's checking "the system"/"ang
+   system"/"sa system"/"our system" — it reads as a bot describing its own backend. The
+   `BATANGUENO_FEWSHOT` prompt example itself used to say "...sa system, tapos
+   sasabihin..." — fixed alongside the new rule/backstop, since the example was teaching
+   the model the exact phrase being banned.
+
+### Material Changes
+- **`dates.ts`:** new `RANGE_SEP` constant (`-`/`to`/`–`/`through`/`until`/`hanggang`) used
+  by all three range regexes (ISO, weekday, month-day) — single source of truth for every
+  word/symbol that joins a check-in phrase to a check-out phrase.
+- **`post-process.ts`:** `ensureDatesStated()` now takes `stayLabel` as a parameter and
+  checks `text.includes(stayLabel.en)` FIRST, before the existing full-month-name
+  fallback. New `stripSystemMentions()` drops any sentence/bullet line matching
+  `the|our system` / `ang system` / `sa system` (article/possessive required immediately
+  before "system", so "the sound system" is never caught).
+- **`system-prompt.ts`:** new hard rule banning "the system"/"ang system"/"sa
+  system"/"our system"; `BATANGUENO_FEWSHOT`'s example reply no longer says "sa system".
+- **`chat-service.ts`:** wires `stripSystemMentions()` into the post-process pipeline and
+  passes `stayLabel` into `ensureDatesStated()`. The internal "Context (already
+  resolved/detected by the system...)" note headers (`chat-service.ts`, `owner-facts.ts`,
+  `property-resolver.ts`) were also reworded to "...already resolved/detected here..." to
+  avoid teaching the model this phrasing in the first place — defense in depth alongside
+  the backstop.
+
+Tests: `dates.test.ts` (the exact live-bug message, "Nov 19 to 21", "November 19-21",
+"mula Nobyembre 19 hanggang 21", "Dec 30 to Jan 2" year rollover, "Nov 19 until 21"),
+`post-process.test.ts` (`ensureDatesStated` no-double-header case; `stripSystemMentions`
+— English/Tagalog/Batangueño phrasings, bullet lines, and the "sound system" false-positive
+guard), `system-prompt.test.ts` (updated for the reworded context-note phrasing).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR #86 into `dev`.
+
+---
+
+## 2026-10-16 — Haven AI: stay ranges now always end on the check-out date (fix/haven-ai-checkout-date-101626)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,702 tests).
+
+### Outcome
+Live bug: Haven stated a Thu check-in/Sat check-out, 2-night stay as "Thursday, November
+19 hanggang Friday, November 20, 2026 (2 nights)" — reading the last occupied NIGHT
+(Friday) as the range's end instead of the check-out date (Saturday). Fixed with a single
+source of truth for how a stay's range is worded, enforced at three independent layers
+(DEC-029's usual pattern: a tool-surfaced fact, a prompt rule, and an independent
+post-generation backstop).
+
+### Material Changes
+- **`dates.ts`:** new `buildStayLabel(checkIn, checkOut)` returns `{en, tl, btg}` (`btg`
+  identical to `tl`) — e.g. EN "Thu, Nov 19 → Sat, Nov 21, 2026 (check-out) · 2 nights",
+  TL/BTG "Huwebes, Nob 19 → Sabado, Nob 21, 2026 (check-out) · 2 gabi". The end date is
+  always `checkOut`; nights is always `checkOut − checkIn`. `resolveDates()`'s own result
+  now carries a `stayLabel`.
+- **`tools.ts`:** `check_availability`, `get_quote`, and `find_stay` each return a
+  `stayLabel` for the exact dates they were called with (`find_stay` once at the top
+  level, shared by every option).
+- **`chat-service.ts`:** `dateContextNote()`'s pre-resolution system-prompt note now
+  states the resolved range's `stayLabel` (en/tl) alongside the ISO dates.
+- **`system-prompt.ts`:** new hard rule — a stay's range always ends on the check-out
+  date, never the last occupied night; copy the `stayLabel` matching the reply language
+  verbatim instead of composing the range.
+- **`post-process.ts`:** new `fixStayRangeEndDate()` — the independent backstop. Whatever
+  English-worded date range the model composed itself, if its start matches this turn's
+  resolved/quoted stay's `checkIn` and its end matches the last occupied night
+  (`checkOut − 1`), the WHOLE matched range (plus any trailing "(N nights)"/"(N gabi)"
+  note) is replaced with the correct `stayLabel` — never just the end date. A correct
+  range and a per-night breakdown line are both left untouched.
+
+Tests: `dates.test.ts` (`buildStayLabel` — check-out end date, singular "night", month
+rollover, invalid/inverted range, parity with `resolveDates()`), `tools.test.ts`
+(`stayLabel` on `check_availability`/`get_quote`/`find_stay`), `post-process.test.ts`
+(`fixStayRangeEndDate` — the exact bad Batangueño/mixed string, an English variant, a
+correct range left untouched, a single-night stay, a month rollover, and a per-night
+breakdown line left untouched), `system-prompt.test.ts` (the new hard rule's wording).
+
+### References
+Branch `fix/haven-ai-checkout-date-101626`, PR into `dev`.
+
+---
+
+## 2026-10-15 — Haven AI: Welcome Book restaurants/things-to-do widened to global (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,660 tests).
+
+### Outcome
+Same day as the B34 Welcome Book entry below, Cedric amended that decision's scoping:
+the Welcome Book's 10 restaurants and 13 things-to-do now apply to EVERY public listing,
+including the Mickey in Lipa (B38) houses — Haven says they're "from our Welcome Book" and
+may combine them with a listing's own `neighborhoodPlaces` tool data when present. House
+rules, how-tos, and check-out steps are unchanged — still scoped ONLY to the two B34
+listings (`cozy-1-bedroom`, `spacious-2-bedroom`), never generalized to a B38/Mickey
+listing or any other property. The excerpt's own exclusions (no address, phone numbers,
+emails, bars list, dialect page) are unchanged.
+
+### Material Changes
+- **`welcome-book.ts`:** `getWelcomeBook(slug)` now always returns `restaurants`/
+  `thingsToDo` (non-null for any slug, including one that doesn't resolve); `houseRules`/
+  `howTos`/`checkOutSteps` remain `null` outside the two B34 slugs.
+- **`tools.ts`:** `get_property_details`'s `welcomeBook` field is now non-null for every
+  property; `get_local_guide` returns the global lists even with no slug or an unresolved
+  one, and only attaches house-specific fields for a resolved B34 slug. Messaging updated
+  to say "from our Welcome Book" instead of "listed in the B34 Welcome Book."
+- **`owner-facts.ts`:** the dated Welcome Book prompt bullet rewritten to state the
+  lists-are-global / house-info-is-B34-only split explicitly.
+
+Tests: `welcome-book.test.ts`, `tools.test.ts`, `owner-facts.test.ts` updated — new cases
+assert a Mickey (B38) slug gets the global restaurants/things-to-do but `null`
+houseRules/howTos/checkOutSteps.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`). Amends the entry below.
+
+---
+
+## 2026-10-15 — Haven AI: banned "afford" phrasing → booking nudge, B34 Welcome Book, Wi-Fi/access guard (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,654 tests).
+
+### Outcome
+Three more Owner-approved guardrails (Cedric, 2026-10-15), each with the same
+tool-only-facts enforcement philosophy as the rest of DEC-029 — a prompt instruction alone
+is guidance, not a boundary, so each also gets an independent server-side backstop:
+1. **Banned "can you afford it" phrasing.** Haven must never ask or imply anything that
+   reads as questioning whether a guest can afford a stay — "Kaya mo na ba?", "Kaya n'yo
+   ba?", "Can you afford it?", "within your budget", "kaya ba ng budget" are all banned.
+   After stating a quote, she now closes with a booking nudge instead ("Want me to help
+   you book it?"/"Gusto n'yo na bang i-book?"/"Gusto n'yo na ga i-book?").
+2. **B34 Welcome Book.** An owner-provided, already-sanitized excerpt of the B34 house
+   manual ("BV-B34L21 House Manual v020325") is now available to Haven, scoped ONLY to the
+   two B34 listings (Cozy 1BR Haven, Spacious 2BR Getaway) — never the Mickey in Lipa
+   (B38) listings. Owner decision the same day: Haven may recommend the Welcome Book's 10
+   restaurants and 13 attractions **by name** to B34 guests (a narrower exception to the
+   2026-10-14 "never invent a place" guardrail, not a repeal of it); the bars list, dialect
+   page, address, and staff contact details stay excluded exactly as the owner excerpt
+   excludes them.
+3. **Wi-Fi and physical-access guard.** Haven must never share a Wi-Fi name/password or a
+   door/gate/lock/keybox code, under any circumstance — a direct ask is answered with a
+   fixed safe reply pointing to the printed in-house Wi-Fi details or Messenger, skipping
+   the model entirely; an independent post-generation scrub catches any such detail that
+   somehow appears in the model's own reply.
+
+### Material Changes
+- **`owner-facts.ts`:** new `replaceBannedAffordPhrasing()`, run in `chat-service.ts`
+  BEFORE `stripBudgetQuestions()` so "within your budget"/"kaya ba ng budget" is replaced
+  with the booking nudge rather than silently dropped by that guard's broader `budget`
+  regex; new owner-facts prompt bullets for the Welcome Book scoping and the Wi-Fi/access
+  rule.
+- **`welcome-book.ts`** (new): typed server-only module, `getWelcomeBook(slug)` /
+  `isWelcomeBookSlug(slug)`, returning restaurants/things-to-do/house-rules/how-tos/
+  check-out-steps ONLY for `cozy-1-bedroom`/`spacious-2-bedroom`, `null` otherwise.
+- **`access-guard.ts`** (new): `isWifiOrAccessRequest()` + `buildAccessGuardReply()` (the
+  model-skipping direct-ask path) and `containsAccessLeak()`/`scrubAccessLeak()`/
+  `ensureAccessHandoffLink()` (the post-generation backstop), in English/Tagalog/
+  Batangueño.
+- **`tools.ts`:** `get_property_details` gained a `welcomeBook` field; new
+  `get_local_guide(slug?)` tool returns the B34 Welcome Book directly (resolving an
+  informal name through the existing fuzzy fallback) or a non-B34/no-property pointer
+  message.
+- **`chat-service.ts`:** `runToolLoop()` checks `isWifiOrAccessRequest()` right after the
+  24+ guest handoff check, before property-name pre-resolution; the post-process pipeline
+  runs `replaceBannedAffordPhrasing()` and `scrubAccessLeak()`/`ensureAccessHandoffLink()`
+  on every model reply.
+- **`system-prompt.ts`:** hard rules for both the banned-phrasing/booking-nudge rule and
+  the Wi-Fi/access rule.
+
+Tests: `owner-facts.test.ts`, `system-prompt.test.ts`, `welcome-book.test.ts` (new),
+`access-guard.test.ts` (new) — including assertions that the Welcome Book content and
+every guarded tool output stay free of "wifi", "password", phone numbers, and emails —
+plus `chat-service.test.ts`/`tools.test.ts` integration cases.
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: server-side property-name pre-resolution, shortName on every property tool result (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,468 tests).
+
+### Outcome
+Live retest on the preview surfaced two failures the existing fuzzy property-name
+resolver (`property-resolver.ts`, `resolveSlugFallback` in `tools.ts`) never caught,
+because that resolver only ever runs AFTER a model tool call already missed a slug — on a
+turn where Haiku answers free-text with no tool call at all, nothing resolved the guest's
+wording:
+1. Batangueño, after some history, "Mickey in lipa" → Haven replied "hindi ko alam ang
+   property na 'yan" (claimed the property didn't exist).
+2. "Magkano ga ang yung malaking bahay ng Mickey sa Nobyembre 14 para sa 10?" → Haven
+   asked for the exact property name instead of recognizing "malaking bahay" ("the big
+   house") as the full-family-house listing.
+
+Both are fixed by pre-resolving the guest's latest message server-side, BEFORE the model
+is called — the same pattern `chat-service.ts` already used for dates
+(`dateContextNote`) and the 24+ guest capacity note (`buildCapacityContextNote`). A
+second, independent gap: a property's `shortName` (e.g. "Mickey in Lipa — Full Family
+House", not the raw "Mickey in Lipa | Full Family House•Sleeps 15") was only ever computed
+from whatever was mentioned in a single turn's tool exchanges — looking up ONE Mickey
+configuration alone couldn't tell it apart from its siblings, since there was nothing else
+in the turn to disambiguate against.
+
+### Material Changes
+- **`property-resolver.ts`:** three new pure functions reusing the existing
+  `resolvePropertyMatch`/`shortPropertyLabels`: `resolveGuestPropertyMention()` (resolves
+  the guest's latest message against the full public-listing set — unique, ambiguous, or
+  none), `buildPropertyContextNote()` (the system-prompt note: a unique match names the
+  slug and short name and forbids asking for the name again, additionally instructing an
+  immediate `get_quote` call when dates and a guest count are ALSO already known this
+  turn; an ambiguous match lists every candidate's short name and capacity and tells the
+  model to ask which one), and `dropUnknownPropertyClaims()` (the independent
+  post-process backstop — replaces any "hindi ko alam ang property"/"not in our
+  system"/"isn't coming up"/"don't recognize" sentence with a "did you mean ...?"
+  question whenever the server itself already found a match or ambiguity list).
+- **`chat-service.ts`:** `runToolLoop` now fetches the public listings once per turn,
+  resolves the guest's property mention, appends `buildPropertyContextNote()` to the
+  system prompt alongside the existing date/capacity notes, and runs
+  `dropUnknownPropertyClaims()` right after the existing `shortenPropertyNamesInText()`
+  step in the post-process pipeline.
+- **`tools.ts`:** `list_properties` and `get_property_details` now both return a
+  `shortName` field, computed against the FULL public-listing set (a new `shortNameFor()`
+  helper re-fetches listings for `get_property_details`'s single-property case) — always
+  correctly disambiguated even when only one of several same-base-name listings is being
+  looked up.
+- **`post-process.ts`:** `shortPropertyLabels()` is now exported and accepts an optional
+  per-pair `shortName`, which always wins over the turn-scoped computed fallback;
+  `collectPropertyNamePairs()` carries a tool result's own `shortName` through (for
+  `list_properties`/`get_property_details`) so `shortenPropertyNamesInText()` picks it up
+  automatically.
+- **`system-prompt.ts`:** two new hard rules — always use a property's `shortName`, never
+  its raw `name`; and trust a "Context (already resolved/detected by the system...)"
+  property note when present, never claiming a property is unknown while one exists.
+
+Tests: `property-resolver.test.ts` (both exact live-failure messages, plus
+`buildPropertyContextNote`'s get_quote-trigger and no-get_quote-without-a-guest-count
+cases, plus `dropUnknownPropertyClaims`), `tools.test.ts` (`shortName` on both tools,
+including the single-Mickey-configuration disambiguation case), `post-process.test.ts`
+(an explicit tool-provided `shortName` winning over the computed fallback), `system-prompt.test.ts`,
+and `chat-service.test.ts` (both exact live messages end-to-end, plus the get_quote-trigger
+and no-match-found-is-a-no-op cases).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: base-rate "from"/"simula" prefix, local-places Welcome Book guardrail (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,405 tests).
+
+### Outcome
+Two new Owner guardrails (Cedric, 2026-10-15), each enforced in the system prompt AND
+independently in post-processing (the standing DEC-029 philosophy: a prompt instruction
+alone is guidance, not an enforcement boundary):
+
+1. **Base/listing rates always read "from ₱X/night".** Whenever Haven states a base or
+   listing nightly rate — a property's own `pricePerNight`, from `list_properties`, or a
+   quick property rundown — it must say "from ₱X/night" (Tagalog/Batangueño: "simula ₱X
+   kada gabi"), never a bare number, because rates can change. An exact dated
+   `get_quote`/`find_stay` quote line (a specific per-night breakdown or total for the
+   guest's own `checkIn`/`checkOut`) is unaffected — stated exactly as the tool returned
+   it, even if the number happens to equal the base rate (e.g. a single night with no
+   extra fees).
+2. **Local places / how things work point to the printed Welcome Book.** A restaurant/
+   food/groceries/nearby-place/appliance-or-house-thing question is answered by pointing
+   the guest to the printed "Welcome Book" in each house, never by looking up or inventing
+   a named place online or from general knowledge — a tool's own `neighborhoodPlaces` data
+   may still be used when present. Two fixed facts Haven may state directly: an Alfamart
+   right outside the subdivision, plus minimarts around the property.
+
+### Material Changes
+- **`post-process.ts`:** new `collectBasePrices()` (every `pricePerNight` value in this
+  turn's tool results) and `collectDatedQuoteAmounts()` (every other tool-result number)
+  let the new `ensureFromPrefix()` tell a bare base rate apart from an exact dated-quote
+  figure that happens to equal it. `ensureFromPrefix()` inserts "from "/"simula " directly
+  before a matching, unprefixed ₱ amount, skipping one already preceded by "from"/
+  "simula"/"starting at".
+- **`chat-service.ts`:** wires `collectBasePrices()`/`collectDatedQuoteAmounts()`/
+  `ensureFromPrefix()` into the existing post-processing pipeline, right after the
+  price-claims guard.
+- **`system-prompt.ts`:** a new hard rule spells out the "from ₱X/night"/"simula ₱X kada
+  gabi" requirement and the dated-quote-line exception.
+- **`owner-facts.ts`:** a new dated fact bullet (Cedric, 2026-10-15) covers local places —
+  the Welcome Book pointer, the never-invent-a-place rule, and the Alfamart/minimarts
+  facts.
+
+Tests: `post-process.test.ts` (`collectBasePrices`/`collectDatedQuoteAmounts`/
+`ensureFromPrefix`, incl. the dated-quote-line exception and the no-double-prefix case),
+`system-prompt.test.ts` and `owner-facts.test.ts` (both guardrails' prompt text),
+`chat-service.test.ts` (the "Mickey in Lipa — ₱6,500/night" → "from ₱6,500/night"
+end-to-end case, and a dated `get_quote` total left untouched even when it numerically
+equals the base rate).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR #85 (into `dev`).
+
+---
+
+## 2026-10-15 — Haven AI: free-text reset-to-greeting fix, long-history validation, "malaking bahay" mapping (fix/haven-ai-freetext-reset-101526)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,360 tests).
+
+### Outcome
+Owner-reported live bug: in Batangueño mode, right after Haven replied with a 4-option
+list, the guest typed "Mickey in lipa" and the widget reset to the static English root
+greeting — mid-conversation, in a non-English chat.
+
+**Root cause:** `ChatWidget.tsx` sends the last 12 messages as history, including Haven's
+own previous replies (`assistant` role). `chatRequestSchema` in `chat-service.ts` capped
+*every* message, regardless of role, at `MAX_MESSAGE_CHARS` (600) — Haven's multi-option
+replies routinely exceed that. The oversized `assistant` history turn failed validation,
+so the **entire request** was rejected (`{mode: "static", reason: "error"}`), and the
+client's `fallbackToTree()` unconditionally appended `tree.root.message` — the English
+welcome text — wiping the guest's language and conversation context.
+
+### Material Changes
+- **Server (`chat-service.ts`):** `chatRequestSchema`'s message schema is now a zod
+  discriminated union on `role` — `user` content still caps at 600 chars, `assistant`
+  history caps at a new `MAX_ASSISTANT_MESSAGE_CHARS` (1500, `config.ts`).
+  `normalizeIncomingMessages()` runs before validation: trims history to the most recent
+  `MAX_MESSAGES` (12) turns and truncates an over-long `assistant` message to its last
+  1500 characters, instead of rejecting the whole request. A genuinely oversized
+  **latest guest** message (>600 chars) no longer falls back to static either — it gets a
+  deterministic, localized (en/tl/btg) "please shorten that" `{mode: "ai"}` reply with the
+  Messenger button, skipping the model (`outcome: "handoff"`, `reason:
+  "oversized_message"`, reusing the existing free-text columns — no schema change).
+- **Client (`ChatWidget.tsx`):** `fallbackToTree()` no longer injects the static tree's
+  root greeting on a mid-conversation static/cap/kill/error response. It now appends a
+  short, localized apology (`buildAiFallbackMessage()`, en/tl/btg) with a "Message us on
+  Messenger" link button, leaving `messages`/`lang`/`currentNodeId`/`lastMode` and the
+  free-text input untouched. The root greeting is now shown only on first load or an
+  explicit Reset. Outgoing `assistant`-role history is also clamped client-side to 1500
+  chars (`CLIENT_MAX_ASSISTANT_MESSAGE_CHARS`) as defense in depth.
+- **`property-resolver.ts`:** the largest-capacity listing's (Mickey Full Family House,
+  sleeps 15) alias table gained "biggest"/"largest"/"big" (English — "house" is itself a
+  filler token, so "big house" already reduces to "big") and "pinakamalaking" (Tagalog),
+  alongside the existing "pinakamalaki"/"malaki"/"malaking". Confirmed (no code change
+  needed): a bare "Mickey"/"Mickey in Lipa" with no size/capacity detail already resolved
+  `ambiguous` — every Mickey slug contains "mickey"/"in"/"lipa" — which `tools.ts`/
+  `system-prompt.ts` already turn into a short clarifying question naming the three
+  Mickey listings, never "isn't in our system".
+
+Tests: `chat-service.test.ts` (long `assistant` history accepted and truncated; >12-turn
+history trimmed to the most recent 12 instead of rejected; an oversized latest `user`
+message gets the friendly AI reply with no provider call; the exact repro sequence
+stays in AI mode), `property-resolver.test.ts` (the new English/Tagalog size aliases;
+"Mickey in Lipa" ambiguous), `ChatWidget.test.ts` (a mid-conversation static fallback
+does not duplicate the root greeting, keeps the selected language pill active, and
+leaves the input enabled).
+
+### References
+Branch `fix/haven-ai-freetext-reset-101526`, PR pending.
+
+---
+
+## 2026-10-14 — Haven AI live bug fixes: fuzzy property-name resolution, deterministic 24+ guest handoff (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,333 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Two more live bugs fixed in `src/lib/haven/*`, on the same branch as the preview-retest
+pass below:
+
+1. **A plausible informal property name got "isn't coming up in our system."** A guest
+   asked "Can we check in early at 9am … at the Mickey Full Family House?" and Haven
+   wrongly said the property wasn't in the system — every slug-taking tool
+   (`get_property_details`, `check_availability`, `get_quote`, `check_early_late`) only
+   ever did an exact-slug `WHERE` lookup, so informal/partial names the model passed
+   through never matched. Added `src/lib/haven/property-resolver.ts`: a pure,
+   DB-free `resolvePropertyMatch(query, listings)` that normalizes case/accents/
+   punctuation, strips a `[...]` bracket prefix and a `" | "`/`"•"` suffix, drops filler
+   tokens ("house", "bahay", "yung", "sa", "ang", "the"), and scores every public listing
+   by token overlap plus a capacity-number bonus (a bare number in the query that matches
+   a listing's `maxGuests` outscores a same-named sibling). A small owner-confirmed alias
+   table (same pattern as `owner-facts.ts`) covers names that don't appear in any DB
+   column at all — "B34"/"B38" block numbers, "Mickey", "pinakamalaki"/"malaki" ("the
+   biggest"), "studio" for the Cozy 1BR, etc. Two or more listings tied at the top score
+   (e.g. a bare "B38" or "Mickey" — all three configurations qualify equally) come back
+   `ambiguous` with a candidate list instead of guessing; `tools.ts`'s new
+   `resolveSlugFallback()` is called by each tool only *after* its existing exact-slug
+   lookup misses, so a model that already got the slug right (the common case) never
+   touches this path at all. `system-prompt.ts` now tells the model to turn an
+   `ambiguous: true` tool result into a short clarifying question naming the candidates,
+   and to never claim a property isn't in the system when a tool result doesn't say so.
+2. **24+ guest handoff wording drifted even with the Messenger link forced on** — the
+   model's own clarifying questions and "exactly max"/"might fit" hedging survived the
+   existing guardrails because they only ever forced the *link*, never the *text*. The
+   model is now skipped entirely for this case: `owner-facts.ts` gained
+   `isLargeGroupMessage()`/`isLargeGroupToolCall()` (the same detection
+   `needsCapacityHandoff()` already used, pulled out into reusable checks) and a fixed,
+   warm `buildLargeGroupHandoffReply()` script in English/Tagalog/Batangueño (`auto` picks
+   English vs. Tagalog the same way `isEnglishContext()` already does — there's no
+   reliable way to detect Batangueño from the guest's own text, so `auto` never produces
+   the `btg` script). `chat-service.ts`'s `runToolLoop()` checks the guest's latest
+   message *before* calling the provider at all (zero tokens, zero cost, logged as
+   `outcome: "handoff"` — a new, additive value in `HavenChatUsage.outcome`, no schema
+   change) and also mid-loop after any tool call, in case a 24+ `find_stay`/`get_quote`
+   call happens without the raw message itself parsing to a number.
+
+Tests: `property-resolver.test.ts` (new — exact-slug fast path, "Mickey Full Family
+House", "mickey 15", the Tagalog "yung malaking bahay ng Mickey", "spacious 2 bedroom",
+"the 1BR", ambiguous "B38"/"Mickey", garbage), `tools.test.ts` (fuzzy fallback for all
+four slug-taking tools, ambiguous-candidates shape, fallback never retried on ambiguity),
+`owner-facts.test.ts` (`isLargeGroupMessage`, `isLargeGroupToolCall`,
+`buildLargeGroupHandoffReply` per language incl. `auto`), `chat-service.test.ts`
+(provider never called for a 24+ message in any language incl. "8 adults + 16 kids", mid-
+loop handoff on a 24+ `find_stay` call, `outcome: "handoff"` logged with zero cost, a
+sub-24 group still reaches the model normally).
+
+---
+
+## 2026-10-14 — Haven AI preview-retest fixes: 24+ handoff parser, early/late fee guard, amenity search, Tagalog-mode Batangueño leak, pricing-arithmetic guard (fix/haven-ai-guardrails-101426, PR #84, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean, 3,219 tests),
+committed on `fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Five bugs found in a preview retest of the H1 AI chat mode, all fixed in `src/lib/haven/*`:
+
+1. **24+ group handoff didn't fire without a tool call.** `Kami ay 24 na tao sa ikalawang
+   Sabado ng Nobyembre. Saan kami pwede?` got a "how many nights?" follow-up instead of a
+   handoff — `needsCapacityHandoff()` only checked `find_stay`/`get_quote` tool-call
+   arguments, never the guest's own wording. Added `parseGuestCount()` (owner-facts.ts): a
+   language-agnostic parser recognizing "24 people/pax/guests/adults", "kami ay 24", "24 na
+   tao", "24 katao", and a split group like "8 adults + 4 kids" (summed) — scoped to a
+   number sitting next to a people-noun, so a date/time/price number is never picked up.
+   `needsCapacityHandoff()` now also checks the parsed count; a new `buildCapacityContextNote()`
+   injects a server-resolved instruction into the system prompt (same pattern as
+   `dateContextNote`) telling the model to hand off immediately rather than ask for more
+   details, with the Messenger button still forced on independently either way.
+2. **Price guard swallowed the approved early-check-in/late-checkout fee.** A reply with a
+   hallucinated per-hour total (the model computing a specific hours × ₱200 figure instead
+   of stating the flat rate) got its whole sentence replaced with the generic "ask us via
+   Messenger" fallback — including the correct ₱200/hour fact that was in the same
+   sentence. Added `FALLBACK_HOURLY_FEE_TEXT` (post-process.ts): any disallowed amount in
+   an early-check-in/late-checkout context now falls back to restating the real ₱200/hour
+   rate instead of deflecting to Messenger. `PESO_AMOUNT_SOURCE` broadened to also
+   recognize "P200" and "200 pesos" phrasing (not just ₱/PHP), and the system prompt now
+   explicitly forbids computing an hours × rate total — state the flat rate only.
+3. **Amenity questions (e.g. "Do you have karaoke?") asked which house first**, because the
+   model only had `get_property_details` (one property at a time). Added a new `find_amenity`
+   tool (tools.ts) that searches every public property's `amenities`/`amenityDetails` for a
+   term and reports which propert(y/ies) have it, or `found: false` if none do — read-only,
+   no write tools exposed. A new `needsAmenityHandoff()` independently forces the Messenger
+   button on whenever `find_amenity` comes back empty.
+4. **Tagalog mode (`lang: "tl"`) leaked Batangueño particles** — "ga"/"baga" as a question
+   particle, "ari"/"ire" as "this/here" — that should be confined to `btg` mode. Added
+   `stripBatanguenoFromTagalog()`, applied whenever the effective reply language is plain
+   Tagalog (`tl` always, or `auto` mirroring a Tagalog-speaking guest): converts "ga"/"baga"
+   → "ba" and "ari"/"ire" → "ito", preserving capitalization. Leaves the "Oo ga" bare-
+   affirmation misuse alone (same carve-out as the btg-mode marker check), and is a no-op
+   for `btg`/`en`.
+5. **HIGH priority — a Thu→Sat quote read as nights × one night's rate**, undercounting a
+   weekend-rate stay (owner report: looked like 2 × ₱2,800 instead of ₱2,800 + ₱3,500 =
+   ₱6,300). `computeBookingQuote`/`getDailyRates` were confirmed correct — every `get_quote`/
+   `find_stay` call already passes the exact full `checkIn`/`checkOut`; the risk was the
+   model doing its own multiplication in prose. Fixed three ways: the system prompt now
+   explicitly bans multiplying/summing a rate itself (a `pricePerNight` "from" figure may
+   only be stated as "from ₱X/night", and the only total/nightlyTotal Haven may state is the
+   one `get_quote`/`find_stay` returned this turn); `get_quote` and `find_stay` now also
+   return a `perNight` breakdown (date, weekday, rate) so Haven can show the nightly split
+   without recomputing it; and a new `PRICE_ARITHMETIC_RE` check in the price guard rejects
+   any "₱2,800 × 2 = ₱5,600"-style arithmetic in the reply outright, even if every number
+   involved happens to be individually valid.
+
+Tests: `owner-facts.test.ts` (`parseGuestCount`, `buildCapacityContextNote`, updated
+`needsCapacityHandoff`), `post-process.test.ts` (hourly-fee fallback reclassification,
+broadened amount formats, `PRICE_ARITHMETIC_RE`, `needsAmenityHandoff`,
+`stripBatanguenoFromTagalog`), `tools.test.ts` (`find_amenity`, `get_quote`'s `perNight`
+breakdown on a Thu→Sat weekend-rate stay), `system-prompt.test.ts` (arithmetic ban, early/
+late fee rule), and `chat-service.test.ts` end-to-end coverage of the exact field-reported
+24-guest sentence, the amenity handoff, and the Tagalog-mode particle leak.
+
+---
+
+## 2026-10-14 — Haven AI chat-widget bug fix: topic chips expanded on the welcome screen (fix/haven-ai-guardrails-101426, PR #84)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on
+`fix/haven-ai-guardrails-101426`.
+
+### Outcome
+Owner screenshot on `dev` (after PR #83 merged) showed that with the AI flag on, the
+welcome screen still rendered all 7 topic chips expanded, pushing the conversation down —
+the collapse was gated on `aiModeActive = aiEnabled && lastMode === "ai"`, but the welcome
+message always comes from the static tree (`lastMode: "tree"`), so chips started expanded
+on first render and stayed expanded after any static-tree turn. Fixed in
+`ChatWidget.tsx`: the topic-chip collapse-behind-"Topics"-toggle and the persistent "Talk
+to a Human" (`m.me/haveninlipa`) link now gate on `aiEnabled` alone, not `lastMode` —
+collapsed by default from the very first render (including a restored `sessionStorage`
+session), regardless of whether the latest reply was AI-generated or static. Topics
+re-collapse after a chip tap (already did) and now also after the guest sends a free-text
+message (`setTopicsOpen(false)` added to `handleFreeTextSubmit`). `aiModeActive` is
+unchanged and still gates the AI-reply scroll-to-top-of-message behavior, which is
+specifically about "did the latest message come from the AI" rather than "is AI mode on."
+Flag-off (`aiEnabled` false) is untouched — renders exactly as before.
+
+Tests: `ChatWidget.test.ts` extended — AI mode now asserts the Topics toggle and no chip
+buttons on first render (before any message) with the Messenger link present, that tapping
+Topics expands all 7, that chips collapse again after a guest message with the AI bubble
+still rendering correctly, and that a static-fallback turn mid-conversation keeps the root
+7 chips collapsed with the Messenger link still present (previously asserted the opposite).
+
+---
+
+## 2026-10-14 — Haven AI owner guardrails and facts: capacity, payment, early-check-in/late-checkout fee, quiet hours, karaoke, plus dadalaw/English/name/date-statement fixes (fix/haven-ai-guardrails-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-guardrails-101426`, PR open against `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+Cedric (the Owner) reviewed H1's live behavior and approved a batch of additional facts and
+guardrails, all sourced in a new single-source-of-truth module, `src/lib/haven/owner-facts.ts`
+(dated "Cedric, 2026-10-14"):
+- **Never ask the guest's budget** — prompt rule plus `stripBudgetQuestions()` drops the
+  sentence regardless of what the model says.
+- **Capacity is 24 guests combined, across both houses, and counts adults** — there is no
+  documented age policy for kids/babies, so Haven must never claim they're free or
+  uncounted, and must never promise flexibility for a 24+ guest group, squeezing in extra
+  people, or an extra bed/mattress. `needsCapacityHandoff()`/`ensureCapacityHandoffLink()`
+  force the Messenger button on for any of those triggers independent of the model's own
+  wording; `removeKidsFreeClaims()` replaces a wrongful "kids are free/uncounted" claim
+  with a Messenger-confirmation sentence.
+- **Full payment is due at booking** — no half payment, no deposit-to-reserve — stated
+  directly from the owner-facts prompt block.
+- **Early check-in/late checkout is ₱200/hour, every listing, subject to availability** —
+  `OWNER_FACT_ALLOWED_AMOUNTS` (`{200}`) is merged into the price guard's allowlist so this
+  fact can be stated without a tool call. A new read-only tool, `check_early_late(slug,
+  date, kind)`, answers a date-specific question from `getInventoryScopeConflicts()` (the
+  same commit-time check the booking flow uses, covering bookings, manual blocks, iCal
+  events, and shared-inventory siblings), returning `likely_possible`/`not_possible`/
+  `unknown` — never a promise.
+- **Quiet hours (10 PM–8 AM) and the other identical-everywhere house rules** (no pets, no
+  smoking inside, no parties/events without approval) get a direct general answer instead
+  of "which house?" — only a genuinely differing rule (e.g. check-in time) still names the
+  difference.
+- **Karaoke/equipment answers only from `amenities`/`amenityDetails`** — marketing copy
+  (e.g. "a karaoke-and-lechon dinner") is never read as a confirmed-equipment claim.
+- **Leftover fixes bundled into the same PR**: `shortenPropertyNamesInText()` applies the
+  existing bracket/pipe name shortener to reply text, not just link labels;
+  `ensureDatesStated()`/`firstResolvedDateRange()` make an English reply state its resolved
+  dates explicitly even when the model's prose omits them; `isEnglishContext()`/
+  `stripTagalogWordsInEnglish()` strip a stray Tagalog word from an English reply;
+  `fixDadalawPhrasing()` rewrites "ilang guests ang dadalaw" (confusing — "dadalaw" means
+  "to visit") to "Ilang guests kayo?"/"Ilan ga kayo?".
+
+New/updated tests: `owner-facts.test.ts` (new), `tools.test.ts` (`check_early_late`'s three
+outcomes, a shared-inventory-sibling conflict, an imported-iCal-event conflict),
+`post-process.test.ts` (the six new text-level guardrails), `system-prompt.test.ts` (scoped
+the few-shot-only price-free assertion now that the owner-facts block legitimately states
+₱200), and nine new `chat-service.test.ts` end-to-end cases.
+
+---
+
+## 2026-10-14 — Haven AI terms-of-address pass: provisional-dedupe punctuation cleanup, per-option booking-link dedup, single-offer labels, gendered/neutral address terms, "ga"/"baga" question-only guidance (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+A further bug-fix/polish round on `src/lib/haven/post-process.ts`, `system-prompt.ts`, and `chat-service.ts`:
+- **Provisional-dedupe punctuation debris** — removing a repeated "provisional" could leave punctuation litter behind (e.g. "(provisional total: ₱10,525)" → "( total: ₱10,525)"). A new `cleanupStrippedPunctuation()` pass collapses a stray "( " to "(", removes a fully empty "()"/"( )" (and a leading space before it), strips a stray leading separator (",", ";", ":", "-", "—") left right after an opening paren, and collapses double spaces.
+- **Booking-link dedup scope** — `collectBookingLinks()` used to dedupe by href globally, which incorrectly collapsed a property appearing under two different `find_stay` combo options (e.g. a property that fits both a 2-property and a 3-property combo) into one. Dedup is now scoped to within a single option only; the cap rose from 6 to 8. `chat-service.ts`'s final link assembly was updated to match — it dedupes the model's own prose links against `collectBookingLinks()`'s output and against each other, but no longer globally dedupes `collectBookingLinks()`'s own entries (which would silently re-collapse the intentional cross-option repeats).
+- **Single-offer booking-link labels** — a `find_stay` reply with exactly one option and one property (a single property, no combo, no alternatives) now labels its button "Book <name> (<guests> guests)" instead of "Option 1: <name> (<guests> guests)" — there's nothing to number.
+- **Terms of address** — the system prompt's existing "no pare/bro/sis/dude" rule is now explicit: also bans "partner", allows the word only if the guest used it first, and gates "parekoy"/"marekoy" (friendly male/female terms) on a clear gender cue — self-identification or a strongly gendered name (prompt examples: "Ako si Maria" → marekoy, "Ako si Juan" → parekoy, "Ako si Toni" → stays neutral). Otherwise the model defaults to "kabayan"/"kaibigan"/"ka-Haven". A new independent post-process check, `enforceTermsOfAddress()`, backs this: any of the five banned terms found in the reply that the guest never used themselves earlier in the conversation gets substituted with "kaibigan" (or "friend" in English mode), preserving capitalization.
+- **Batangueño "ga"/"baga" question-only guidance** — the `btg` system prompt now explicitly states "ga"/"baga" are a yes/no question particle ONLY, with a worked example of the common misuse ("Oo ga, may bakante" is WRONG; "Aba'y oo, may bakante!" is the fix), and documents "ire" alongside "ari"/"are". `ensureBatanguenoMarker()`'s regex was updated to match: a negative lookbehind excludes a bare "Oo ga"/"Oo baga" affirmation from counting as a genuine marker, while still recognizing "ire" and a correctly-used "baga". The prompt also gained a vetted list of further natural, respectful Batangueño and Filipino-courtesy expressions (e.g. "kapeng barako", "Tuloy po kayo", "Mabuhay") to use at most 1–2 per reply.
+
+New/updated tests: `post-process.test.ts` (the exact reported "( total: ₱10,525)" cleanup case, empty-parens removal, per-option booking-link dedup vs. cross-option repeats, the 8-link cap, single-offer vs. multi-offer labels, `ensureBatanguenoMarker`'s "ire"/"baga" recognition and "Oo ga"/"Oo baga" misuse exclusion, `enforceTermsOfAddress`), `system-prompt.test.ts` (terms-of-address rule content, the "ga"/"baga" question-only + misuse example, the vetted expression list), `chat-service.test.ts` (end-to-end banned-term substitution and guest-used-it-first exemption).
+
+---
+
+## 2026-10-14 — Haven AI live-test bug-fix pass: Messenger link scheme, provisional-dedupe artifact, Tagalog/Batangueño dates, booking-link labels, Batangueño markers (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+A further round of live dev testing of H0+H1 surfaced five bugs, all fixed in `src/lib/haven/dates.ts`, `post-process.ts`, `system-prompt.ts`, and `chat-service.ts` (no widget change needed — the widget already rendered whatever href it was given verbatim):
+- **Messenger link scheme** — the handoff link was sometimes emitted as the scheme-less `m.me/haveninlipa`, which `ChatWidget.tsx` renders as a broken *relative* link (no `/` prefix, not `haveninlipa.com`, so it resolves against the current page path). `post-process.ts` now has a single canonical `MESSENGER_HREF = "https://m.me/haveninlipa"` constant; `normalizeHref()` rewrites any scheme-less form to it wherever a link passes through `extractAllowedLinks()`; `ensureHandoffLink()`, `FALLBACK_FEE_TEXT`, `system-prompt.ts`'s hard rules, and `chat-service.ts`'s `NO_ANSWER_FALLBACK` all now say the `https://` form.
+- **"Provisional" dedupe artifact** — `limitToOneProvisional()` used to strip only the bare word, leaving a repeat's own markdown emphasis behind empty (e.g. "**Option 2** — ** total ₱10,525"). It now matches `**provisional**`/`*provisional*`/`__provisional__`/`_provisional_` as one atomic unit before falling back to the bare word, so a repeat's emphasis markers are removed with it.
+- **Date resolution skipping to "what year"** — the model sometimes skipped its own `resolve_dates` tool call and asked the guest "2024 o 2025?". `dates.ts`'s weekday/month/ordinal vocabularies gained Tagalog and Batangueño forms (`Linggo`–`Sabado`, `Enero`–`Disyembre`, `ikalawang`/`una`/…, "ng" alongside "of"/"in", "susunod na" alongside "next"), and `chat-service.ts` now runs this same resolver on the guest's latest message *before* calling the model at all, injecting a system context note with the resolved dates (ISO + human form) and an explicit "never ask what year" instruction when a phrase is detected.
+- **Booking-link labels** — `collectBookingLinks()` used to label a button with the raw `Property.name` (which can carry a dev-DB bracket tag or an SEO `"Name | descriptor"` suffix). It now strips a leading `[...]` bracket tag and cuts at the first `" | "` or `"•"` (`stripToBaseName()`), reusing `buildShortNames()` (`src/lib/listings.ts`) to keep a distinguishing second segment for properties sharing a base name (e.g. the three "Mickey in Lipa" configurations). `find_stay` options are now labeled and grouped "Option N: \<name\> (\<guests\> guests)" in the same order the options array (and therefore the reply prose) lists them, and the cap rose from 5 to 6.
+- **Batangueño markers** — `system-prompt.ts`'s `btg` guidance had loose/partly-inaccurate marker glosses; rewritten with correct usage notes for each of "ala eh", "aba'y", "ga", "nga", "ari"/"are", plus a longer (6–8 line) placeholder-only few-shot block. A new server-side check, `ensureBatanguenoMarker()`, prepends a short natural opener ("Ala eh, ") to any `btg` reply that landed with none of these markers, so the mode never silently degrades to plain Tagalog.
+
+New/updated tests: `dates.test.ts` (Tagalog weekday/month/ordinal resolution, the exact "ikalawang Sabado ng Nobyembre" live-test phrase, "susunod na Sabado"), `post-process.test.ts` (`normalizeHref`, the exact reported provisional-dedupe regression, the new booking-link label format, `ensureBatanguenoMarker`), `chat-service.test.ts` (date-context injection into the system prompt, the btg-marker prepend), and a new `system-prompt.test.ts`.
+
+---
+
+## 2026-10-14 — Haven AI chat-widget UX pass: collapsible topics, reply-start scroll, distinct AI bubble (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`.
+
+### Outcome
+Owner UX feedback on the live chat widget: the 7 static topic chips (`src/lib/chat/chat-tree.ts`'s `root.options`) sat below every message, including Haven's AI replies, so the owner scrolled to "bottom" and saw the chip grid instead of the reply. Fixed in `ChatWidget.tsx`/`ChatMessage.tsx`, gated on a new `aiModeActive = aiEnabled && lastMode === "ai"` (`lastMode` tracks whether the *most recent* Haven message actually came from the AI vs. the static tree — flag off, or any turn that fell back to the tree, renders exactly as before this pass):
+- Topic chips collapse behind a small "Topics" toggle once `aiModeActive`; tapping it still works as before.
+- A persistent "Talk to a Human" text link (`m.me/haveninlipa`) stays visible near the input in AI mode, since the toggle can hide the chip version.
+- Auto-scroll now scrolls to the *top* of Haven's newest reply in AI mode (not the panel bottom, which used to land on the chip grid), deferred one `requestAnimationFrame` so a reply's booking-link buttons have their final layout first. Static mode's scroll-to-bottom is unchanged.
+- AI replies get a distinct `bg-cream` bubble with a "Haven" label (vs. the unchanged `bg-white` static-tree bubble) — `text-charcoal/80`, not `text-forest`, since forest-on-cream falls short of WCAG AA at this bubble's size. The message list carries `aria-live="polite"`.
+- New `ChatWidget.test.ts` (jsdom, mounts the real component) covers: static mode still renders all 7 chips with no "Topics" toggle; an AI-mode turn collapses chips and exposes the persistent Messenger link; a fallback turn renders exactly like static mode.
+
+---
+
+## 2026-10-14 — Haven AI polish pass: booking-link buttons, sentence-level price guard, stronger Batangueño, handoff (fix/haven-ai-polish-101426, DEC-029)
+
+Area: Website
+
+Status: Code complete and tested (lint/typecheck/`vitest run` clean), committed on `fix/haven-ai-polish-101426`, not yet merged to `dev`. Flag still off by default — no behavior change for any guest until an Owner sets `HAVEN_AI_ENABLED`.
+
+### Outcome
+Live dev testing of H0+H1 (the prior entry below) surfaced several rough edges, fixed in
+`src/lib/haven/post-process.ts`, `tools.ts`, `system-prompt.ts`, and `chat-service.ts`:
+- **Booking-link buttons** — `collectBookingLinks()` turns every booking link a tool
+  actually produced this turn (`get_quote`, `find_stay`) into a labeled button ("Book
+  <property> · <dates>", deduped, capped at 5), instead of relying on the model to format
+  one as a markdown link (it often didn't, so replies returned `links: []`).
+- **Sentence-level price guard** — `enforcePriceClaims()` used to replace only the matched
+  ₱ amount, leaving broken fragments like "(You'll see the exact total at checkout./hour)".
+  It now replaces the whole sentence or bullet line, with a fee-vs-total-aware fallback
+  ("For that fee, please ask us via Messenger…" vs "You'll see the exact total at
+  checkout."). `get_quote`/`get_property_details` now surface a property `name` and a
+  structured `fees` object (extra-guest, early-check-in/late-checkout) so real fee numbers
+  are traceable instead of forcing every fee question into the Messenger fallback.
+- **Stronger Batangueño mode** — `btg` gained a 4-exchange few-shot block in a playful
+  Batangueña host voice, using real expressions ("ala eh", "aba'y", "ga", "nga", "ari", "ala
+  e ganoon") with placeholder-only facts so an example can never leak as real data.
+- **Explicit resolved dates, neutral address, Messenger handoff, "provisional" once** — the
+  system prompt now requires stating resolved dates explicitly, bans "pare"/"bro"/"sis" in
+  English, and requires the literal m.me/haveninlipa text for any off-topic/unknown
+  question; `ensureHandoffLink()` and `limitToOneProvisional()` back the last two with a
+  server-side check that doesn't depend on the model complying.
+- Added/extended unit tests for all of the above (`post-process.test.ts`, `tools.test.ts`,
+  `chat-service.test.ts`) and a per-property guest-split-cap assertion to
+  `find-stay-combinations.test.ts`.
+
+---
+
+## 2026-10-14 — CI "Migrations" row-count check fixed for expand-only migrations (feature/haven-ai-h1-101426)
+
+Area: Website
+
+Status: Done.
+
+### Outcome
+`scripts/test-migrations.mjs` section 2 ("no rows were added or removed by them") compared
+a single flattened `"table:count|..."` string across all tables, so a later migration that
+only *creates* a new, empty table (allowed as expand-only under
+[DEC-026](HIL_DECISIONS.md)) still failed the check — the new table's `name:0` entry changed
+the string even though no existing row moved. This is what broke CI for
+`20261014120000_add_haven_chat_ai`, which creates two empty tables
+(`HavenChatUsage`, `HavenChatTranscript`).
+
+Fixed by comparing per table instead of as one string: every table present before the later
+migrations must still exist afterward with an identical row count, and any table that is new
+must start at 0 rows. Dropped tables and data changes (inserts/deletes) in existing tables
+still fail, same as before. See [HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md) (Review
+checklist, section 2) for the documented behavior.
+
+---
+
+## 2026-10-14 — Haven AI chat mode, H0+H1 (feature/haven-ai-h1-101426, DEC-029)
+
+Area: Website
+
+Status: **Code complete and tested (lint/typecheck/`vitest run` clean), committed on `feature/haven-ai-h1-101426`, not yet merged. Flag off by default (`HAVEN_AI_ENABLED` unset) — no behavior change for any guest until an Owner sets it.**
+
+### Outcome
+Adds an optional free-text LLM mode to the existing static chat widget, entirely behind
+`HAVEN_AI_ENABLED` (kill switch `HAVEN_AI_KILL`). With the flag off, behavior is
+byte-identical to before this session.
+- **`src/lib/haven/`** — provider adapter (`anthropic` default / `openai`, raw `fetch`, no
+  vendor SDK dependency); `resolveDates()` for natural-language date phrases ("this
+  weekend", "2nd Saturday of November", "Dec 24-26"), pure and Asia/Manila-anchored;
+  seven read-only, zod-validated tools (`list_properties`, `get_property_details`,
+  `check_availability`, `get_quote`, `find_stay`, `get_faq`, `resolve_dates`), each
+  calling an **existing** service — nothing in the AI path computes a price or
+  availability decision itself; the fixed persona/rules system prompt; post-generation
+  guardrails (link allowlist, price-claim enforcement against this turn's tool results);
+  PII masking before any transcript write; DB-backed rate limits (20/10 min, 100/day per
+  IP, 600/hour global) and a monthly spend cap (`HAVEN_AI_MONTHLY_CAP_USD`, default $20,
+  with a one-alert-per-month admin email); the `handleHavenChat()` orchestrator, which
+  never throws — every failure degrades to `{mode: "static"}`.
+- **`POST /api/haven/chat`** (Node runtime, 20 s race) and **`/api/cron/haven-retention`**
+  (daily Vercel Cron — 90-day transcript retention, 13-month usage retention).
+- **Widget:** `ChatWidgetServer` passes `aiEnabled` (server-computed); when on, a language
+  toggle (Auto/English/Tagalog/Batangueño) and a free-text input with a typing indicator
+  appear, persisted in `sessionStorage` with a client-generated `sessionId`; a privacy
+  note links `/privacy`. The existing topic buttons and "Talk to a Human" link are
+  unconditional — both modes coexist.
+- **GA4:** `haven_ai_message`, `haven_ai_lang_select`, `haven_ai_fallback`,
+  `haven_ai_availability_checked`, `haven_ai_booking_link_click` — all via `track()`, no
+  message text or PII.
+- **Schema:** two new, additive tables — `HavenChatUsage` (one row per guest message, for
+  rate limiting and the spend cap) and `HavenChatTranscript` (masked message content, 90-day
+  retention). Migration `20261014120000_add_haven_chat_ai`, generated via a schema-to-schema
+  diff (`prisma migrate diff --from-schema-datamodel <before> --to-schema-datamodel
+  schema.prisma --script`, no database connection). **Not yet applied to any database** —
+  ships migrate-first per the runbook; the release gate will block the build until an
+  operator applies it to dev, then production.
+- **Docs:** [DEC-029](HIL_DECISIONS.md); [Haven AI Chat](HIL%20Website%20Technical%20Specification.md#haven-ai-chat)
+  in the Website spec; env vars in both `CLAUDE.md` and the Website spec's Environment
+  Variables table; a new "Haven, Our Chat Assistant" section in `/privacy`.
+- **Not in scope for H1 (by design):** no write action — booking creation, payment, admin
+  mutation — is exposed as a tool. Payment, booking-creation, Stripe, and admin code are
+  untouched. Next: H2 (lead capture/inquiry handoff) and a private, read-only admin Haven
+  mode behind `/admin`.
+
+### Evidence
+Lint clean, `tsc --noEmit` clean, `npx vitest run`: full suite green (177 files / 2,634
+tests, ~290 of them new Haven AI tests across 11 files: `dates`, `masking`,
+`post-process`, `find-stay-combinations`, `provider`, `rate-limit`, `config`, `tools`,
+`chat-service`, `retention`, `no-public-env`). Covers: flag off/kill → static; request
+validation; rate limits; monthly-cap fallback and the one-alert-per-month dedupe; date
+resolver cases including year rollover and the Manila UTC-16:00 timezone edge;
+`find_stay` single-property and combination results with inventory-group exclusion; the
+price post-check and link allowlist; PII masking; provider swap (anthropic ↔ openai); a
+provider error falling back to static; and that no Haven AI source file reads a
+`NEXT_PUBLIC_*` env var. `npm run build:app` not exercised (no DB connection permitted for
+this task; the migration gate needs a database). No real call to Anthropic or OpenAI was
+made — `fetch` is mocked in every provider test.
+
+---
+
 ## 2026-10-14 — Release dev → main: DEC-025 footer-credit closeout docs (release/dev-to-main-2026-10-14)
 
 Area: Website | Docs
