@@ -940,6 +940,12 @@ const DATE_RECONFIRMATION_RE = new RegExp(
     String.raw`\bilang\s+gabi\b`,
     String.raw`\bsigurado\s+(?:ba|ga)\s+kayo\b`,
     String.raw`\b[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\s+o\s+[a-z]+\.?\s+\d{1,2}\s*(?:[–-]|hanggang)\s*\d{1,2}\b`,
+    // Single-date-default re-confirmation (Owner rule, 2026-10-19): "kung 1 night lang po,
+    // check-in sabado at check-out linggo, tama ba?" — the live bad reply's closing
+    // question, re-questioning the 1-night default resolveDates already applied.
+    String.raw`\bkung\s+\d+\s+nights?\s+lang\b`,
+    String.raw`\b\d+\s+nights?\s+ba\b`,
+    String.raw`\bcheck-?in\s+.+\s+at\s+check-?out\s+.+\btama\s+(?:ba|ga)\b`,
   ].join("|"),
   "i"
 );
@@ -970,10 +976,65 @@ export function dropDateReconfirmationQuestions(
  * Haven must never ask a guest what year they mean — a detected date phrase always
  * resolves to the next upcoming occurrence (see dates.ts), so the question never needed
  * answering in the first place. Independent backstop for the same instruction in
- * system-prompt.ts and the per-turn date context note (chat-service.ts).
+ * system-prompt.ts and the per-turn date/today context notes (chat-service.ts). Live bug
+ * (2026-10-19): "10/24 ba yan ng taong ito, o next year? ... Oktubre 24, 2024 ba, o 2025
+ * na?" — both the generic "which year" question AND two explicit past years offered as
+ * options.
  */
-const WHAT_YEAR_RE = /\bwhat year\b|\bwhich year\b|\banong\s+taon\b|\banong\s+year\b/i;
+const WHAT_YEAR_RE = new RegExp(
+  [
+    String.raw`\bwhat\s+year\b`,
+    String.raw`\bwhich\s+year\b`,
+    String.raw`\banong\s+taon\b`,
+    String.raw`\banong\s+year\b`,
+    String.raw`\bthis\s+year\s+or\s+next\b`,
+    // "...ng taong ito, o next year?" — both phrases anywhere in the same sentence.
+    String.raw`(?=.*\btaong\s+ito\b)(?=.*\bnext\s+year\b)`,
+  ].join("|"),
+  "i"
+);
 
-export function dropWhatYearQuestions(text: string): string {
-  return tidyAfterSentenceDrop(replaceMatchingSentences(text, WHAT_YEAR_RE, ""));
+/** Every calendar year from `currentYear - 50` up to (not including) `currentYear`, as a
+ * regex alternation — the dynamic half of the backstop below: ANY literal past year
+ * mentioned in a booking context (e.g. "2024 ba, o 2025 na?") gets its whole sentence
+ * dropped, whatever words surround it, without hardcoding specific years. */
+function pastYearPattern(currentYear: number): RegExp {
+  const years: number[] = [];
+  for (let y = currentYear - 50; y < currentYear; y++) years.push(y);
+  return new RegExp(`\\b(?:${years.join("|")})\\b`);
+}
+
+/**
+ * `currentYear` is optional so existing callers that only need the static "which year"
+ * guard keep working unchanged; chat-service.ts passes `manilaYear(now)` to also catch a
+ * past year the model stated literally (see `pastYearPattern` above).
+ */
+export function dropWhatYearQuestions(text: string, currentYear?: number): string {
+  const re = currentYear
+    ? new RegExp(`${WHAT_YEAR_RE.source}|${pastYearPattern(currentYear).source}`, "i")
+    : WHAT_YEAR_RE;
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, re, ""));
+}
+
+// ── Single-date-default "add more nights" nudge (Owner rule, 2026-10-19) ───────
+
+const SINGLE_NIGHT_NUDGE = {
+  en: "Want to add more nights? Just tell me.",
+  tl: "Pwede pong dagdagan ang gabi — sabihin n'yo lang.",
+  btg: "Pwede ga dagdagan ang gabi? Sabihin n'yo lang.",
+} as const;
+
+/**
+ * When the guest gave only a single date with no check-out of their own ("10/24", "this
+ * coming Saturday" — `resolveDates`' `singleDateDefault: true`, see dates.ts), Haven quotes
+ * the resolver's 1-night default and invites the guest to extend it, rather than asking
+ * them to confirm 1 night is correct (that confirmation question is dropped separately by
+ * `dropDateReconfirmationQuestions`). A no-op when `applies` is false, or the nudge (in the
+ * reply's own language) is already present.
+ */
+export function ensureSingleNightNudge(text: string, applies: boolean, lang: HavenLang, isEnglish: boolean): string {
+  if (!applies) return text;
+  const nudge = lang === "btg" ? SINGLE_NIGHT_NUDGE.btg : isEnglish ? SINGLE_NIGHT_NUDGE.en : SINGLE_NIGHT_NUDGE.tl;
+  if (text.includes(nudge)) return text;
+  return `${text}\n\n${nudge}`;
 }

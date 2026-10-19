@@ -396,6 +396,84 @@ describe("handleHavenChat — successful AI turn, post-processing", () => {
     expect(system).not.toContain("checkIn=");
   });
 
+  it("always injects today's exact Manila date into the system prompt, even with no date phrase in the latest message", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sure, happy to help!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-10-19T04:00:00Z"); // Monday, Manila noon
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: "Do you have a swimming pool?" }] }), "1.2.3.4", now);
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toContain("Today is Monday, Oct 19, 2026 (Asia/Manila)");
+    expect(system).toMatch(/current year is 2026/i);
+  });
+
+  // Owner rule, 2026-10-19 — live bug: a numeric date ("10/24") paired with an explicit
+  // weekday phrase ("this coming Saturday") that fall on the SAME calendar day.
+  describe("numeric month-first dates / relative weekday (Owner rule, 2026-10-19)", () => {
+    it('btg: "Pwede ga mag-book sa 10/24, this coming Saturday, para sa 4 sa Spacious 2BR?" resolves to 2026-10-24/25 with no year/night question', async () => {
+      providerChat.mockResolvedValue({
+        text: "Sige po, tatawag ako ng quote para sa inyo.",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-19T04:00:00Z"); // Monday, Manila noon
+      const result = await handleHavenChat(
+        validBody({
+          lang: "btg",
+          messages: [{ role: "user", content: "Pwede ga mag-book sa 10/24, this coming Saturday, para sa 4 sa Spacious 2BR?" }],
+        }),
+        "1.2.3.4",
+        now
+      );
+
+      const system = providerChat.mock.calls[0][0].system as string;
+      expect(system).toContain("Today is Monday, Oct 19, 2026 (Asia/Manila)");
+      expect(system).toContain("checkIn=2026-10-24");
+      expect(system).toContain("checkOut=2026-10-25");
+      expect(system).toMatch(/never ask the guest what year/i);
+
+      expect(result.reply).not.toMatch(/what year|which year|anong\s+taon/i);
+      expect(result.reply).not.toMatch(/\b(?:2024|2025)\b/);
+      expect(result.reply).not.toMatch(/1 night ba|tama ba/i);
+    });
+
+    it("fixes the exact live bad reply end to end (Batangueño year + 1-night re-confirmation)", async () => {
+      providerChat.mockResolvedValue({
+        text:
+          "Ala eh, Ay, teka lang — kailangan ko ng mas specific. 10/24 ba yan ng taong ito, o next year? " +
+          "Parang may confusion lang ng date format. 😅 Pwede ba i-confirm: Oktubre 24, 2024 ba, o 2025 na? " +
+          "At kung 1 night lang, check-in sabado at check-out linggo, tama ba?",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+
+      const { handleHavenChat } = await freshChatService();
+      const now = new Date("2026-10-19T04:00:00Z"); // Monday, Manila noon
+      const result = await handleHavenChat(
+        validBody({ lang: "btg", messages: [{ role: "user", content: "10/24, this coming Saturday" }] }),
+        "1.2.3.4",
+        now
+      );
+
+      expect(result.reply).not.toMatch(/taong\s+ito/i);
+      expect(result.reply).not.toMatch(/next\s+year/i);
+      expect(result.reply).not.toMatch(/\b2024\b/);
+      expect(result.reply).not.toMatch(/\b2025\b/);
+      expect(result.reply).not.toMatch(/tama\s+ba/i);
+      expect(result.reply).not.toMatch(/kung\s+1\s+night\s+lang/i);
+    });
+  });
+
   // DEC-029, 2026-10-15 live-retest fix: the resolver in tools.ts only ever ran AFTER a
   // model tool call already missed, so it never helped on a turn where Haiku answered
   // free-text with no tool call at all — the two exact live failures below.

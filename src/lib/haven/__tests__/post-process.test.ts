@@ -31,6 +31,7 @@ import {
   fixStayRangeEndDate,
   dropDateReconfirmationQuestions,
   dropWhatYearQuestions,
+  ensureSingleNightNudge,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
@@ -1107,9 +1108,33 @@ describe("dropDateReconfirmationQuestions (Owner rule 1, 2026-10-16)", () => {
     expect(result).not.toMatch(/did you mean/i);
     expect(result).toContain("Either way we have availability.");
   });
+
+  // Owner rule, 2026-10-19 — the live bad reply's closing question: Haven re-confirmed the
+  // 1-night default resolveDates already applied for a bare single date.
+  it('drops "kung 1 night lang ... tama ba?"', () => {
+    const input = "At kung 1 night lang, check-in sabado at check-out linggo, tama ba? Sige po.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, false);
+    expect(result).not.toMatch(/kung\s+1\s+night\s+lang/i);
+    expect(result).not.toMatch(/tama\s+ba/i);
+    expect(result).toContain("Sige po.");
+  });
+
+  it('drops "1 night ba"', () => {
+    const input = "1 night ba yan? Sige po, ibibigay ko ang quote.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, false);
+    expect(result).not.toMatch(/1\s+night\s+ba/i);
+    expect(result).toContain("Sige po, ibibigay ko ang quote.");
+  });
+
+  it('drops a standalone "check-in sabado at check-out linggo, tama ba?"', () => {
+    const input = "Check-in sabado at check-out linggo, tama ba? Meron pa kaming bakante.";
+    const result = dropDateReconfirmationQuestions(input, true, stayLabel, false);
+    expect(result).not.toMatch(/tama\s+ba/i);
+    expect(result).toContain("Meron pa kaming bakante.");
+  });
 });
 
-describe("dropWhatYearQuestions (Owner rule 2, 2026-10-16)", () => {
+describe("dropWhatYearQuestions (Owner rule 2, 2026-10-16; extended 2026-10-19)", () => {
   it('drops "what year" in English', () => {
     const input = "What year do you mean? We'll check availability once I know.";
     const result = dropWhatYearQuestions(input);
@@ -1127,5 +1152,83 @@ describe("dropWhatYearQuestions (Owner rule 2, 2026-10-16)", () => {
   it("is a no-op when no year question is present", () => {
     const input = "We have availability for those dates.";
     expect(dropWhatYearQuestions(input)).toBe(input);
+  });
+
+  it('drops "this year or next" in English', () => {
+    const input = "Is that this year or next? Let me know and I'll confirm.";
+    const result = dropWhatYearQuestions(input);
+    expect(result).not.toMatch(/this year or next/i);
+    expect(result).toContain("Let me know and I'll confirm.");
+  });
+
+  it('drops "taong ito ... o next year" in Tagalog/Batangueño', () => {
+    const input = "10/24 ba yan ng taong ito, o next year? Sige po, ibibigay ko ang quote.";
+    const result = dropWhatYearQuestions(input);
+    expect(result).not.toMatch(/taong\s+ito/i);
+    expect(result).not.toMatch(/next\s+year/i);
+    expect(result).toContain("Sige po, ibibigay ko ang quote.");
+  });
+
+  it("drops any sentence naming a past year, given the current year, without hardcoding which year", () => {
+    const input = "Oktubre 24, 2024 ba, o 2025 na? Meron pa kaming bakante.";
+    const result = dropWhatYearQuestions(input, 2026);
+    expect(result).not.toMatch(/2024/);
+    expect(result).not.toMatch(/2025/);
+    expect(result).toContain("Meron pa kaming bakante.");
+  });
+
+  it("leaves the current year and future years untouched", () => {
+    const input = "We have a 2026 opening and a 2027 opening too.";
+    expect(dropWhatYearQuestions(input, 2026)).toBe(input);
+  });
+
+  it("is a no-op for past years when currentYear is omitted (backward compatible)", () => {
+    const input = "Oktubre 24, 2024 ba, o 2025 na?";
+    expect(dropWhatYearQuestions(input)).toBe(input);
+  });
+
+  it("fixes the exact live bad reply (Owner screenshot, 2026-10-19)", () => {
+    const stayLabel = buildStayLabel("2026-10-24", "2026-10-25")!;
+    const input =
+      "Ala eh, Ay, teka lang — kailangan ko ng mas specific. 10/24 ba yan ng taong ito, o next year? " +
+      "Parang may confusion lang ng date format. 😅 Pwede ba i-confirm: Oktubre 24, 2024 ba, o 2025 na? " +
+      "At kung 1 night lang, check-in sabado at check-out linggo, tama ba?";
+    // Mirrors chat-service.ts's actual pipeline order: reconfirmation guard runs first,
+    // then the year-question guard.
+    const result = dropWhatYearQuestions(dropDateReconfirmationQuestions(input, true, stayLabel, false), 2026);
+    expect(result).not.toMatch(/taong\s+ito/i);
+    expect(result).not.toMatch(/next\s+year/i);
+    expect(result).not.toMatch(/2024/);
+    expect(result).not.toMatch(/2025/);
+    expect(result).not.toMatch(/tama\s+ba/i);
+    expect(result).not.toMatch(/kung\s+1\s+night\s+lang/i);
+    expect(result.trim().length).toBeGreaterThan(0);
+  });
+});
+
+describe("ensureSingleNightNudge (Owner rule, 2026-10-19)", () => {
+  it("appends the English nudge when applies is true", () => {
+    const result = ensureSingleNightNudge("Saturday, Oct 24, 2026 — 1 night.", true, "en", true);
+    expect(result).toContain("Want to add more nights? Just tell me.");
+  });
+
+  it("appends the Tagalog nudge for lang 'tl'", () => {
+    const result = ensureSingleNightNudge("Sabado, Okt 24, 2026 — 1 gabi.", true, "tl", false);
+    expect(result).toContain("Pwede pong dagdagan ang gabi — sabihin n'yo lang.");
+  });
+
+  it("appends the Batangueño nudge for lang 'btg', regardless of the englishMode flag", () => {
+    const result = ensureSingleNightNudge("Sabado, Okt 24, 2026 — 1 gabi.", true, "btg", false);
+    expect(result).toContain("Pwede ga dagdagan ang gabi? Sabihin n'yo lang.");
+  });
+
+  it("is a no-op when applies is false", () => {
+    const input = "Thursday, Nov 19 → Saturday, Nov 21, 2026 — 2 nights.";
+    expect(ensureSingleNightNudge(input, false, "en", true)).toBe(input);
+  });
+
+  it("does not duplicate the nudge if already present", () => {
+    const input = "Saturday, Oct 24, 2026 — 1 night.\n\nWant to add more nights? Just tell me.";
+    expect(ensureSingleNightNudge(input, true, "en", true)).toBe(input);
   });
 });

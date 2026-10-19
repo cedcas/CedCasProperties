@@ -186,6 +186,40 @@ describe("buildHavenSystemPrompt", () => {
     it("forbids asking what year a guest means", () => {
       expect(prompt).toMatch(/never ask a guest what year they mean/i);
     });
+
+    it("forbids offering or mentioning a past year as an option", () => {
+      expect(prompt).toMatch(/never offer or mention a past year/i);
+    });
+  });
+
+  // Owner rule, 2026-10-19: numeric dates are month-first; a single date with no
+  // check-out defaults to 1 night and invites more nights; "next weekend" means the
+  // Saturday after the coming one.
+  describe("numeric month-first dates / single-date nudge / next weekend (Cedric, 2026-10-19)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("states numeric dates are always month-first, never day-first", () => {
+      expect(prompt).toMatch(/always month-first/i);
+      expect(prompt).toMatch(/never day-first/i);
+      expect(prompt).toContain('"10/24" is always October 24');
+    });
+
+    it("tells the model to trust the explicit date over a disagreeing weekday, never asking", () => {
+      expect(prompt).toMatch(/trust the explicit numeric date/i);
+      expect(prompt).toMatch(/never ask the guest to pick one/i);
+    });
+
+    it("instructs the single-date 1-night default and the add-more-nights invite per language", () => {
+      expect(prompt).toMatch(/never ask "is that just 1 night\?"/i);
+      expect(prompt).toContain("Want to add more nights? Just tell me.");
+      expect(prompt).toContain("Pwede pong dagdagan ang gabi");
+      expect(prompt).toContain("Pwede ga dagdagan ang gabi");
+    });
+
+    it("defines 'next weekend' as the Saturday after the coming one, 1 night", () => {
+      expect(prompt).toMatch(/"next weekend" means the Saturday after the coming one/i);
+      expect(prompt).toMatch(/1-night Saturday→Sunday/i);
+    });
   });
 
   // Owner incident, 2026-10-16: Haven said "(provisional lang — tutuklasin ng tama sa

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveDates, buildStayLabel, findContextMonth } from "../dates";
+import { resolveDates, buildStayLabel, findContextMonth, todayContextNote, manilaYear } from "../dates";
 
 // Reference "today": Wednesday, 2026-10-14 (the date this feature was built), at a time
 // safely before the Manila-midnight UTC boundary (16:00 UTC).
@@ -245,6 +245,8 @@ describe("resolveDates", () => {
         checkOut: "2026-12-26",
         interpreted: result!.interpreted,
         stayLabel: result!.stayLabel,
+        nights: 2,
+        singleDateDefault: false,
       });
     });
 
@@ -253,6 +255,102 @@ describe("resolveDates", () => {
       expect(result!.checkIn).toBe("2026-12-24");
       expect(result!.checkOut).toBe("2026-12-25");
     });
+  });
+});
+
+// Reference "today" for the numeric-date / relative-weekday fixes below: Monday,
+// 2026-10-19 (the live-bug date), at a time safely before the Manila-midnight UTC
+// boundary. Oct 24, 2026 is a Saturday.
+const OCT_19 = new Date("2026-10-19T04:00:00Z");
+
+describe("numeric month-first dates (Owner convention, 2026-10-19)", () => {
+  it("resolves a bare 'M/D' to the next upcoming occurrence, defaulting to 1 night", () => {
+    const result = resolveDates("10/24", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-24");
+    expect(result!.checkOut).toBe("2026-10-25");
+    expect(result!.singleDateDefault).toBe(true);
+  });
+
+  it("resolves 'M/D to M/D'", () => {
+    const result = resolveDates("10/24 to 10/26", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-24");
+    expect(result!.checkOut).toBe("2026-10-26");
+    expect(result!.singleDateDefault).toBe(false);
+  });
+
+  it("resolves 'M/D-M/D' (no spaces)", () => {
+    const result = resolveDates("10/24-10/26", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-24");
+    expect(result!.checkOut).toBe("2026-10-26");
+  });
+
+  it("resolves the shorthand 'M/D-D' (same month as the start date)", () => {
+    const result = resolveDates("10/24-26", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-24");
+    expect(result!.checkOut).toBe("2026-10-26");
+  });
+
+  it("rolls a passed 'M/D' into next year ('1/5')", () => {
+    const result = resolveDates("1/5", OCT_19);
+    expect(result!.checkIn).toBe("2027-01-05");
+    expect(result!.checkOut).toBe("2027-01-06");
+  });
+
+  it("takes an explicit 2-digit year literally ('12/31/26')", () => {
+    const result = resolveDates("12/31/26", OCT_19);
+    expect(result!.checkIn).toBe("2026-12-31");
+    expect(result!.checkOut).toBe("2027-01-01");
+  });
+
+  it("never mistakes a guest-count phrase for a date ('4 pax', '4/5 guests')", () => {
+    expect(resolveDates("4 pax", OCT_19)).toBeNull();
+    expect(resolveDates("4/5 guests", OCT_19)).toBeNull();
+  });
+});
+
+describe("relative weekday phrasing (Owner rule, 2026-10-19)", () => {
+  it("resolves 'this coming Saturday' to the nearest Saturday, defaulting to 1 night", () => {
+    const result = resolveDates("this coming Saturday", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-24");
+    expect(result!.checkOut).toBe("2026-10-25");
+    expect(result!.singleDateDefault).toBe(true);
+  });
+
+  it("resolves 'this Saturday'", () => {
+    expect(resolveDates("this Saturday", OCT_19)!.checkIn).toBe("2026-10-24");
+  });
+
+  it("resolves 'sa Sabado'", () => {
+    expect(resolveDates("sa Sabado", OCT_19)!.checkIn).toBe("2026-10-24");
+  });
+
+  it("resolves 'ngayong Sabado'", () => {
+    expect(resolveDates("ngayong Sabado", OCT_19)!.checkIn).toBe("2026-10-24");
+  });
+
+  it("resolves 'sa darating na Sabado'", () => {
+    expect(resolveDates("sa darating na Sabado", OCT_19)!.checkIn).toBe("2026-10-24");
+  });
+
+  it("resolves 'next weekend' to the Saturday after the coming one, 1 night Sat->Sun", () => {
+    const result = resolveDates("next weekend", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-31");
+    expect(result!.checkOut).toBe("2026-11-01");
+    expect(result!.nights).toBe(1);
+    expect(result!.singleDateDefault).toBe(false);
+  });
+
+  it("resolves 'bukas' the same as 'tomorrow'", () => {
+    const result = resolveDates("bukas", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-20");
+    expect(result!.checkOut).toBe("2026-10-21");
+    expect(result!.singleDateDefault).toBe(true);
+  });
+
+  it("resolves 'sa makalawa' to the day after tomorrow", () => {
+    const result = resolveDates("sa makalawa", OCT_19);
+    expect(result!.checkIn).toBe("2026-10-21");
+    expect(result!.checkOut).toBe("2026-10-22");
   });
 });
 
@@ -304,5 +402,23 @@ describe("findContextMonth", () => {
 
   it("understands Tagalog/Batangueño month names", () => {
     expect(findContextMonth("Baka sa Nobyembre kami pupunta")).toBe(10);
+  });
+});
+
+describe("todayContextNote / manilaYear (Owner rule, 2026-10-19)", () => {
+  it("states today's exact date in Asia/Manila, matching the Owner's live-bug example", () => {
+    const note = todayContextNote(OCT_19);
+    expect(note).toContain("Today is Monday, Oct 19, 2026 (Asia/Manila)");
+  });
+
+  it("states the current year and never a past year as an option", () => {
+    const note = todayContextNote(OCT_19);
+    expect(note).toMatch(/current year is 2026/i);
+    expect(note).toMatch(/next year \(2027\)/i);
+    expect(note).toMatch(/never ask the guest what year/i);
+  });
+
+  it("manilaYear returns the current Manila calendar year", () => {
+    expect(manilaYear(OCT_19)).toBe(2026);
   });
 });
