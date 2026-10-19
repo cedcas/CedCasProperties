@@ -6,7 +6,7 @@ import { getChatProvider, type ProviderMessage } from "./provider";
 import { getToolDefinitions, runHavenTool } from "./tools";
 import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
-import { resolveDates, buildStayLabel, type ResolvedDates } from "./dates";
+import { resolveDates, buildStayLabel, todayContextNote, manilaYear, type ResolvedDates } from "./dates";
 import {
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
@@ -14,6 +14,7 @@ import {
 } from "./property-resolver";
 import {
   extractAllowedLinks,
+  stripBareUrls,
   collectToolAmounts,
   enforcePriceClaims,
   collectBasePrices,
@@ -37,6 +38,7 @@ import {
   fixStayRangeEndDate,
   dropDateReconfirmationQuestions,
   dropWhatYearQuestions,
+  ensureSingleNightNudge,
   needsAmenityHandoff,
   stripBatanguenoFromTagalog,
   MESSENGER_HREF,
@@ -295,6 +297,8 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
 
   const system =
     buildHavenSystemPrompt(lang) +
+    "\n\n" +
+    todayContextNote(now) +
     dateContextNote(resolvedDates) +
     buildCapacityContextNote(latestMessage) +
     buildPropertyContextNote(propertyResolution, {
@@ -384,11 +388,23 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const effectiveStayLabel = stayLabel ?? resolvedDates?.stayLabel ?? null;
   const datesResolvedThisTurn = Boolean(resolvedDates) || Boolean(resolvedRange);
   const reconfirmFixed = dropDateReconfirmationQuestions(rangeFixed, datesResolvedThisTurn, effectiveStayLabel, englishMode);
-  const yearQuestionFixed = dropWhatYearQuestions(reconfirmFixed);
+  const yearQuestionFixed = dropWhatYearQuestions(reconfirmFixed, manilaYear(now));
   const { reply: strippedReply, links: modelLinks } = extractAllowedLinks(yearQuestionFixed);
-  const englishClean = englishMode ? stripTagalogWordsInEnglish(strippedReply) : strippedReply;
+  // A bare (non-markdown) URL the model wrote straight into prose slips past
+  // extractAllowedLinks entirely — including an invented domain (see post-process.ts).
+  const bareUrlsStripped = stripBareUrls(strippedReply);
+  const englishClean = englishMode ? stripTagalogWordsInEnglish(bareUrlsStripped) : bareUrlsStripped;
   const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
-  const batanguenoFixed = stripBatanguenoFromTagalog(datesStated, lang, englishMode);
+  // Owner rule (2026-10-16 / 2026-10-19): once dates are resolved this turn, never let a
+  // single-date default (e.g. "10/24") get re-questioned as "1 night lang ba?" — and always
+  // invite the guest to add nights instead.
+  const singleNightNudged = ensureSingleNightNudge(
+    datesStated,
+    Boolean(resolvedDates?.singleDateDefault),
+    lang,
+    englishMode
+  );
+  const batanguenoFixed = stripBatanguenoFromTagalog(singleNightNudged, lang, englishMode);
   const reply = lang === "btg" ? ensureBatanguenoMarker(batanguenoFixed) : batanguenoFixed;
 
   const bookingLinks = collectBookingLinks(toolExchangesThisTurn);

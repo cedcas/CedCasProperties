@@ -4,6 +4,110 @@
 
 ---
 
+## 2026-10-19 — Haven AI: numeric month-first dates, always-on today's-date context, single-date 1-night nudge, redefined "next weekend" (fix/haven-ai-numeric-dates-101926)
+
+Area: Website / Haven AI Chat
+
+Status: Shipped — `npm run lint`, `npx tsc --noEmit`, `npx vitest run` all clean (full repo
+suite, 3993 tests across `tz-chicago`/`tz-utc`/`tz-manila`).
+
+### Outcome
+Live bug, production, 2026-10-19 (Batangueño mode): a guest asked to book "10/24, this
+coming Saturday" (Oct 24, 2026 — genuinely a Saturday, so the numeric date and the weekday
+already agreed) and Haven replied asking whether "10/24" meant "taong ito, o next year"
+and whether "Oktubre 24, 2024 ba, o 2025 na?", then separately re-asked to confirm the
+1-night default ("kung 1 night lang... check-in sabado at check-out linggo, tama ba?").
+Root cause: `dates.ts`'s `resolveDates()` had no numeric-date (`M/D`) parsing at all, and
+nothing ever told the model today's actual date — only a per-turn context note that fired
+only when a date phrase was independently detected.
+
+### Material Changes
+- **`src/lib/haven/dates.ts`:** numeric month-first date parsing (Owner convention —
+  `M/D`/`MM/DD`/`M/D/YY`/`M/D/YYYY`, never day-first), including ranges
+  (`10/24-10/26`/`10/24 to 10/26`/`10/24 hanggang 10/26`/`10/24-26` shorthand), guarded
+  against a guest-count phrase like "4/5 guests". New relative-weekday phrasing ("this
+  coming Saturday"/"this Saturday"/"sa Sabado"/"ngayong Sabado"/"sa darating na Sabado" —
+  nearest occurrence including today; "bukas" as "tomorrow"; "sa makalawa" as the day
+  after tomorrow). "Next weekend" redefined (Owner rule) to the Saturday after the coming
+  one, 1 night Sat→Sun — not an extra Friday-to-Sunday span a week further out. New result
+  fields `nights` and `singleDateDefault`. New exports `todayContextNote(now)` and
+  `manilaYear(now)`.
+- **`src/lib/haven/chat-service.ts`:** prepends `todayContextNote(now)` to the system
+  prompt on every request, unconditionally; passes `manilaYear(now)` into
+  `dropWhatYearQuestions()`; runs the new `ensureSingleNightNudge()` in the post-process
+  pipeline.
+- **`src/lib/haven/post-process.ts`:** `dropWhatYearQuestions()` gained an optional
+  `currentYear` parameter (backward-compatible) that dynamically drops any sentence naming
+  a past calendar year, plus two static phrases ("this year or next", "taong ito ... o
+  next year"). `dropDateReconfirmationQuestions()` gained three more patterns for the
+  1-night-default re-confirmation mistake. New `ensureSingleNightNudge()`.
+- **`src/lib/haven/system-prompt.ts`:** new hard rules `NUMERIC_DATE_RULE`,
+  `SINGLE_DATE_NIGHT_RULE`, `NEXT_WEEKEND_RULE`; `NO_YEAR_QUESTION_RULE` extended to ban
+  offering/mentioning a past year.
+- **Tests:** the exact bad reply as a backstop fixture (`post-process.test.ts`,
+  `chat-service.test.ts`); resolver cases for every new numeric/relative-date form pinned
+  to today = 2026-10-19 Manila (`dates.test.ts`); an end-to-end `chat-service.test.ts` case
+  for the live btg message, asserting a 2026-10-24→25 quote context and no year/night
+  question.
+- **Docs:** [HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md)'s
+  Haven AI Chat section updated (`dates.ts`/`post-process.ts`/`system-prompt.ts`
+  sub-sections, pipeline-order note).
+
+### Follow-up: bare-URL leak past the link allowlist (same branch, 2026-10-19)
+Preview retest found a second live bug: a Batangueño reply ended "...Ari ang link:
+https://haven.com.ph/properties/spacious-2-bedroom/book?checkIn=2026-10-24&checkOut=2026-10-26&guests=4"
+— `extractAllowedLinks`'s markdown-link allowlist (`isAllowedHref`) never ran, because the
+URL wasn't written as a markdown link, and `haven.com.ph` isn't even a real HIL domain.
+New `stripBareUrls()` in `src/lib/haven/post-process.ts` removes any bare `http(s)://`,
+`www.`, or `domain.tld/path` URL from the reply text — allowlisted or not, since a
+legitimate link already has its own button — together with a lead-in phrase ("Ari ang
+link:", "Here's the link:", "Heto ang link:", "Eto po ang link:"), with one exception: the
+Messenger handoff URL (`m.me/haveninlipa`) is left in place, since `ensureHandoffLink`'s
+button safety-net and the fixed owner-facts.ts fallback sentences both depend on the guest
+seeing that literal text. Wired into `chat-service.ts`'s post-process pipeline right after
+`extractAllowedLinks`. `system-prompt.ts` gained a new hard rule telling the model never to
+write a URL in reply text (booking buttons are automatic), carving out the existing
+Messenger-handoff instruction as the one exception. Tests added for the exact bad string,
+EN/TL/btg lead-in variants, and an allowlisted-URL case (`post-process.test.ts`).
+
+### Deploy note
+Committed to `fix/haven-ai-numeric-dates-101926` (cut from `main` @ 69af104); not merged —
+the base branch is being restored by the Owner first. Not yet live; no schema change, no
+migration involved.
+
+---
+
+## 2026-10-19 — Haven AI H1: production launch (release commit 649784d, PR #89 → main @ 69af104)
+
+Area: Website / Haven AI Chat — Deployment
+
+Status: Live in production.
+
+### Outcome
+Haven AI's H1 milestone shipped to production. Migration
+`20261014120000_add_haven_chat_ai` was applied by the Owner (per the migration-gate
+runbook — Claude never runs this) from release commit 649784d: "Applied 1 migration(s).
+Schema verified.", **NO DRIFT** across all 4 checked states. Run record kept on the
+Owner's Mac: `.migration-runs/2026-10-19T12-04-11-360Z-production-deploy.json`. PR #89
+merged into `main` as `69af104`. Vercel production deployment
+`ced-cas-properties-5foyxb3qi` reached **Ready**; the `vercel-build` release gate reported
+"OK — every migration in this commit is applied". Production smoke test: 4/4 checks
+passing.
+
+### Material Changes
+- No code change in this entry — deployment/release record only. See
+  [HIL_DECISIONS.md](HIL_DECISIONS.md) DEC-029 for the feature's own architecture and
+  flag-off-by-default posture, and the migration runbook
+  ([HIL_MIGRATION_RUNBOOK.md](HIL_MIGRATION_RUNBOOK.md)) for the applied-migration
+  procedure this release followed.
+
+### Deploy note
+Confirmed live per DEC-006 (a merge to `main` is not itself a deploy) — the Vercel
+deployment above and the passing smoke test are the actual live-confirmation evidence,
+not just the merge.
+
+---
+
 ## 2026-10-16 — `hil-seo` 1.1.9 built: social `sameAs` + blog theme social-link fix (content/hil-seo-1.1.9-social-101626)
 
 Area: Blog / SEO

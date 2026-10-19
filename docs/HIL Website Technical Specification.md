@@ -1,6 +1,38 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-16 (Haven AI: plain-language pass banning deep/literary Tagalog,
+> **Last updated:** 2026-10-19 (Haven AI: numeric month-first dates, always-on
+> today's-date context, single-date 1-night nudge, and a redefined "next weekend", branch
+> `fix/haven-ai-numeric-dates-101926`: [Haven AI Chat](#haven-ai-chat) — live bug: a guest
+> said "10/24, this coming Saturday" (Oct 24, 2026 — a Saturday) and Haven asked "2024 ba,
+> o 2025 na?" plus re-questioned the 1-night default. `dates.ts` gained numeric month-first
+> date parsing (Owner convention: `M/D`/`MM/DD`/`M/D/YY`/`M/D/YYYY`, never day-first;
+> ranges `10/24-10/26`, `10/24 to 10/26`, `10/24-26` shorthand; guarded against a
+> guest-count phrase like "4/5 guests" the same way the existing bare day-range fallback
+> is) and relative-weekday phrasing ("this coming Saturday"/"this Saturday"/"sa Sabado"/
+> "ngayong Sabado"/"sa darating na Sabado" — nearest occurrence, including today; "bukas"
+> as a Tagalog "tomorrow"; "sa makalawa" — day after tomorrow). When a numeric date and an
+> explicit weekday both appear and agree, the numeric-date patterns are checked first, so
+> the explicit date always wins (no behavior change when they already agree, as in the
+> live bug). `resolveDates()`'s result gained `nights` and `singleDateDefault` — true only
+> for a bare single-day phrase with no guest-stated check-out (never for an explicit range
+> or "this/next weekend"). New exports `todayContextNote(now)`/`manilaYear(now)`:
+> `chat-service.ts` now injects "Today is Monday, Oct 19, 2026 (Asia/Manila)" (plus the
+> current-year/next-year rule) into the system prompt on **every** request, not only when
+> a date phrase is detected, so the model never has to guess "this year" — the root cause
+> of the year-confusion bug. `post-process.ts`'s `dropWhatYearQuestions()` gained an
+> optional `currentYear` parameter: a dynamic backstop drops any sentence naming a
+> calendar year earlier than the current one (so a hardcoded "2024"/"2025" list is never
+> needed), plus two static phrases ("this year or next", "taong ito ... o next year").
+> `dropDateReconfirmationQuestions()` gained three more mistaken-reconfirmation patterns
+> ("kung 1 night lang ... tama ba?", "1 night ba", "check-in sabado at check-out linggo,
+> tama ba?"). New `ensureSingleNightNudge()` appends a short "want to add more nights?"
+> line (EN/TL/BTG) whenever `singleDateDefault` is true, instead of ever asking the guest
+> to confirm the 1-night default. "Next weekend" is redefined (Owner rule) to mean the
+> Saturday after the coming one, a 1-night Sat→Sun stay — not an extra Friday-to-Sunday
+> span a week further out. `system-prompt.ts` gained matching hard rules
+> (`NUMERIC_DATE_RULE`, `SINGLE_DATE_NIGHT_RULE`, `NEXT_WEEKEND_RULE`) and
+> `NO_YEAR_QUESTION_RULE` now explicitly bans offering/mentioning a past year.
+> Prior: 2026-10-16 (Haven AI: plain-language pass banning deep/literary Tagalog,
 > same branch `fix/haven-ai-checkout-date-101626`: [Haven AI Chat](#haven-ai-chat) — Owner
 > incident: Haven qualified a quote as "(provisional lang — tutuklasin ng tama sa
 > checkout)"; "tutuklasin" is deep, literary Tagalog no real local host would use.
@@ -2019,6 +2051,51 @@ buttons and "Talk to a Human" link are unaffected either way.
   phrase like "4 to 5 guests"/"4-5 kami" is never mistaken for a date range.
   `chat-service.ts` passes it the same last-6-prior-turns window (`recentHistoryMessages()`)
   it also uses for cross-turn property resolution (see `property-resolver.ts` below).
+  *(added 2026-10-19, Owner convention, `fix/haven-ai-numeric-dates-101926`)* Numeric
+  month-first dates: `M/D`, `MM/DD`, `M/D/YY`, `M/D/YYYY` (e.g. "10/24" is always October
+  24 — **never day-first**), and ranges `10/24-10/26`, `10/24 to 10/26`, `10/24 hanggang
+  10/26`, and the shorthand `10/24-26` (end day only, same month as the start). Guarded
+  against a guest-count phrase like "4/5 guests" with the same trailing-noun exclusion the
+  bare day-range fallback uses, so it's never mistaken for a date. Checked before every
+  relative-weekday pattern, so when a numeric date and an explicit weekday both appear in
+  the same message and agree (e.g. "10/24, this coming Saturday" — Oct 24, 2026 is a
+  Saturday), the explicit numeric date resolves first; `system-prompt.ts` additionally
+  tells the model to trust the numeric date and simply state the weekday it falls on if
+  the two ever disagree, never asking the guest to pick one. New relative-weekday
+  patterns, all resolving to the nearest occurrence of that weekday **including today**
+  (unlike the existing "next `<weekday>`", which always skips today): "this coming
+  Saturday", "this Saturday", "sa Sabado", "ngayong Sabado", "sa darating na Sabado".
+  "bukas" now resolves the same as "tomorrow"; new "sa makalawa" resolves to the day after
+  tomorrow. "Next weekend" is **redefined** (Owner rule) to mean the Saturday after the
+  coming one, a 1-night Saturday→Sunday stay — not an extra Friday-to-Sunday span a week
+  further out, which is what the prior implementation computed (no guest-facing test had
+  pinned the old behavior). `resolveDates()`'s result gained two new fields: `nights`
+  (`checkOut − checkIn`, in days) and `singleDateDefault` — `true` only when the guest's
+  phrase named a single day with no check-out of its own (a bare numeric date, bare
+  weekday, "tomorrow"/"bukas", "today"/"tonight", "sa makalawa", or one of the new
+  relative-weekday phrases above) and the resulting 1-night stay is this resolver's own
+  default rather than something the guest explicitly asked for — never `true` for an
+  explicit range or "this/next weekend". New exports `todayContextNote(now)` ("Today is
+  Monday, Oct 19, 2026 (Asia/Manila). The current year is 2026 — use next year (2027)
+  only for a calendar date that has already passed this year...") and `manilaYear(now)`.
+  `chat-service.ts` prepends `todayContextNote(now)` to **every** system prompt,
+  unconditionally — not only on a turn where a date phrase is detected — so the model
+  always has today's exact date and the current year as an anchor and never has to guess
+  "this year" when relaying a tool result; this is the root-cause fix for the live bug
+  where Haven asked a guest "10/24 ba yan ng taong ito, o next year? ... 2024 ba, o 2025
+  na?" for a date four days away. `post-process.ts` gained `ensureSingleNightNudge(text,
+  applies, lang, isEnglish)`: whenever `singleDateDefault` is true, Haven's reply gets a
+  short "want to add more nights?" line appended (EN "Want to add more nights? Just tell
+  me."; TL "Pwede pong dagdagan ang gabi — sabihin n'yo lang."; BTG "Pwede ga dagdagan ang
+  gabi? Sabihin n'yo lang."), and the reply must never ask the guest to confirm the
+  1-night default first — the three new `dropDateReconfirmationQuestions()` patterns just
+  below handle that. `dropWhatYearQuestions()` gained an optional `currentYear` parameter
+  (backward-compatible — omitting it keeps the prior static-only behavior): when passed
+  (`chat-service.ts` always passes `manilaYear(now)`), it also drops any sentence naming a
+  calendar year earlier than the current one — built as a 50-year alternation at call
+  time, so no "2024"/"2025" literal list ever needs hardcoding or updating — plus two
+  static phrases this live bug also produced: "this year or next" (EN), "taong ito ... o
+  next year" (TL/BTG, matched as a same-sentence lookahead so word order doesn't matter).
 - `owner-facts.ts` *(added 2026-10-14, owner-guardrails pass)* — the single server-side
   source of Owner-confirmed facts (Cedric, 2026-10-14): `buildOwnerFactsPrompt()` is
   injected into `system-prompt.ts`'s prompt and states the 24-guest combined capacity cap
@@ -2257,7 +2334,23 @@ buttons and "Talk to a Human" link are unaffected either way.
   to confirm whether a correctly-parsed "Nobyembre 19 hanggang 21" meant 1 night or 2,
   contradicting the range it had just parsed; independent backstops
   `post-process.ts`'s `dropDateReconfirmationQuestions()`/`dropWhatYearQuestions()`,
-  above)*. Haven must never say she's checking/looking something up in "the
+  above)*. The year rule now also explicitly bans offering or mentioning a past year as an
+  option (e.g. "2024 or 2025?"), and points at the always-injected `todayContextNote()`
+  system message as the source of truth for "today"/"this year." A numeric date is always
+  month-first — "10/24" is always October 24, never day-first; a numeric date and a
+  weekday mentioned together that agree need no comment, and if they ever disagree Haven
+  trusts the explicit date and simply states the weekday it falls on, never asking the
+  guest to pick one. A bare single date with no guest-stated check-out gets the resolver's
+  1-night default stated directly — never "is that just 1 night?"/"check-in Saturday,
+  check-out Sunday, right?" — closing with a short invite to add more nights (EN "Want to
+  add more nights? Just tell me."; TL "Pwede pong dagdagan ang gabi — sabihin n'yo lang.";
+  BTG "Pwede ga dagdagan ang gabi? Sabihin n'yo lang."). "Next weekend" means the Saturday
+  after the coming one, a 1-night Saturday→Sunday stay — not next Friday; `resolve_dates`
+  already resolves it this way, Haven just relays it *(three rules added 2026-10-19, Owner
+  rule, `fix/haven-ai-numeric-dates-101926` — `NUMERIC_DATE_RULE`, `SINGLE_DATE_NIGHT_RULE`,
+  `NEXT_WEEKEND_RULE` in `system-prompt.ts`; independent backstops `post-process.ts`'s
+  extended `dropDateReconfirmationQuestions()`/`dropWhatYearQuestions()` and the new
+  `ensureSingleNightNudge()`, above)*. Haven must never say she's checking/looking something up in "the
   system"/"ang system"/"sa system"/"our system" — a real host, not software describing its
   own backend; say what she's actually doing in plain terms instead ("let me check that for
   you", "tinitingnan ko muna") *(rule added 2026-10-16, fix/haven-ai-checkout-date-101626;
@@ -2449,6 +2542,23 @@ buttons and "Talk to a Human" link are unaffected either way.
   `stayLabel` with a booking nudge rather than sending a blank message; the second
   unconditionally drops "what year"/"anong taon". Both run in `chat-service.ts` right
   after `fixStayRangeEndDate()`, before the model's markdown links are extracted.
+  *(extended 2026-10-19, Owner rule, `fix/haven-ai-numeric-dates-101926`)*
+  `dropDateReconfirmationQuestions()` gained three more mistaken-reconfirmation patterns
+  for the single-date-default 1-night stay: "kung N night(s) lang" (TL/BTG, e.g. "kung 1
+  night lang, ... tama ba?"), "N night(s) ba" (e.g. "1 night ba"), and a standalone
+  "check-in `<weekday>` at check-out `<weekday>`, ... tama ba/ga" — the exact closing
+  question from the live bad reply. `dropWhatYearQuestions(text, currentYear?)` gained an
+  optional second parameter, backward-compatible (omitting it keeps the prior static-only
+  behavior checking only "what year"/"anong taon"): when `chat-service.ts` passes
+  `manilaYear(now)`, a dynamic backstop also drops any sentence naming a calendar year
+  earlier than the current one — a 50-year alternation built at call time, so no
+  "2024"/"2025" literal list needs hardcoding — plus two more static phrases from the same
+  live bug: "this year or next" (EN) and a same-sentence lookahead for "taong ito" +
+  "next year" (TL/BTG, word-order-independent). New `ensureSingleNightNudge(text, applies,
+  lang, isEnglish)` appends the "want to add more nights?" line (EN/TL/BTG, see `dates.ts`
+  above) whenever `resolveDates()`'s `singleDateDefault` was true this turn, run in
+  `chat-service.ts` right after `ensureDatesStated()`, before the Batangueño-particle
+  guard.
   `replaceTuklasinFamily(text, isEnglish)` and `simplifyDeepTagalogWords(text)` *(added
   2026-10-16, Owner plain-language pass, same branch)* are the independent backstops for
   `system-prompt.ts`'s `PLAIN_LANGUAGE_RULE`, fixing the Owner incident where Haven
@@ -2537,6 +2647,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   (gated on either this turn's tool-resolved range or the pre-resolved date context note)
   then `dropWhatYearQuestions()` (unconditional) right after `fixStayRangeEndDate()`,
   before the model's markdown links are extracted.
+  *(Added 2026-10-19, Owner rule, `fix/haven-ai-numeric-dates-101926`):* `runToolLoop()`
+  prepends `todayContextNote(now)` to the system prompt unconditionally (every request,
+  before `dateContextNote()`), and now passes `manilaYear(now)` as `dropWhatYearQuestions()`'s
+  `currentYear` argument. A new step, `ensureSingleNightNudge()`, runs right after
+  `ensureDatesStated()` (gated on `resolveDates()`'s `singleDateDefault` for the guest's
+  latest message, independent of whether a tool call happened this turn) and before the
+  Batangueño-particle guard (`stripBatanguenoFromTagalog()`/`ensureBatanguenoMarker()`).
 - `retention.ts` — `purgeExpiredHavenData()`, driven by the daily cron (see Cron Jobs
   above): deletes `HavenChatTranscript` rows older than 90 days and `HavenChatUsage` rows
   older than 13 months.

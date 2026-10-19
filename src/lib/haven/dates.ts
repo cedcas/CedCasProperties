@@ -18,6 +18,17 @@ export interface ResolvedDates {
   interpreted: string;
   /** The guest-facing stay range — see `buildStayLabel` below. */
   stayLabel: StayLabel;
+  /** checkOut - checkIn, in days. */
+  nights: number;
+  /**
+   * True when the guest's phrase named only a single day with no check-out of its own
+   * (a bare date, weekday, "tomorrow"/"bukas", etc.) and the 1-night stay is this
+   * resolver's own default, not something the guest explicitly asked for — e.g. "10/24"
+   * or "this coming Saturday", but never "Nov 19-21" or "this weekend" (Owner rule,
+   * 2026-10-19). Callers use this to offer "want to add more nights?" without ever
+   * asking the guest to confirm the 1-night default.
+   */
+  singleDateDefault: boolean;
 }
 
 export interface StayLabel {
@@ -28,6 +39,7 @@ export interface StayLabel {
 }
 
 const EN_WEEKDAYS_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const EN_WEEKDAYS_FULL = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const EN_MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const TL_WEEKDAYS_FULL = ["Linggo", "Lunes", "Martes", "Miyerkules", "Huwebes", "Biyernes", "Sabado"];
 const TL_MONTHS_SHORT = ["Ene", "Peb", "Mar", "Abr", "May", "Hun", "Hul", "Ago", "Set", "Okt", "Nob", "Dis"];
@@ -124,6 +136,30 @@ function todayManila(now: Date): Date {
   return toUtcMidnight(manilaTodayKey(now));
 }
 
+/** The current calendar year in Asia/Manila. */
+export function manilaYear(now: Date = new Date()): number {
+  return todayManila(now).getUTCFullYear();
+}
+
+/**
+ * Stated at the top of every chat-service system prompt (chat-service.ts), regardless of
+ * whether this turn's message contains a detectable date phrase, so the model always has
+ * an anchor for "today"/"this year" and never needs to ask the guest what year they mean
+ * (the live bug this fixes: Haven asked "2024 ba, o 2025 na?" for a date in the near
+ * future). Year rule: current year, or next year once that calendar date has passed —
+ * exactly what every resolver in this file already does.
+ */
+export function todayContextNote(now: Date = new Date()): string {
+  const today = todayManila(now);
+  const year = today.getUTCFullYear();
+  const label = `${EN_WEEKDAYS_FULL[today.getUTCDay()]}, ${EN_MONTHS_SHORT[today.getUTCMonth()]} ${today.getUTCDate()}, ${year}`;
+  return (
+    `Today is ${label} (Asia/Manila). The current year is ${year} — use next year ` +
+    `(${year + 1}) only for a calendar date that has already passed this year. Never ask ` +
+    "the guest what year they mean, and never offer or mention a past year as an option."
+  );
+}
+
 function nthWeekdayOfMonth(year: number, month: number, weekday: number, nth: number): Date | null {
   const first = new Date(Date.UTC(year, month, 1));
   const firstWeekday = first.getUTCDay();
@@ -168,12 +204,14 @@ function formatInterpreted(checkIn: Date, checkOut: Date): string {
     : `${fmt(checkIn)} – ${fmt(checkOut)} (${nightWord})`;
 }
 
-function toResult(checkIn: Date, checkOut: Date): ResolvedDates {
+function toResult(checkIn: Date, checkOut: Date, singleDateDefault = false): ResolvedDates {
   return {
     checkIn: utcDateKey(checkIn),
     checkOut: utcDateKey(checkOut),
     interpreted: formatInterpreted(checkIn, checkOut),
     stayLabel: buildStayLabelFromDates(checkIn, checkOut),
+    nights: Math.round((checkOut.getTime() - checkIn.getTime()) / 86_400_000),
+    singleDateDefault,
   };
 }
 
@@ -268,6 +306,57 @@ const PEOPLE_NOUN_AFTER_RE = String.raw`(?!\s*(?:na\s+)?(?:adults?|guests?|pax|p
  */
 const RANGE_SEP = String.raw`(?:-|to|–|through|until|hanggang)`;
 
+/** 2-digit years are the Owner's "20YY" convention, never 19YY. */
+function parseNumericYear(yearStr: string): number {
+  return yearStr.length <= 2 ? 2000 + Number(yearStr) : Number(yearStr);
+}
+
+const NUMERIC_DATE_RANGE_RE = new RegExp(
+  `\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\s*${RANGE_SEP}\\s*(?:(\\d{1,2})/)?(\\d{1,2})(?:/(\\d{2,4}))?\\b${PEOPLE_NOUN_AFTER_RE}`
+);
+const NUMERIC_DATE_SINGLE_RE = new RegExp(`\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\b${PEOPLE_NOUN_AFTER_RE}`);
+
+/**
+ * Resolves a numeric month-first range ("10/24-10/26", "10/24-26"). `endMonth` is `null`
+ * for the shorthand form (same month as the start date). Mirrors the named-month range
+ * resolver (`resolveMonthDay` + year-rollover-on-checkout) just below.
+ */
+function resolveNumericRange(
+  today: Date,
+  startMonth: number,
+  startDay: number,
+  startYearStr: string | undefined,
+  endMonth: number | null,
+  endDay: number,
+  endYearStr: string | undefined
+): { checkIn: Date; checkOut: Date } | null {
+  const effectiveEndMonth = endMonth ?? startMonth;
+  if (startMonth < 1 || startMonth > 12 || startDay < 1 || startDay > 31) return null;
+  if (effectiveEndMonth < 1 || effectiveEndMonth > 12 || endDay < 1 || endDay > 31) return null;
+
+  const checkIn = startYearStr
+    ? new Date(Date.UTC(parseNumericYear(startYearStr), startMonth - 1, startDay))
+    : resolveMonthDay(today, startMonth - 1, startDay);
+
+  let checkOut: Date;
+  if (endYearStr) {
+    checkOut = new Date(Date.UTC(parseNumericYear(endYearStr), effectiveEndMonth - 1, endDay));
+  } else {
+    checkOut = new Date(Date.UTC(checkIn.getUTCFullYear(), effectiveEndMonth - 1, endDay));
+    if (checkOut <= checkIn) checkOut = new Date(Date.UTC(checkIn.getUTCFullYear() + 1, effectiveEndMonth - 1, endDay));
+  }
+  return checkOut > checkIn ? { checkIn, checkOut } : null;
+}
+
+/** Resolves a numeric month-first single date ("10/24", "12/31/26"). No year given rolls
+ * forward to the next occurrence, same as `resolveMonthDay`; an explicit year is taken
+ * literally. */
+function resolveNumericSingle(today: Date, month: number, day: number, yearStr: string | undefined): Date | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+  if (yearStr) return new Date(Date.UTC(parseNumericYear(yearStr), month - 1, day));
+  return resolveMonthDay(today, month - 1, day);
+}
+
 export function resolveDates(
   expression: string,
   now: Date = new Date(),
@@ -290,7 +379,36 @@ export function resolveDates(
   m = expr.match(/^(\d{4}-\d{2}-\d{2})$/);
   if (m) {
     const checkIn = toUtcMidnight(m[1]);
-    if (!isNaN(checkIn.getTime())) return toResult(checkIn, addUtcDays(checkIn, 1));
+    if (!isNaN(checkIn.getTime())) return toResult(checkIn, addUtcDays(checkIn, 1), true);
+  }
+
+  // Numeric month-first date range: "10/24-10/26", "10/24 - 10/26", "10/24 to 10/26",
+  // "10/24 hanggang 10/26", "10/24-26" (shorthand — same month as the start date). Tried
+  // before the single-date form below so a full range is never truncated to just its start
+  // date. Owner convention (2026-10-19): numeric dates are always US month-first, never
+  // day-first — "10/24" is always October 24, never the 10th of a 24th month. Guarded
+  // against a guest-count phrase like "4/5 guests" via PEOPLE_NOUN_AFTER_RE, the same guard
+  // the bare day-range fallback below uses.
+  m = expr.match(NUMERIC_DATE_RANGE_RE);
+  if (m) {
+    const range = resolveNumericRange(
+      today,
+      parseInt(m[1], 10),
+      parseInt(m[2], 10),
+      m[3],
+      m[4] ? parseInt(m[4], 10) : null,
+      parseInt(m[5], 10),
+      m[6]
+    );
+    if (range) return toResult(range.checkIn, range.checkOut);
+  }
+
+  // Numeric month-first single date: "10/24", "1/5", "12/31/26". Same US month-first
+  // convention and guest-count guard as the range pattern above.
+  m = expr.match(NUMERIC_DATE_SINGLE_RE);
+  if (m) {
+    const checkIn = resolveNumericSingle(today, parseInt(m[1], 10), parseInt(m[2], 10), m[3]);
+    if (checkIn) return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
   // "2nd Saturday of November" / "1st Friday in December" / "ikalawang Sabado ng Nobyembre"
@@ -308,19 +426,22 @@ export function resolveDates(
         year += 1;
         date = nthWeekdayOfMonth(year, month, weekday, nth);
       }
-      if (date) return toResult(date, addUtcDays(date, 1));
+      if (date) return toResult(date, addUtcDays(date, 1), true);
     }
   }
 
-  // "this weekend" / "the weekend" / "next weekend"
+  // "this weekend" / "the weekend"
   if (/\b(this|the)\s+weekend\b/.test(expr)) {
     const { checkIn, checkOut } = thisWeekendRange(today);
     return toResult(checkIn, checkOut);
   }
+  // "next weekend" (Owner definition, 2026-10-19): the Saturday after the coming one,
+  // 1 night Sat -> Sun — NOT the Friday after the coming weekend's Friday (that reads a
+  // week further out than guests mean by "next weekend").
   if (/\bnext\s+weekend\b/.test(expr)) {
-    const { checkIn } = thisWeekendRange(today);
-    const nextFriday = addUtcDays(checkIn, 7);
-    return toResult(nextFriday, addUtcDays(nextFriday, 2));
+    const comingSaturday = nextOccurrence(today, WEEKDAYS.sat, false);
+    const nextSaturday = addUtcDays(comingSaturday, 7);
+    return toResult(nextSaturday, addUtcDays(nextSaturday, 1));
   }
 
   // "next Friday to Sunday" (also "next Fri-Sun")
@@ -335,7 +456,21 @@ export function resolveDates(
   m = expr.match(new RegExp(`\\b(?:next|susunod\\s+na)\\s+(${WEEKDAY_NAME_PATTERN})\\b`));
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], true);
-    return toResult(checkIn, addUtcDays(checkIn, 1));
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
+  }
+
+  // "this coming Saturday" / "this Saturday" / "sa Sabado" / "ngayong Sabado" /
+  // "sa darating na Sabado" — the nearest occurrence of that weekday, INCLUDING today
+  // (unlike "next <weekday>" above, which always skips today). Owner rule (2026-10-19):
+  // when this also agrees with an explicit numeric date elsewhere in the same message
+  // ("10/24, this coming Saturday"), the numeric-date patterns above already return first,
+  // so this branch is only reached when no numeric date was also given.
+  m = expr.match(
+    new RegExp(`\\b(?:this\\s+coming|this|sa\\s+darating\\s+na|ngayong|sa)\\s+(${WEEKDAY_NAME_PATTERN})\\b`)
+  );
+  if (m) {
+    const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], false);
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
   // "Dec 24-26" / "December 24 to 26" / "Dec 24 - Dec 26" / "Nov 30 to Dec 2"
@@ -359,25 +494,32 @@ export function resolveDates(
   m = expr.match(new RegExp(`\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
   if (m) {
     const checkIn = resolveMonthDay(today, MONTHS[m[1]], parseInt(m[2], 10));
-    return toResult(checkIn, addUtcDays(checkIn, 1));
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
-  // "tomorrow"
-  if (/\btomorrow\b/.test(expr)) {
+  // "sa makalawa" (day after tomorrow) — checked before "tomorrow"/"bukas" since
+  // "makalawa" has no overlap with "bukas", but both are single-day phrases below.
+  if (/\bsa\s+makalawa\b/.test(expr)) {
+    const checkIn = addUtcDays(today, 2);
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
+  }
+
+  // "tomorrow" / "bukas"
+  if (/\b(tomorrow|bukas)\b/.test(expr)) {
     const checkIn = addUtcDays(today, 1);
-    return toResult(checkIn, addUtcDays(checkIn, 1));
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
   // "today" / "tonight"
   if (/\b(today|tonight)\b/.test(expr)) {
-    return toResult(today, addUtcDays(today, 1));
+    return toResult(today, addUtcDays(today, 1), true);
   }
 
   // bare weekday, no "next": nearest future occurrence, e.g. "Saturday"
   m = expr.match(new RegExp(`^(${WEEKDAY_NAME_PATTERN})$`));
   if (m) {
     const checkIn = nextOccurrence(today, WEEKDAYS[m[1]], false);
-    return toResult(checkIn, addUtcDays(checkIn, 1));
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
   // Bare day-of-month range, no month attached: "19 to 21" / "19-21" / "19 hanggang 21".

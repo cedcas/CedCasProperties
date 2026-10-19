@@ -91,9 +91,45 @@ const DATE_RANGE_CONFIRMATION_RULE =
   "and never contradict that range. State it (copy stayLabel verbatim) and move on.";
 
 const NO_YEAR_QUESTION_RULE =
-  "Never ask a guest what year they mean. Always assume the current year in Asia/Manila, " +
-  "or next year if that calendar date has already passed — exactly what resolve_dates and " +
-  "the pre-resolved date context note already do for you.";
+  "Never ask a guest what year they mean, and never offer or mention a past year (e.g. " +
+  '"2024 or 2025?") as an option. A system message below always states today\'s exact date ' +
+  "in Asia/Manila — trust it. Always assume the current year, or next year if that " +
+  "calendar date has already passed — exactly what resolve_dates and the pre-resolved date " +
+  "context note already do for you.";
+
+/**
+ * Owner convention (Cedric, 2026-10-19): a numeric date is always US month-first, never
+ * day-first — the live bug this fixes had Haven unsure whether "10/24" meant Oct 24 or some
+ * other reading. Backed by dates.ts's numeric-date patterns.
+ */
+const NUMERIC_DATE_RULE =
+  'A numeric date is always month-first (US convention): "10/24" is always October 24, ' +
+  '"1/5" is always January 5 — never day-first. A numeric date and a weekday mentioned ' +
+  'together ("10/24, this coming Saturday") that agree need no comment; if they ever ' +
+  "disagree, trust the explicit numeric date and simply state the weekday it actually " +
+  "falls on — never ask the guest to pick one.";
+
+/**
+ * Owner rule (Cedric, 2026-10-19): a bare single date ("10/24", "this coming Saturday") has
+ * no guest-stated check-out, so resolve_dates/the date context note default it to exactly
+ * 1 night. Haven must quote that default and invite more nights, never ask the guest to
+ * confirm it first. Backed by `ensureSingleNightNudge` and the extended
+ * `dropDateReconfirmationQuestions` backstop in post-process.ts.
+ */
+const SINGLE_DATE_NIGHT_RULE =
+  "When the guest names only a single date with no check-out of their own, quote the " +
+  "resolver's 1-night default directly — never ask \"is that just 1 night?\" or \"check-in " +
+  "Saturday, check-out Sunday, right?\" — and close with a short invite to add more nights: " +
+  'in English, "Want to add more nights? Just tell me."; in Tagalog, "Pwede pong dagdagan ' +
+  'ang gabi — sabihin n\'yo lang."; in Batangueño, "Pwede ga dagdagan ang gabi? Sabihin ' +
+  'n\'yo lang."';
+
+/** Owner definition (Cedric, 2026-10-19): guests say "next weekend" meaning the Saturday
+ * after the one coming up, not an extra Friday-to-Sunday span — a 1-night stay. */
+const NEXT_WEEKEND_RULE =
+  '"Next weekend" means the Saturday after the coming one, a 1-night Saturday→Sunday stay ' +
+  '— not next Friday. resolve_dates already resolves it this way; relay its result, never ' +
+  "recompute it yourself.";
 
 /**
  * Owner incident (Cedric, 2026-10-16): Haven qualified a quote as "(provisional lang —
@@ -165,6 +201,9 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "occupied night, including the last one.",
     DATE_RANGE_CONFIRMATION_RULE,
     NO_YEAR_QUESTION_RULE,
+    NUMERIC_DATE_RULE,
+    SINGLE_DATE_NIGHT_RULE,
+    NEXT_WEEKEND_RULE,
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     DADALAW_RULE,
@@ -203,6 +242,10 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "the given slug directly for a unique match, or ask the given clarifying question " +
       "naming the candidates for an ambiguous one. Never say a property is unknown, not in " +
       "our system, or unrecognized when such a note is present.",
+    "- Never write a URL in your reply text — no http(s) link, no www./bare-domain mention, " +
+      "and never a property's own booking link. A button for it is added automatically from " +
+      "the tool result; just refer to the property/option in prose. The one exception is the " +
+      "Messenger handoff rule right below, where writing the literal m.me text is required.",
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +
