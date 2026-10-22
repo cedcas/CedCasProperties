@@ -92,11 +92,8 @@ export default function ContactForm() {
               <div>
                 <div className="font-semibold text-charcoal text-[14px] mb-3">Find Us Online</div>
                 <div className="flex gap-3">
-                  {[
-                    ...SOCIAL_LINKS.map(({ icon, name, url }) => [icon, `Haven in Lipa on ${name}`, url]),
-                    ["fa-airbnb", "Airbnb", "https://airbnb.com/h/fullhousebellavita"],
-                  ].map(([icon, label, href]) => (
-                    <a key={icon} href={href} aria-label={label} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
+                  {SOCIAL_LINKS.map(({ icon, name, url }) => (
+                    <a key={icon} href={url} aria-label={`Haven in Lipa on ${name}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-forest/10 text-forest flex items-center justify-center text-[14px] hover:bg-forest hover:text-white transition-all duration-300">
                       <i className={`fa-brands ${icon}`} />
                     </a>
                   ))}

@@ -4,6 +4,139 @@
 
 ---
 
+## 2026-10-22, later — Last two hardcoded Airbnb links removed: homepage CTA block + about-page Person `sameAs` (hil-pm/remove-airbnb-cta-about-102226)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/remove-airbnb-cta-about-102226` (based on
+`dev`, fast-forwarded to pick up PR #91/DEC-030 first since this branch started from an
+older `dev` snapshot; targets `dev`); committed, **not pushed, no PR opened** (explicit
+constraint on this task). `npm run lint`, `npx tsc --noEmit`, and the full `npx vitest run`
+suite are clean (204 test files / 4,059 tests, all three timezone projects). `npm run
+build` was not run (forbidden for this task); no database was touched; no `.env` file was
+read.
+
+### Outcome
+Cedric's same-day follow-up (2026-10-22) to [DEC-030](HIL_DECISIONS.md), which had
+deliberately left two call sites untouched because they don't read from the shared
+`src/lib/social-links.ts` list: the homepage CTA block's hardcoded Airbnb icon and the
+about-page Person JSON-LD's hardcoded Airbnb `sameAs` entry. Both are now removed, closing
+DEC-030's "known remaining inconsistency." No individual Airbnb listing link remains
+anywhere on `haveninlipa.com`.
+
+### Material Changes
+- **`src/app/page.tsx`** — the "Ready to Experience Our Comfort?" CTA block's social icon
+  row no longer appends a hardcoded `fa-airbnb` icon (`https://airbnb.com/h/fullhousebellavita`).
+  **Dropped, not replaced** with an on-site icon: the block already has two on-site CTAs
+  ("Book Your Stay Today" → `/#properties`, "Browse Properties" → `#properties`)
+  immediately above the icon row, and every other social-icon row in the app
+  (`Footer.tsx`, `ContactForm.tsx`) is `SOCIAL_LINKS`-only with no on-site entry mixed in —
+  adding a fifth icon here for `/properties` would have been the inconsistent choice. The
+  row's array-of-arrays indirection (needed only to splice in the one-off Airbnb entry) is
+  simplified to a direct `SOCIAL_LINKS.map(...)`.
+- **`src/app/about/page.tsx`** — the Person JSON-LD `sameAs` drops the hardcoded Airbnb
+  URL; now `sameAs: [...SOCIAL_LINK_URLS]`, matching `LodgingBusiness`'s `sameAs`. The
+  "Airbnb Superhost" prose mentions (lines ~49, ~172) are unchanged — this is a links/schema
+  change only, per DEC-030's own scope.
+- **Verified by grep:** no `airbnb.com` href/URL remains anywhere in `src/` except (a) the
+  admin `airbnbIcsUrl` calendar-import field placeholder (`PropertyForm.tsx`) — a
+  functional iCal-sync feature, not a marketing link — and (b) test fixtures that assert
+  Airbnb domains are *rejected* (Haven AI's link allowlist tests, and the new/updated
+  regression tests below).
+- **Tests:** `src/lib/__tests__/social-links.test.ts` — updated the about-page source-text
+  assertion (was pinned to the old Airbnb-plus-spread pattern; now asserts
+  `sameAs: [...SOCIAL_LINK_URLS]` and the absence of the Airbnb URL) and added an
+  equivalent source-text assertion for the homepage CTA block.
+  `src/lib/__tests__/homepage-cta-social-links.test.ts` (new) — renders the real `Home`
+  page component (mocking Prisma and the heavy child sections) and asserts the icon row
+  renders exactly the four owner-approved icons with no `fa-airbnb`/`airbnb.com`, and that
+  the two on-site CTA links are still present. `footer-social-links.test.ts`'s header
+  comment updated to stop describing these two spots as "flagged, not touched."
+- **Blog, recorded here for completeness (not built this session):** Cedric deployed
+  `hil-seo` 1.1.10 (built in the prior DEC-030 session, PR #91) live to
+  `blog.haveninlipa.com` via Hostinger on 2026-10-22 at approximately 7:40 AM CT. The
+  theme's Airbnb icon now points to `https://haveninlipa.com/properties` on the live blog.
+
+---
+
+## 2026-10-22 — Footer social links (site-wide) + Airbnb icon removed from homepage + blog Airbnb link fixed (hil-seo 1.1.10) (hil-pm/footer-social-airbnb-102226)
+
+Area: Website | Blog
+
+Status: Built and tested on branch `hil-pm/footer-social-airbnb-102226` (based on `main`,
+targets `dev`); committed, **not pushed, no PR opened** (explicit constraint on this task).
+`npm run lint`, `npx tsc --noEmit`, and the full `npx vitest run` suite are clean (201
+test files / 4,050 tests, all three timezone projects). `php -l` clean on every plugin
+file; the plugin's standalone PHP test (`content/seo/runs/102226/tests/test-social-links.php`)
+passes all 26 assertions. `npm run build` was not run (forbidden for this task — it runs
+`prisma db push`); no database was touched.
+
+### Outcome
+Cedric's decision (2026-10-22, recorded in [DEC-030](HIL_DECISIONS.md)): add a site-wide
+footer social row (Facebook/Instagram/TikTok/YouTube, no Airbnb) on `haveninlipa.com`;
+remove the Airbnb icon from the homepage "Find Us Online" row; keep the `LodgingBusiness`
+JSON-LD `sameAs` to exactly those four URLs (no individual Airbnb listing link); and fix
+the blog's dead Airbnb vanity link (`https://airbnb.com/h/haveninlipa`, confirmed to
+redirect to Airbnb's generic `/s/homes` search page, not a HIL listing) to point at direct
+booking (`https://haveninlipa.com/properties`) instead of a real listing.
+
+### Material Changes
+- **`src/components/layout/Footer.tsx`** — new social icon row (Facebook, Instagram,
+  TikTok, YouTube) in the Brand column, sourced from `src/lib/social-links.ts`
+  (`SOCIAL_LINKS`, the existing shared constant from PR #87's social-profile work).
+  Each anchor: `target="_blank"`, `rel="noopener noreferrer"`,
+  `aria-label="Haven in Lipa on <Network>"`, styled to match the existing dark-background
+  pill icons already used in the homepage CTA block (`fa-brands` Font Awesome). No Airbnb
+  icon added — the footer previously had no social row at all.
+- **`src/components/sections/ContactForm.tsx`** — removed the hardcoded Airbnb icon
+  (`fa-airbnb`, `https://airbnb.com/h/fullhousebellavita`) from the homepage "Find Us
+  Online" row. The other four icons (sourced from `SOCIAL_LINKS`) are unchanged.
+- **`src/lib/local-business-schema.ts`** — `BUSINESS_SAME_AS` no longer appends the Airbnb
+  listing link; it is now exactly `SOCIAL_LINK_URLS` (the four owner-approved profiles).
+  Comment updated to record the 2026-10-22 decision in place of the prior "pending Owner
+  decision" note.
+- **Flagged, not changed** (per the task's own scope — "report, don't touch unless fed by
+  the shared social list"): the homepage "Ready to Experience Our Comfort?" CTA block
+  (`src/app/page.tsx`) still renders its own hardcoded Airbnb icon
+  (`https://airbnb.com/h/fullhousebellavita`), and the about page's Person JSON-LD
+  (`src/app/about/page.tsx`) still lists the same Airbnb URL in `sameAs`. Neither reads
+  from `SOCIAL_LINKS`/`SOCIAL_LINK_URLS` (Airbnb is deliberately excluded from that shared
+  list), so removing it from the list does not touch these two call sites. Left for Cedric
+  to decide — see [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
+- **`content/seo/runs/102226/hil-seo-plugin/`** (copied from the 1.1.9 artifact built
+  2026-10-16, `content/seo/runs/101626/` — **never uploaded**; the live site was still on
+  1.1.8, so this upload goes straight from 1.1.8 to **v1.1.10**, carrying 1.1.9's changes
+  forward): `includes/social-links.php` gains
+  `hil_seo_rewrite_airbnb_href()`, called from the existing `hil_seo_rewrite_social_links()`
+  output-buffer rewrite. Matches `href="https?://(?:www\.)?airbnb\.com/h/haveninlipa/?"`
+  (case-insensitive, any scheme/`www` variant, optional trailing slash) and rewrites it to
+  `href="https://haveninlipa.com/properties"`. `target`/`rel`/`aria-label`/icon class are
+  untouched — link-destination fix only. Plugin header/version bumped to 1.1.10 in
+  `hil-seo.php`; `readme.txt` stable tag and changelog updated.
+  `content/seo/runs/102226/tests/test-social-links.php` extended with Airbnb-rewrite
+  assertions (CTA + footer snippets, idempotency, six scheme/`www`/trailing-slash
+  variants) — all pass. Deploy note:
+  [`content/seo/runs/102226/HIL_SEO_v1.1.10_Deploy_Note.md`](../content/seo/runs/102226/HIL_SEO_v1.1.10_Deploy_Note.md).
+  Zip built at `content/seo/runs/102226/hil-seo-v1.1.10.zip`, also copied to
+  `/workspace/hil-blog-social/hil-seo-v1.1.10.zip`. **Not uploaded to WordPress** — this
+  task is plugin-source-only, no live WordPress REST/admin change.
+- **New test coverage:** `src/lib/__tests__/footer-social-links.test.ts` — Footer renders
+  exactly the 4 owner URLs with correct `target`/`rel`/`aria-label` and no Airbnb; no
+  duplicate rendering; ContactForm's "Find Us Online" row has no Airbnb icon/link;
+  `BUSINESS_SAME_AS` equals the 4 owner URLs exactly.
+
+### Still open (Owner decision needed)
+1. Whether to also remove the Airbnb icon from the homepage CTA block
+   (`src/app/page.tsx`) and the about-page Person `sameAs` (`src/app/about/page.tsx`), for
+   full consistency with the footer/Find-Us-Online/`LodgingBusiness`-schema removal.
+2. Review and (if approved) merge this branch into `dev`, then release to `main` per the
+   normal flow — **not done by this task** (no push, no PR opened, per explicit
+   instruction).
+3. Upload `hil-seo` 1.1.10 to WordPress per the deploy note — **not done by this task**
+   (plugin-source change only; live WordPress untouched).
+
+---
+
 ## 2026-10-19 — Haven AI: numeric month-first dates, always-on today's-date context, single-date 1-night nudge, redefined "next weekend" (fix/haven-ai-numeric-dates-101926)
 
 Area: Website / Haven AI Chat

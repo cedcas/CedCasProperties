@@ -116,18 +116,13 @@ export default async function Home() {
               </a>
             </div>
             <div className="flex justify-center gap-4">
-              {(
-                [
-                  ...SOCIAL_LINKS.map(({ icon, name, url }) => [icon, name, url, `Haven in Lipa on ${name}`]),
-                  ["fa-airbnb", "Airbnb", "https://airbnb.com/h/fullhousebellavita", "Airbnb"],
-                ] as [string, string, string, string][]
-              ).map(([icon, label, href, ariaLabel]) => (
+              {SOCIAL_LINKS.map(({ icon, name, url }) => (
                 <a
-                  key={label}
-                  href={href}
+                  key={name}
+                  href={url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  aria-label={ariaLabel}
+                  aria-label={`Haven in Lipa on ${name}`}
                   className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#FF5371] hover:border-[#FF5371] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
                   style={{ background: "rgba(255,255,255,.08)" }}
                 >

@@ -977,6 +977,37 @@ None
 
 ---
 
+## DEC-030 — No individual Airbnb listing link anywhere; footer social row is Facebook/Instagram/TikTok/YouTube only; the blog's broken Airbnb vanity link repoints to direct booking
+
+Date: 2026-10-22
+Status: Active. **`hil-seo` 1.1.10 deployed live to `blog.haveninlipa.com` on 2026-10-22 (~7:40 AM CT) via Hostinger** — the theme's broken `https://airbnb.com/h/haveninlipa` anchor now points to `https://haveninlipa.com/properties`. **Same-day follow-up (below) closes the "known remaining inconsistency" this entry originally flagged.**
+Area: Website | Blog
+
+### Decision
+On `haveninlipa.com`: a site-wide footer social row (every page, via `src/components/layout/Footer.tsx`) lists exactly the four owner-approved profiles from `src/lib/social-links.ts` — Facebook, Instagram, TikTok, YouTube — never Airbnb. The homepage "Find Us Online" row (`src/components/sections/ContactForm.tsx`) drops its previously-hardcoded Airbnb icon. The `LodgingBusiness` JSON-LD `sameAs` (`src/lib/local-business-schema.ts`) is exactly those same four URLs, with no Airbnb entry. No individual Airbnb listing link (e.g. a specific `/rooms/<id>` or `/h/<vanity>` URL) is added anywhere on `haveninlipa.com`, full stop — this was raised as an open question in the 2026-10-10 marketing-measurement session (see `HIL_PROJECT_STATUS.md`'s then-current In Progress entry) and is now decided against.
+
+On `blog.haveninlipa.com`: the theme's hardcoded Airbnb anchor (CTA section + footer `.social-links` block), `https://airbnb.com/h/haveninlipa`, is corrected via `hil-seo` 1.1.10's `includes/social-links.php` to point at `https://haveninlipa.com/properties` instead of a real Airbnb listing — chosen over fixing the vanity link to point at an actual listing (e.g. `https://www.airbnb.com/rooms/1132697739115508822`), consistent with "direct booking, not an Airbnb redirect" and with the main-site decision above.
+
+### Reason
+`https://airbnb.com/h/haveninlipa` is not a valid vanity link — resolving it (2026-10-22) shows it redirects to Airbnb's generic `https://www.airbnb.com/s/homes` search page, not any Haven in Lipa listing. It had been live, broken, on both the blog's CTA section and footer. Separately, the main site's `LodgingBusiness` `sameAs` had carried a single hardcoded Airbnb listing URL (`https://airbnb.com/h/fullhousebellavita`) since 2026-10-10 pending exactly this decision — HIL's whole product thesis is direct booking over OTA fees (DEC-007's "Airbnb alternative" framing, the BookingForm Airbnb-savings comparison), so routing any of the site's own social/schema surfaces back toward Airbnb, even a correctly-resolving one, cuts against that.
+
+### Implications
+- `src/lib/social-links.ts`'s `SOCIAL_LINKS`/`SOCIAL_LINK_URLS` remain the single source of truth for the four owner-approved profiles and deliberately exclude Airbnb (unchanged from their original 2026-10-16 design) — any new social-row or `sameAs` call site should read from there, never hardcode a fifth entry.
+- ~~**Known remaining inconsistency, flagged for Cedric, not resolved by this decision:** the homepage "Ready to Experience Our Comfort?" CTA block (`src/app/page.tsx`) and the about-page Person JSON-LD `sameAs` (`src/app/about/page.tsx`) still hardcode `https://airbnb.com/h/fullhousebellavita` independently of `SOCIAL_LINKS`.~~ **Closed same day (2026-10-22 addendum below).**
+- `hil-seo`'s Organization schema (`includes/schema.php`) has never included an Airbnb `sameAs` entry, so nothing changes there — only the two hardcoded theme anchors (CTA + footer) go through the `includes/social-links.php` rewrite.
+- A future Airbnb-listing-link request (anywhere on either site) should be checked against this decision before implementing — it is a deliberate "never," not an oversight to "finish."
+
+### Addendum, 2026-10-22 (same day, Owner-approved) — the two remaining hardcoded links closed
+- **Homepage CTA block (`src/app/page.tsx`):** the hardcoded `fa-airbnb` icon linking to `https://airbnb.com/h/fullhousebellavita` is **dropped, not replaced** with an on-site icon. The block already carries two on-site CTAs immediately above the icon row ("Book Your Stay Today" → `/#properties`, "Browse Properties" → `#properties`), and every other social-icon row in the app (`Footer.tsx`, `ContactForm.tsx`) is `SOCIAL_LINKS`-only with no on-site entry mixed in — adding a fifth, non-social icon here would have been the inconsistent choice, not the fix. The row now reads `SOCIAL_LINKS.map(...)` directly, same as the other two call sites.
+- **About page (`src/app/about/page.tsx`):** the Person JSON-LD `sameAs` array drops the hardcoded Airbnb URL; it is now `[...SOCIAL_LINK_URLS]`, matching `LodgingBusiness`'s `sameAs`. The "Airbnb Superhost" prose mention is unchanged — this decision (and DEC-030 generally) is about links/schema, not prose.
+- Verified by grep: no `airbnb.com` href/URL remains anywhere in `src/` except (a) the admin `airbnbIcsUrl` calendar-import field placeholder (a functional iCal feature, not a marketing link) and (b) test fixtures asserting that Airbnb domains are *rejected* (Haven AI's link allowlist tests, the footer/CTA/about regression tests themselves).
+- Tests: `src/lib/__tests__/social-links.test.ts` (source-text assertions for both files), `src/lib/__tests__/homepage-cta-social-links.test.ts` (new — renders the real `Home` page and asserts the icon row).
+
+### Supersedes
+The implicit gap left open by the 2026-10-10 marketing-measurement session ("Airbnb `sameAs` entry needs an Owner decision," `HIL_PROJECT_STATUS.md`) — now resolved as "no."
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
