@@ -4,6 +4,70 @@
 
 ---
 
+## 2026-10-22, latest — Haven AI property-overview fix: forced `list_properties`, a per-turn listings context note, and a price-guard bullet fix (hil-pm/haven-property-list-102226)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/haven-property-list-102226` (from `dev`,
+recreated from `main` at `84dbd1a` after PR #93's release auto-deleted the prior `dev`);
+targets `dev`. Lint (`npm run lint`), typecheck (`npx tsc --noEmit`), and the full
+`npx vitest run` suite are clean (207 test files / 4,185 tests, all three timezone
+projects — 44 new tests). `npm run build` was not run (forbidden for this task); no
+database was touched; no `.env` file was read or printed.
+
+### Outcome
+Fixes a production incident (Oct 22 2026): asked "Hi, what properties do you have?",
+Haven ~50% of the time skipped `list_properties` and invented an answer — only the two
+B34 units (Cozy 1BR Haven, Spacious 2BR Getaway) with wrong capacities (2/4 or 4/6 instead
+of the real 5/9), and once an invented price that the price guard correctly caught but
+replaced with the generic Messenger-fee fallback **inside a property bullet**, where that
+wording reads wrong. Full root-cause and fix recorded as an "Implementation note
+(2026-10-22 property-overview fix)" under [DEC-029](HIL_DECISIONS.md) — not a new decision.
+
+### Material Changes
+- **`src/lib/haven/overview-intent.ts` (new)** — `isPropertyOverviewMessage()`, a pure
+  regex detector for a plain property-overview question in English ("what properties do
+  you have", "list your properties", "how many properties") and Tagalog/Batangueño
+  ("anong property/properties meron kayo", "ano (ang) (mga) bahay ninyo", "ilang
+  bahay/property meron kayo").
+- **`src/lib/haven/chat-service.ts`** — `listingsContextNote()` builds a compact "Context
+  (public listings, authoritative...)" system-prompt block every turn from the
+  `publicListings` already fetched for property pre-resolution (one line per listing:
+  `shortName`, slug, bedrooms, `maxGuests`, "from ₱X/night"; a plain "fetch
+  failed/empty — call list_properties yourself" note otherwise). `basePricesFromListings()`
+  folds every fetched listing's own `pricePerNight` into the price guard's `allowedAmounts`
+  and `ensureFromPrefix()`'s `basePrices`. `runToolLoop()` passes
+  `forceToolName: "list_properties"` to `provider.chat()` on round 0 only when
+  `isPropertyOverviewMessage()` fires.
+- **`src/lib/haven/provider.ts`** — `ChatRequest` gained `forceToolName?: string`, mapped
+  to Anthropic's `tool_choice: {type: "tool", name}` and OpenAI's
+  `tool_choice: {type: "function", function: {name}}`; omitted/unset falls back to each
+  provider's normal `"auto"`.
+- **`src/lib/haven/system-prompt.ts`** — new `PROPERTY_OVERVIEW_RULE`: never
+  name/count/describe properties from memory; use the listings note or call
+  `list_properties`; name every listing for an overview question, never only some; the
+  two-building fact (Block 34 = Cozy 1BR + Spacious 2BR, Block 38 "Mickey in Lipa" = the
+  three Sleeps-7/11/15 configurations) is owner-approved color, never a substitute for the
+  full per-listing list; never let a hallucinated price inside a property bullet become the
+  generic Messenger-fee fallback.
+- **`src/lib/haven/post-process.ts`** — `enforcePriceClaims()`'s bullet-line branch gained a
+  `RATE_CONTEXT` regex (`/night`, `/day`, `/guest`) distinct from `FEE_CONTEXT` (now only
+  `/hour`/`/hr`/"fee"/"charge"); a disallowed amount on a `RATE_CONTEXT` bullet with no
+  fee/hourly wording drops just the price (`dropPriceFromBullet()`) instead of replacing the
+  whole bullet, so the property's name/capacity still reaches the guest. An explicit
+  "fee"/"charge" or hourly bullet is unaffected — still the full-line fallback.
+- **Tests (44 new):** `overview-intent.test.ts` (new); `provider.test.ts` (`forceToolName`
+  → `tool_choice` mapping, both providers); `post-process.test.ts` (bullet price-drop vs.
+  full-line fallback); `system-prompt.test.ts` (`PROPERTY_OVERVIEW_RULE`); `chat-service.test.ts`
+  (listings note content incl. a fetch-failure fallback, forced tool on round 0 only, an
+  overview reply naming all 5 listings' real rates survives the guard untouched, a
+  hallucinated bullet price is dropped rather than fallback-replaced).
+- **Not done this session:** merge, push, or deploy (explicit task constraint — commit
+  only, no PR); the Owner has not yet reviewed or merged this branch, so the fix is not
+  live. See [HIL_PROJECT_STATUS.md](HIL_PROJECT_STATUS.md).
+
+---
+
 ## 2026-10-22, later — Last two hardcoded Airbnb links removed: homepage CTA block + about-page Person `sameAs` (hil-pm/remove-airbnb-cta-about-102226)
 
 Area: Website

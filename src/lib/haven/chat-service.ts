@@ -27,6 +27,7 @@ import {
   ensureBatanguenoMarker,
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
+  shortPropertyLabels,
   fixDadalawPhrasing,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
@@ -45,6 +46,7 @@ import {
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
+import { isPropertyOverviewMessage } from "./overview-intent";
 import {
   OWNER_FACT_ALLOWED_AMOUNTS,
   stripBudgetQuestions,
@@ -236,6 +238,59 @@ function dateContextNote(resolved: ResolvedDates | null): string {
 }
 
 /**
+ * "Public listings (authoritative)" context note — built every turn from the listings
+ * already fetched above (`getPublicListings()`), never from the model's own memory. Fixes
+ * the live bug (Oct 22 2026): asked a plain "what properties do you have?", Haven sometimes
+ * skipped `list_properties` and invented an answer — only the two B34 units, with wrong
+ * capacities. This note gives the model the real data directly, and `system-prompt.ts`'s
+ * rule tells it to use this note (or call `list_properties`) rather than ever answer an
+ * overview question from memory. Kept small: one line per listing. When the fetch failed or
+ * returned nothing, says so plainly and tells the model to call `list_properties` itself.
+ */
+function listingsContextNote(listings: Awaited<ReturnType<typeof getPublicListings>>): string {
+  if (!Array.isArray(listings) || listings.length === 0) {
+    return (
+      "\n\nContext (public listings unavailable this turn): the server's own listings fetch " +
+      "failed or returned none. Do not guess what properties exist — call list_properties " +
+      "yourself before answering any question about what properties/listings we have."
+    );
+  }
+  const shortNames = shortPropertyLabels(listings.map((p) => ({ slug: p.slug, name: p.name })));
+  const lines = listings.map((p) => {
+    const shortName = shortNames.get(p.slug) ?? p.name;
+    const price = Number(p.pricePerNight);
+    const priceText = Number.isFinite(price) ? `from ₱${price.toLocaleString("en-US")}/night` : "price unavailable";
+    return `- ${shortName} (slug ${p.slug}): ${p.bedrooms} bed, sleeps up to ${p.maxGuests}, ${priceText}`;
+  });
+  return (
+    "\n\nContext (public listings, authoritative — already fetched this turn, not a guest " +
+    "claim): this is the COMPLETE list of every current public listing. For any overview " +
+    'question ("what properties do you have", "anong property meron kayo", "list your ' +
+    "properties\", etc.), name every one of these — never only some of them, never from " +
+    "memory, and never a name/capacity/price not in this list:\n" +
+    lines.join("\n")
+  );
+}
+
+/**
+ * Every listing's own `pricePerNight`, from the listings already fetched this turn — allowed
+ * through the price guard the same way a `list_properties` tool call's result would be, since
+ * this is the identical server-fetched figure (see `listingsContextNote` above and
+ * `enforcePriceClaims`/`ensureFromPrefix` in post-process.ts). Without this, a reply built
+ * from the context note rather than an actual tool call this turn would have its own correct
+ * "from ₱X/night" price wrongly treated as unverified.
+ */
+function basePricesFromListings(listings: Awaited<ReturnType<typeof getPublicListings>>): Set<number> {
+  const amounts = new Set<number>();
+  if (!Array.isArray(listings)) return amounts;
+  for (const p of listings) {
+    const price = Number(p.pricePerNight);
+    if (Number.isFinite(price)) amounts.add(Math.round(price * 100) / 100);
+  }
+  return amounts;
+}
+
+/**
  * Drives the model <-> tool exchange for one guest message. All provider calls within this
  * loop count as ONE HavenChatUsage row (see rate-limit.ts: a row is a guest message, not a
  * model call) — usage is summed across rounds by the caller.
@@ -294,11 +349,17 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // carry one itself.
   const resolvedDates = resolveDates(latestMessage, now, recentHistory.join(" "));
   const guestCount = parseGuestCount(latestMessage);
+  // DEC-029 overview-question fix (Oct 22 2026 incident): force list_properties on the
+  // model's first round whenever the guest's latest message is a plain property-overview
+  // question — see overview-intent.ts — so this specific question can never be answered
+  // from memory, in addition to the listingsContextNote below and the system-prompt rule.
+  const isOverviewQuestion = isPropertyOverviewMessage(latestMessage);
 
   const system =
     buildHavenSystemPrompt(lang) +
     "\n\n" +
     todayContextNote(now) +
+    listingsContextNote(publicListings) +
     dateContextNote(resolvedDates) +
     buildCapacityContextNote(latestMessage) +
     buildPropertyContextNote(propertyResolution, {
@@ -318,7 +379,8 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   let text = "";
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const result = await provider.chat({ system, messages, tools, maxTokens: MAX_OUTPUT_TOKENS });
+    const forceToolName = round === 0 && isOverviewQuestion ? "list_properties" : undefined;
+    const result = await provider.chat({ system, messages, tools, maxTokens: MAX_OUTPUT_TOKENS, forceToolName });
     inputTokens += result.usage.inputTokens;
     outputTokens += result.usage.outputTokens;
     text = result.text;
@@ -346,8 +408,13 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
 
   const englishMode = isEnglishContext(lang, guestMessages);
 
+  const listingBasePrices = basePricesFromListings(publicListings);
   const allowedAmounts = collectToolAmounts(toolResultsThisTurn);
   OWNER_FACT_ALLOWED_AMOUNTS.forEach((amount) => allowedAmounts.add(amount));
+  // A reply built from listingsContextNote's data (rather than an actual list_properties
+  // call this turn) states the identical server-fetched pricePerNight — allow it through the
+  // guard the same way a tool-result price would be (see basePricesFromListings above).
+  listingBasePrices.forEach((amount) => allowedAmounts.add(amount));
 
   const named = shortenPropertyNamesInText(text, toolExchangesThisTurn);
   const propertyKnown = dropUnknownPropertyClaims(named, propertyResolution, lang, guestMessages);
@@ -373,6 +440,7 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const accessScrubbed = scrubAccessLeak(systemMentionsStripped, lang, guestMessages);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
+  listingBasePrices.forEach((amount) => basePrices.add(amount));
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
   const fromPrefixed = ensureFromPrefix(priceChecked, basePrices, datedAmounts, englishMode);
   const termsChecked = enforceTermsOfAddress(fromPrefixed, guestMessages, lang);

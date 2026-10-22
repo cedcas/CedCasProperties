@@ -69,6 +69,52 @@ describe("AnthropicProvider.chat", () => {
     expect(result.toolCalls).toEqual([{ id: "call_1", name: "check_availability", input: { slug: "cozy-1-bedroom" } }]);
   });
 
+  // DEC-029 overview-question fix (Oct 22 2026): forces a specific tool on round 0 for a
+  // property-overview question so the model can never skip list_properties.
+  it("sends an explicit tool_choice naming the forced tool when forceToolName is set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "tool_use", id: "call_1", name: "list_properties", input: {} }],
+        stop_reason: "tool_use",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = getChatProvider("anthropic");
+    await provider.chat({
+      system: "sys",
+      messages: [{ role: "user", content: "what properties do you have?" }],
+      tools: [],
+      maxTokens: 100,
+      forceToolName: "list_properties",
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.tool_choice).toEqual({ type: "tool", name: "list_properties" });
+  });
+
+  it("omits tool_choice entirely when forceToolName is not set", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        content: [{ type: "text", text: "hi" }],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = getChatProvider("anthropic");
+    await provider.chat({ system: "sys", messages: [], tools: [], maxTokens: 100 });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(init.body as string);
+    expect(body.tool_choice).toBeUndefined();
+  });
+
   it("throws when ANTHROPIC_API_KEY is not configured", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     const provider = getChatProvider("anthropic");
@@ -122,6 +168,26 @@ describe("OpenAiProvider.chat", () => {
     expect(result.stopReason).toBe("tool_use");
     expect(result.toolCalls).toEqual([{ id: "call_1", name: "get_quote", input: { slug: "cozy-1-bedroom" } }]);
     expect(result.usage).toEqual({ inputTokens: 15, outputTokens: 6 });
+  });
+
+  it("sends an explicit function tool_choice when forceToolName is set, and 'auto' otherwise", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [{ message: { content: "hi" }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 5, completion_tokens: 2 },
+      }),
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+
+    const provider = getChatProvider("openai");
+    await provider.chat({ system: "sys", messages: [], tools: [], maxTokens: 100, forceToolName: "list_properties" });
+    let body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.tool_choice).toEqual({ type: "function", function: { name: "list_properties" } });
+
+    await provider.chat({ system: "sys", messages: [], tools: [], maxTokens: 100 });
+    body = JSON.parse(fetchMock.mock.calls[1][1].body as string);
+    expect(body.tool_choice).toBe("auto");
   });
 
   it("maps finish_reason 'stop' to end_turn", async () => {

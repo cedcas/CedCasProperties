@@ -36,13 +36,14 @@ vi.mock("@/lib/listings", async () => {
   return { ...actual, getPublicListings: listingsApi.getPublicListings };
 });
 
-/** The two houses' five live listings, as `property-resolver.ts` expects them. */
+/** The two houses' five live listings, as `property-resolver.ts` expects them, plus the
+ * bedrooms/pricePerNight fields the listings context note (chat-service.ts) also reads. */
 const PUBLIC_LISTINGS = [
-  { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax", maxGuests: 5 },
-  { slug: "spacious-2-bedroom", name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax", maxGuests: 9 },
-  { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7 },
-  { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11 },
-  { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15 },
+  { slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax", maxGuests: 5, bedrooms: 1, pricePerNight: 3500 },
+  { slug: "spacious-2-bedroom", name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax", maxGuests: 9, bedrooms: 2, pricePerNight: 5500 },
+  { slug: "mickey-in-lipa--family-staycation--sleeps-7", name: "Mickey in Lipa | Family Staycation•Sleeps 7", maxGuests: 7, bedrooms: 2, pricePerNight: 6000 },
+  { slug: "mickey-in-lipa--family-house--sleeps-11", name: "Mickey in Lipa | Family House•Sleeps 11", maxGuests: 11, bedrooms: 3, pricePerNight: 7500 },
+  { slug: "mickey-in-lipa--full-family-house--sleeps-15", name: "Mickey in Lipa | Full Family House•Sleeps 15", maxGuests: 15, bedrooms: 4, pricePerNight: 9500 },
 ];
 
 const ORIGINAL_ENV = { ...process.env };
@@ -1045,6 +1046,173 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     expect(result.reply).toBe(
       "For Saturday, November 14 → Sunday, November 15, 2026:\n\nWe have availability for that stay."
     );
+  });
+});
+
+// Oct 22 2026 incident: asked "Hi, what properties do you have?", Haven ~50% of the time
+// skipped list_properties and invented an answer (only the two B34 units, wrong capacities,
+// once an invented price). Fix: a per-turn listings context note (always true data, never
+// the model's memory), a forced list_properties tool call on round 0 for this specific
+// question, and a price guard that doesn't clobber a real listing price.
+describe("handleHavenChat — property overview (DEC-029, Oct 22 2026 incident)", () => {
+  it("injects a 'public listings, authoritative' context note with all 5 listings, real capacity and price", async () => {
+    providerChat.mockResolvedValue({
+      text: "Here they are!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Hi, what properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toContain("Context (public listings, authoritative");
+    expect(system).toContain("Cozy 1BR Haven");
+    expect(system).toContain("Spacious 2BR Haven");
+    expect(system).toContain("Mickey in Lipa — Family Staycation");
+    expect(system).toContain("Mickey in Lipa — Family House");
+    expect(system).toContain("Mickey in Lipa — Full Family House");
+    expect(system).toContain("from ₱3,500/night");
+    expect(system).toContain("from ₱9,500/night");
+  });
+
+  it("falls back to instructing a list_properties call when the listings fetch fails", async () => {
+    listingsApi.getPublicListings.mockRejectedValueOnce(new Error("db down"));
+    providerChat.mockResolvedValue({
+      text: "Let me check for you.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "What properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toContain("public listings unavailable this turn");
+    expect(system).toMatch(/call list_properties yourself/i);
+  });
+
+  it.each([
+    "Hi, what properties do you have?",
+    "Can you list your properties?",
+  ])("forces a list_properties tool call on round 0 for an English overview question: %s", async (message) => {
+    providerChat.mockResolvedValue({
+      text: "Here they are!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: message }] }), "1.2.3.4");
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBe("list_properties");
+  });
+
+  it("forces a list_properties tool call for the Tagalog phrasing 'anong property meron kayo'", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ito po sila!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Anong property meron kayo?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBe("list_properties");
+  });
+
+  it("does not force any tool for an unrelated question", async () => {
+    providerChat.mockResolvedValue({
+      text: "Check-in is at 2 PM.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ messages: [{ role: "user", content: "What time is check-in?" }] }), "1.2.3.4");
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBeUndefined();
+  });
+
+  it("only forces the tool on round 0, never on a later round", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "Let me check.",
+        toolCalls: [{ id: "1", name: "list_properties", input: {} }],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "Here they are!",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 5 },
+        stopReason: "end_turn",
+      });
+    runHavenToolMock.mockResolvedValue(PUBLIC_LISTINGS);
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "What properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBe("list_properties");
+    expect(providerChat.mock.calls[1][0].forceToolName).toBeUndefined();
+  });
+
+  it("an overview reply naming all 5 listings' real base rates survives the price guard untouched", async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "- Cozy 1BR Haven: sleeps 5, from ₱3,500/night\n" +
+        "- Spacious 2BR Haven: sleeps 9, from ₱5,500/night\n" +
+        "- Mickey in Lipa — Family Staycation: sleeps 7, from ₱6,000/night\n" +
+        "- Mickey in Lipa — Family House: sleeps 11, from ₱7,500/night\n" +
+        "- Mickey in Lipa — Full Family House: sleeps 15, from ₱9,500/night",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "What properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    for (const price of ["3,500", "5,500", "6,000", "7,500", "9,500"]) {
+      expect(result.reply).toContain(`from ₱${price}/night`);
+    }
+    expect(result.reply).not.toContain("For that fee, please ask us via Messenger");
+  });
+
+  it("drops just a hallucinated price from a property bullet instead of the generic Messenger-fee fallback", async () => {
+    providerChat.mockResolvedValue({
+      text: "- Cozy 1BR Haven: sleeps 5, from ₱99,000/night",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "What properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toContain("Cozy 1BR Haven: sleeps 5");
+    expect(result.reply).not.toContain("99,000");
+    expect(result.reply).not.toContain("For that fee, please ask us via Messenger");
   });
 });
 

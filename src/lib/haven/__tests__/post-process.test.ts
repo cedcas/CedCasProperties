@@ -232,6 +232,47 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     );
   });
 
+  // Oct 22 2026 overview-question incident: a property-rundown bullet with an unverified
+  // per-night/day/guest rate drops just the price, keeping the rest of the bullet (name,
+  // capacity) — unlike a true fee/total bullet, which still replaces the whole line.
+  describe("a property-rundown bullet's rate drops just the price, not the whole line", () => {
+    it("drops only the disallowed price from a per-night property bullet, keeping the rest", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("- Cozy 1BR Haven: sleeps 5, from ₱99,000/night", amounts);
+      expect(result).toBe("- Cozy 1BR Haven: sleeps 5");
+    });
+
+    it("keeps a per-night property bullet whose price IS allowed (e.g. a real listing's own pricePerNight)", () => {
+      const amounts = new Set([3500]);
+      const text = "- Cozy 1BR Haven: sleeps 5, from ₱3,500/night";
+      expect(enforcePriceClaims(text, amounts)).toBe(text);
+    });
+
+    it("drops a disallowed 'per guest' rate the same way, with no 'fee' wording in the line", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("- Mickey in Lipa: sleeps 15, ₱9,500 per guest", amounts);
+      expect(result).toBe("- Mickey in Lipa: sleeps 15");
+    });
+
+    it("still uses the fee-handoff fallback (whole line) for an explicit 'fee' bullet, even with 'per guest'", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("- Extra guest fee: ₱500 per guest", amounts);
+      expect(result).toBe(`- ${FALLBACK_FEE_TEXT}`);
+    });
+
+    it("still uses the hourly-fee fallback (whole line) for an hourly bullet, not the price-drop path", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("- Early check-in fee: ₱9999/hour", amounts);
+      expect(result).toBe(`- ${FALLBACK_HOURLY_FEE_TEXT}`);
+    });
+
+    it("still replaces the whole bullet for an arithmetic claim even in a per-night context", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("- Cozy 1BR Haven: ₱3,500 x 2 /night", amounts);
+      expect(result).toBe(`- ${FALLBACK_TOTAL_TEXT}`);
+    });
+  });
+
   it("does not split a peso amount with centavos at its decimal point", () => {
     const amounts = new Set([4500.75]);
     expect(enforcePriceClaims("Your total is ₱4,500.75 today.", amounts)).toBe("Your total is ₱4,500.75 today.");
