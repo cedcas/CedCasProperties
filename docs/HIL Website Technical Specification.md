@@ -1,6 +1,18 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-19 (Haven AI: numeric month-first dates, always-on
+> **Last updated:** 2026-10-22 (Footer social links + Airbnb icon removed from homepage,
+> branch `hil-pm/footer-social-airbnb-102226`, DEC-030: a site-wide social icon row
+> (Facebook/Instagram/TikTok/YouTube, `src/lib/social-links.ts`) added to `Footer.tsx`'s
+> Brand column — the footer previously had none — and the homepage "Find Us Online" row
+> (`ContactForm.tsx`) no longer appends a fifth, hardcoded Airbnb icon. `BUSINESS_SAME_AS`
+> (`local-business-schema.ts`) no longer appends the Airbnb listing link either; the
+> `LodgingBusiness` JSON-LD `sameAs` is now exactly the four owner-approved URLs. Flagged,
+> not touched: the homepage CTA block (`src/app/page.tsx`) and the about-page Person
+> `sameAs` (`src/app/about/page.tsx`) still hardcode the same Airbnb URL independently of
+> `SOCIAL_LINKS` — see `HIL_PROJECT_STATUS.md`. New test:
+> `src/lib/__tests__/footer-social-links.test.ts`. See [Accessibility
+> patterns](#accessibility-patterns).
+> Prior: 2026-10-19 (Haven AI: numeric month-first dates, always-on
 > today's-date context, single-date 1-night nudge, and a redefined "next weekend", branch
 > `fix/haven-ai-numeric-dates-101926`: [Haven AI Chat](#haven-ai-chat) — live bug: a guest
 > said "10/24, this coming Saturday" (Oct 24, 2026 — a Saturday) and Haven asked "2024 ba,
@@ -2817,7 +2829,7 @@ The `haven-pulse` keyframes in [globals.css](../src/app/globals.css) animate `tr
 ### Accessibility patterns
 
 - Form fields in [ContactForm.tsx](../src/components/sections/ContactForm.tsx) use explicit `id` + `htmlFor` pairs (`contact-name`, `contact-email`, `contact-phone`, `contact-subject`, `contact-message`).
-- Social-media link icons (Facebook / Instagram / TikTok / YouTube / Airbnb) carry `aria-label` props — the visible content is an icon-only `<i>` element. The first four are sourced from one shared constant, `src/lib/social-links.ts` (`SOCIAL_LINKS`); Airbnb is appended separately wherever the icon row renders, since it isn't one of the owner's four confirmed social profiles. `aria-label` on those four reads `"Haven in Lipa on {Platform}"` (2026-10-16).
+- Social-media link icons carry `aria-label` props — the visible content is an icon-only `<i>` element. Facebook/Instagram/TikTok/YouTube are sourced from one shared constant, `src/lib/social-links.ts` (`SOCIAL_LINKS`, `aria-label="Haven in Lipa on {Platform}"`, 2026-10-16). **Since 2026-10-22 (DEC-030):** `Footer.tsx` renders this same four-icon row (Brand column, `target="_blank" rel="noopener noreferrer"`) on every page — the footer previously had no social icons at all — and the homepage "Find Us Online" row (`ContactForm.tsx`) no longer appends a fifth, hardcoded Airbnb icon. The homepage CTA block (`src/app/page.tsx`) still appends its own hardcoded Airbnb icon independently of `SOCIAL_LINKS` — a known, flagged inconsistency, not yet resolved (see `HIL_PROJECT_STATUS.md`). Test: `src/lib/__tests__/footer-social-links.test.ts`.
 - Property card "View Details" links carry `aria-label={`View details for ${property.name}`}` so screen readers can distinguish otherwise-identical links.
 - Heading hierarchy on the homepage: `h1` (Hero) → `h2` (each top-level section) → `h3` (sub-sections and footer columns). **Do not introduce `h4`** without an intervening `h3` in the same section.
 - Footer body text uses `text-white/70` and secondary text `text-white/55` on `bg-[#1c1c1c]` to meet WCAG AA contrast; hover state is `text-white/85`.
