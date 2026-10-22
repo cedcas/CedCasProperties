@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import NewsletterSignup from "@/components/sections/NewsletterSignup";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 
 type WpPost = {
   id: number;
@@ -105,6 +106,21 @@ export default async function Footer() {
               Thoughtfully managed short-term rentals in Lipa City, Batangas — designed for families, travelers, and professionals.
             </p>
             <span className="inline-block mt-3 text-[12px] italic text-[#FF5371]">&ldquo;Stay in Style, Live in Comfort.&rdquo;</span>
+            <div className="flex gap-3 mt-6">
+              {SOCIAL_LINKS.map(({ icon, name, url }) => (
+                <a
+                  key={name}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Haven in Lipa on ${name}`}
+                  className="w-11 h-11 rounded-full flex items-center justify-center text-[15px] text-white/70 border border-white/[.15] hover:bg-[#FF5371] hover:border-[#FF5371] hover:text-white hover:-translate-y-0.5 transition-all duration-300"
+                  style={{ background: "rgba(255,255,255,.08)" }}
+                >
+                  <i className={`fa-brands ${icon}`} />
+                </a>
+              ))}
+            </div>
           </div>
 
           {/* Links */}

@@ -34,17 +34,16 @@ export const GBP_GEO = { latitude: 13.9050606, longitude: 121.1687456 };
 
 /**
  * Sourced from src/lib/social-links.ts (the owner-approved Facebook,
- * Instagram, TikTok, YouTube profiles — confirmed by Cedric, 2026-10-16),
- * plus the Airbnb listing link, kept as-is pending an explicit Owner
- * decision (see docs/HIL_COMPLETION_LOG.md, 2026-10-10 entry). The blog's
- * Organization `sameAs` (`hil-seo` plugin) was aligned on Facebook/Instagram/
- * TikTok as of v1.1.8 but needs its own separate update to add YouTube and
- * fix TikTok — it does not auto-follow this file.
+ * Instagram, TikTok, YouTube profiles — confirmed by Cedric, 2026-10-16).
+ * The pending Airbnb listing link flagged in the 2026-10-10 entry
+ * (docs/HIL_COMPLETION_LOG.md) was decided against by Cedric, 2026-10-22: no
+ * individual Airbnb listing link anywhere on haveninlipa.com, direct
+ * bookings only. The blog's Organization `sameAs` (`hil-seo` plugin) was
+ * aligned on Facebook/Instagram/TikTok as of v1.1.8 but needs its own
+ * separate update to add YouTube and fix TikTok — it does not auto-follow
+ * this file.
  */
-export const BUSINESS_SAME_AS: readonly string[] = [
-  ...SOCIAL_LINK_URLS,
-  "https://airbnb.com/h/fullhousebellavita",
-];
+export const BUSINESS_SAME_AS: readonly string[] = [...SOCIAL_LINK_URLS];
 
 export function buildLocalBusinessJsonLd() {
   return {
