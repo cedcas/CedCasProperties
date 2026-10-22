@@ -38,9 +38,17 @@ describe("social links — owner-approved profiles (2026-10-16)", () => {
     expect(BUSINESS_SAME_AS).toEqual(expect.arrayContaining(OWNER_APPROVED_URLS));
   });
 
-  it("the about-page Person sameAs is wired to the shared SOCIAL_LINK_URLS constant", () => {
+  it("the about-page Person sameAs is wired to the shared SOCIAL_LINK_URLS constant, no Airbnb (2026-10-22)", () => {
     const source = fs.readFileSync(path.join(SRC_DIR, "app/about/page.tsx"), "utf-8");
-    expect(source).toMatch(/sameAs:\s*\[\s*"https:\/\/airbnb\.com\/h\/fullhousebellavita",\s*\.\.\.SOCIAL_LINK_URLS,?\s*\]/);
+    expect(source).toMatch(/sameAs:\s*\[\s*\.\.\.SOCIAL_LINK_URLS,?\s*\]/);
+    expect(source).not.toContain("airbnb.com/h/fullhousebellavita");
+  });
+
+  it("the homepage CTA social row is wired to the shared SOCIAL_LINKS constant, no Airbnb (2026-10-22)", () => {
+    const source = fs.readFileSync(path.join(SRC_DIR, "app/page.tsx"), "utf-8");
+    expect(source).toMatch(/SOCIAL_LINKS\.map\(\(\{\s*icon,\s*name,\s*url\s*\}\)\s*=>/);
+    expect(source).not.toContain("fa-airbnb");
+    expect(source).not.toContain("airbnb.com/h/fullhousebellavita");
   });
 
   it("no stale '@haven_inlipa' TikTok URL remains anywhere in src", () => {
