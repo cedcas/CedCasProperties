@@ -97,10 +97,7 @@ const personJsonLd = {
     },
   },
   knowsLanguage: ["en", "fil"],
-  sameAs: [
-    "https://airbnb.com/h/fullhousebellavita",
-    ...SOCIAL_LINK_URLS,
-  ],
+  sameAs: [...SOCIAL_LINK_URLS],
 };
 
 export default async function AboutPage() {

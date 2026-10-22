@@ -4,6 +4,61 @@
 
 ---
 
+## 2026-10-22, later — Last two hardcoded Airbnb links removed: homepage CTA block + about-page Person `sameAs` (hil-pm/remove-airbnb-cta-about-102226)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/remove-airbnb-cta-about-102226` (based on
+`dev`, fast-forwarded to pick up PR #91/DEC-030 first since this branch started from an
+older `dev` snapshot; targets `dev`); committed, **not pushed, no PR opened** (explicit
+constraint on this task). `npm run lint`, `npx tsc --noEmit`, and the full `npx vitest run`
+suite are clean (204 test files / 4,059 tests, all three timezone projects). `npm run
+build` was not run (forbidden for this task); no database was touched; no `.env` file was
+read.
+
+### Outcome
+Cedric's same-day follow-up (2026-10-22) to [DEC-030](HIL_DECISIONS.md), which had
+deliberately left two call sites untouched because they don't read from the shared
+`src/lib/social-links.ts` list: the homepage CTA block's hardcoded Airbnb icon and the
+about-page Person JSON-LD's hardcoded Airbnb `sameAs` entry. Both are now removed, closing
+DEC-030's "known remaining inconsistency." No individual Airbnb listing link remains
+anywhere on `haveninlipa.com`.
+
+### Material Changes
+- **`src/app/page.tsx`** — the "Ready to Experience Our Comfort?" CTA block's social icon
+  row no longer appends a hardcoded `fa-airbnb` icon (`https://airbnb.com/h/fullhousebellavita`).
+  **Dropped, not replaced** with an on-site icon: the block already has two on-site CTAs
+  ("Book Your Stay Today" → `/#properties`, "Browse Properties" → `#properties`)
+  immediately above the icon row, and every other social-icon row in the app
+  (`Footer.tsx`, `ContactForm.tsx`) is `SOCIAL_LINKS`-only with no on-site entry mixed in —
+  adding a fifth icon here for `/properties` would have been the inconsistent choice. The
+  row's array-of-arrays indirection (needed only to splice in the one-off Airbnb entry) is
+  simplified to a direct `SOCIAL_LINKS.map(...)`.
+- **`src/app/about/page.tsx`** — the Person JSON-LD `sameAs` drops the hardcoded Airbnb
+  URL; now `sameAs: [...SOCIAL_LINK_URLS]`, matching `LodgingBusiness`'s `sameAs`. The
+  "Airbnb Superhost" prose mentions (lines ~49, ~172) are unchanged — this is a links/schema
+  change only, per DEC-030's own scope.
+- **Verified by grep:** no `airbnb.com` href/URL remains anywhere in `src/` except (a) the
+  admin `airbnbIcsUrl` calendar-import field placeholder (`PropertyForm.tsx`) — a
+  functional iCal-sync feature, not a marketing link — and (b) test fixtures that assert
+  Airbnb domains are *rejected* (Haven AI's link allowlist tests, and the new/updated
+  regression tests below).
+- **Tests:** `src/lib/__tests__/social-links.test.ts` — updated the about-page source-text
+  assertion (was pinned to the old Airbnb-plus-spread pattern; now asserts
+  `sameAs: [...SOCIAL_LINK_URLS]` and the absence of the Airbnb URL) and added an
+  equivalent source-text assertion for the homepage CTA block.
+  `src/lib/__tests__/homepage-cta-social-links.test.ts` (new) — renders the real `Home`
+  page component (mocking Prisma and the heavy child sections) and asserts the icon row
+  renders exactly the four owner-approved icons with no `fa-airbnb`/`airbnb.com`, and that
+  the two on-site CTA links are still present. `footer-social-links.test.ts`'s header
+  comment updated to stop describing these two spots as "flagged, not touched."
+- **Blog, recorded here for completeness (not built this session):** Cedric deployed
+  `hil-seo` 1.1.10 (built in the prior DEC-030 session, PR #91) live to
+  `blog.haveninlipa.com` via Hostinger on 2026-10-22 at approximately 7:40 AM CT. The
+  theme's Airbnb icon now points to `https://haveninlipa.com/properties` on the live blog.
+
+---
+
 ## 2026-10-22 — Footer social links (site-wide) + Airbnb icon removed from homepage + blog Airbnb link fixed (hil-seo 1.1.10) (hil-pm/footer-social-airbnb-102226)
 
 Area: Website | Blog

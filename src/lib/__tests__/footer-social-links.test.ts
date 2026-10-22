@@ -16,12 +16,12 @@ import { SOCIAL_LINKS } from "@/lib/social-links";
 import { BUSINESS_SAME_AS } from "@/lib/local-business-schema";
 
 /**
- * Cedric's decision, 2026-10-22: a site-wide footer social row (Facebook,
- * Instagram, TikTok, YouTube — no Airbnb) on haveninlipa.com, and the Airbnb
- * icon removed from the homepage "Find Us Online" row (ContactForm.tsx).
- * The CTA block (src/app/page.tsx) and the about-page Person `sameAs` keep
- * their existing Airbnb link — flagged for Cedric, not touched by this
- * decision (see PR description / HIL_COMPLETION_LOG.md).
+ * Cedric's decision, 2026-10-22 (DEC-030): a site-wide footer social row
+ * (Facebook, Instagram, TikTok, YouTube — no Airbnb) on haveninlipa.com, and
+ * the Airbnb icon removed from the homepage "Find Us Online" row
+ * (ContactForm.tsx). Follow-up the same day: the homepage CTA block
+ * (src/app/page.tsx) and the about-page Person `sameAs` also drop their
+ * remaining hardcoded Airbnb link (see HIL_COMPLETION_LOG.md).
  */
 async function renderFooter(): Promise<string> {
   vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
