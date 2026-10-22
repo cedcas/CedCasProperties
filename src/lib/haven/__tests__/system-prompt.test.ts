@@ -222,6 +222,37 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  // Owner incident, 2026-10-22: a plain "what properties do you have?" sometimes got
+  // answered from memory — only the two B34 units, with wrong capacities, and once an
+  // invented price that the price guard replaced with the generic Messenger-fee fallback
+  // inside a property bullet.
+  describe("property overview rule (Cedric, 2026-10-22 incident)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("forbids naming/counting/describing properties from memory, pointing to the listings note or list_properties", () => {
+      expect(prompt).toMatch(/never name, count, or describe our properties\/inventory from memory/i);
+      expect(prompt).toMatch(/Context \(public listings, authoritative/i);
+      expect(prompt).toMatch(/call list_properties yourself/i);
+    });
+
+    it("requires every overview reply to list all listings with real capacity and 'from ₱X/night'", () => {
+      expect(prompt).toMatch(/list EVERY public listing/i);
+      expect(prompt).toMatch(/simula ₱X kada gabi/);
+      expect(prompt).toMatch(/anong property\/properties/i);
+    });
+
+    it("allows the two-building fact but still requires every listing named individually", () => {
+      expect(prompt).toMatch(/Bella Vita subdivision/i);
+      expect(prompt).toMatch(/Block 34/i);
+      expect(prompt).toMatch(/Block 38/i);
+      expect(prompt).toMatch(/must still name every one of the 5 listings individually/i);
+    });
+
+    it("forbids the Messenger-fee fallback from standing in for a real property price", () => {
+      expect(prompt).toMatch(/never let a hallucinated or unverified price inside a property-listing bullet/i);
+    });
+  });
+
   // Owner incident, 2026-10-16: Haven said "(provisional lang — tutuklasin ng tama sa
   // checkout)" — banned outright in favor of plain, conversational Tagalog/Batangueño.
   describe("plain-language rule / checkout caveat (Cedric, 2026-10-16)", () => {
