@@ -31,6 +31,7 @@ import {
   fixDadalawPhrasing,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
+  replaceSikatSaInyo,
   stripSystemMentions,
   fixBellaVitaMiscount,
   isEnglishContext,
@@ -448,7 +449,11 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // checkout") in favor of Haven's plain, conversational voice — independent backstop for
   // system-prompt.ts's PLAIN_LANGUAGE_RULE.
   const tuklasinFixed = replaceTuklasinFamily(dadalawFixed, englishMode);
-  const plainLanguageFixed = simplifyDeepTagalogWords(tuklasinFixed);
+  // Owner incident (2026-10-23): ban "sikat sa inyo/iyo/'yo" ("what appeals to you") — not a
+  // real Tagalog/Batangueño idiom — independent backstop for system-prompt.ts's
+  // PLAIN_LANGUAGE_RULE, same wiring as replaceTuklasinFamily above.
+  const sikatFixed = replaceSikatSaInyo(tuklasinFixed);
+  const plainLanguageFixed = simplifyDeepTagalogWords(sikatFixed);
   // Haven must never describe her own backend to a guest ("the system"/"ang system"/
   // "sa system"/"our system") — independent backstop for the rule in system-prompt.ts.
   const systemMentionsStripped = stripSystemMentions(plainLanguageFixed);

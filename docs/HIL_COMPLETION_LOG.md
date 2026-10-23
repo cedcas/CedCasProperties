@@ -4,7 +4,40 @@
 
 ---
 
-## 2026-10-23, latest — Haven AI Bella Vita grouping correction: "3 Mickey in Lipa" + "2 Original Haven in Lipa," all in Bella Vita (hil-pm/haven-listing-grouping-102326)
+## 2026-10-23, latest — Haven AI "sikat sa inyo" ban (hil-pm/haven-sikat-102326)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/haven-sikat-102326` (from `dev` at `15ac8f0`);
+targets `dev`. Lint, `tsc --noEmit`, and the full `npx vitest run` suite are clean (210
+files / 4,326 tests across all three timezone projects). No schema change, no `.env` file
+was read, no push/PR/merge (explicit task constraints for this session).
+
+### Outcome
+Fixes an Owner-reported wording bug (Cedric, 2026-10-23): Haven asked "Anong sikat sa
+inyo, o ilang guests ang dadalhan ninyo?" — "sikat sa inyo"/"sikat sa iyo"/"sikat sa'yo"
+("what appeals to you") is not a real Tagalog/Batangueño idiom. Addendum to the 2026-10-16
+plain-language pass (tutuklasin ban) below — same guard pattern, same post-process chain
+position. Full detail: [DEC-029 addendum](HIL_DECISIONS.md).
+
+### Material Changes
+- **`src/lib/haven/system-prompt.ts`** — `PLAIN_LANGUAGE_RULE` gained a clause banning
+  "sikat sa inyo/iyo/'yo," naming "Ano ang type ninyo?"/"Alin ang gusto ninyo?" as the
+  plain replacements, and clarifying a standalone "sikat" (e.g. "sikat na kainan") is
+  unaffected.
+- **`src/lib/haven/post-process.ts`** — new `replaceSikatSaInyo()`: the exact incident
+  question form ("anong"/"ano ang" + "sikat sa inyo/iyo/'yo") maps to "ano ang type
+  ninyo"; any other "sikat sa inyo/iyo/'yo" occurrence maps to "gusto ninyo."
+- **`src/lib/haven/chat-service.ts`** — wired right after `replaceTuklasinFamily()`, before
+  `simplifyDeepTagalogWords()`.
+- **Tests**: `post-process.test.ts` (exact owner sentence, the question-form mapping, the
+  generic fallback, "sikat na kainan" and "Tinutulungan kita mamili" left untouched),
+  `system-prompt.test.ts` (prompt bans the phrase and names both replacements, Batangueño
+  few-shot block carries none of it).
+
+---
+
+## 2026-10-23 — Haven AI Bella Vita grouping correction: "3 Mickey in Lipa" + "2 Original Haven in Lipa," all in Bella Vita (hil-pm/haven-listing-grouping-102326)
 
 Area: Website
 

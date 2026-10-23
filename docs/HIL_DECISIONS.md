@@ -806,8 +806,34 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-22 on `hil-pm/haven-property-list-102226`, and 2026-10-23 on `hil-pm/haven-listing-grouping-102326` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, and 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-23 "sikat sa inyo" ban — addendum to the 2026-10-16 plain-Tagalog pass)
+Owner incident (Cedric, 2026-10-23): Haven asked "Anong sikat sa inyo, o ilang guests ang
+dadalhan ninyo?" — "sikat sa inyo" (and the "sikat sa iyo"/"sikat sa'yo" variants), meaning
+"what appeals to you"/"which do you like," is not a real Tagalog/Batangueño idiom a local
+host would use. Same philosophy as the 2026-10-16 plain-language pass below (tutuklasin):
+a prompt instruction plus an independent post-process backstop, closed without changing the
+decision itself. "Tinutulungan kita mamili" (a legitimate existing phrase) and a standalone
+"sikat" (e.g. "sikat na kainan," a popular restaurant) are unaffected; no greeting/opener
+text was touched.
+- **`system-prompt.ts`:** `PLAIN_LANGUAGE_RULE` gained a clause banning "sikat sa
+  inyo"/"sikat sa iyo"/"sikat sa'yo" for "what appeals to you," naming "Ano ang type
+  ninyo?"/"Alin ang gusto ninyo?" as the plain replacements, right next to the existing
+  tutuklasin ban.
+- **`post-process.ts`:** new `replaceSikatSaInyo()` — the "anong"/"ano ang" + "sikat sa
+  inyo/iyo/'yo" question form (the exact incident phrasing) maps to "ano ang type ninyo";
+  any other "sikat sa inyo/iyo/'yo" occurrence maps to "gusto ninyo." Both regexes require
+  "sikat sa" immediately before the pronoun, so a bare "sikat" never matches.
+- **`chat-service.ts`:** wired right after `replaceTuklasinFamily()`, before
+  `simplifyDeepTagalogWords()`, same post-process chain position as the other plain-language
+  backstops.
+- Tests: `post-process.test.ts` (exact owner sentence, the "ano ang"/"anong" question form,
+  the generic fallback, "sikat na kainan" and "Tinutulungan kita mamili" left untouched),
+  `system-prompt.test.ts` (prompt bans the phrase and names both replacements, few-shot block
+  carries no "sikat sa"). Full suite green (210 files, 4,326 tests); `tsc --noEmit` and
+  `eslint` clean. Committed, not pushed, no PR (task constraint for this session).
 
 ### Implementation note (2026-10-23 Bella Vita grouping correction)
 Owner correction, same day (Cedric): the 2026-10-22 property-overview fix's own

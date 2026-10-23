@@ -719,6 +719,26 @@ export function simplifyDeepTagalogWords(text: string): string {
   return out.replace(TUNAY_NA_RE, (match) => capitalizeLike(match, "talagang"));
 }
 
+/**
+ * Owner incident (Cedric, 2026-10-23): Haven asked "Anong sikat sa inyo, o ilang guests ang
+ * dadalhan ninyo?" — "sikat sa inyo/iyo/'yo" meaning "what appeals to you" is not a real
+ * Tagalog/Batangueño idiom a local host would use. The "anong"/"ano ang" + "sikat sa
+ * inyo/iyo/'yo" question form (the exact incident phrasing) maps to "Ano ang type ninyo",
+ * matching the owner's suggested replacement; any OTHER "sikat sa inyo/iyo/'yo" occurrence
+ * (not part of that question form) falls back to "gusto ninyo". Both regexes require
+ * "sikat sa" immediately before the pronoun, so a legitimate standalone "sikat" (e.g. "sikat
+ * na kainan" — a popular restaurant) never matches. Independent backstop for the
+ * `PLAIN_LANGUAGE_RULE` instruction in system-prompt.ts, same wiring as `replaceTuklasinFamily`.
+ */
+const SIKAT_TYPE_QUESTION_RE = /\b(?:anong|ano\s+ang)\s+sikat\s+sa\s*(?:inyo|iyo|'yo)\b/gi;
+const SIKAT_SA_INYO_RE = /\bsikat\s+sa\s*(?:inyo|iyo|'yo)\b/gi;
+
+export function replaceSikatSaInyo(text: string): string {
+  return text
+    .replace(SIKAT_TYPE_QUESTION_RE, (match) => capitalizeLike(match, "ano ang type ninyo"))
+    .replace(SIKAT_SA_INYO_RE, (match) => capitalizeLike(match, "gusto ninyo"));
+}
+
 // ── Batangueño marker check ──────────────────────────────────────────────────
 
 /**
