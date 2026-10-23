@@ -24,6 +24,7 @@ import {
   PROVISIONAL_CAVEAT_EN,
   PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
+  fixBellaVitaMiscount,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -985,6 +986,41 @@ describe("stripSystemMentions", () => {
   it("is a no-op when there's no system mention", () => {
     const input = "We have availability for that stay. Want me to help you book it?";
     expect(stripSystemMentions(input)).toBe(input);
+  });
+});
+
+// Owner correction (Cedric, 2026-10-23): Haven kept saying "2 Bella Vita properties" / "two
+// in the Bella Vita subdivision", implying only some of the 5 listings share that
+// subdivision. All 5 do. Cheap backstop for exactly the miscounted phrasings flagged.
+describe("fixBellaVitaMiscount", () => {
+  it('rewrites "2 Bella Vita properties"', () => {
+    const result = fixBellaVitaMiscount("We have 2 Bella Vita properties available.");
+    expect(result).toBe("We have listings in the Bella Vita subdivision available.");
+  });
+
+  it('rewrites "two Bella Vita houses"', () => {
+    const result = fixBellaVitaMiscount("Haven has two Bella Vita houses.");
+    expect(result).toBe("Haven has listings in the Bella Vita subdivision.");
+  });
+
+  it('rewrites "two in the Bella Vita subdivision"', () => {
+    const result = fixBellaVitaMiscount("Only two in the Bella Vita subdivision are bookable this week.");
+    expect(result).toBe("Only listings in the Bella Vita subdivision are bookable this week.");
+  });
+
+  it('rewrites the Tagalog "dalawang Bella Vita listings"', () => {
+    const result = fixBellaVitaMiscount("May dalawang Bella Vita listings kami.");
+    expect(result).toBe("May listings in the Bella Vita subdivision kami.");
+  });
+
+  it("is a no-op when all 5 listings are correctly described as being in Bella Vita", () => {
+    const input = "All 5 of our listings are in the Bella Vita subdivision.";
+    expect(fixBellaVitaMiscount(input)).toBe(input);
+  });
+
+  it("does not touch an unrelated mention of the number two near Bella Vita", () => {
+    const input = "We've been in the Bella Vita subdivision for two years.";
+    expect(fixBellaVitaMiscount(input)).toBe(input);
   });
 });
 

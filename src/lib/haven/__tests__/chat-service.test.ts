@@ -1080,6 +1080,40 @@ describe("handleHavenChat — property overview (DEC-029, Oct 22 2026 incident)"
     expect(system).toContain("from ₱9,500/night");
   });
 
+  // Owner correction, 2026-10-23: Haven kept saying "2 Bella Vita properties" / "two in the
+  // Bella Vita subdivision" — all 5 listings are in Bella Vita, grouped as 3 Mickey in Lipa
+  // listings + 2 Original Haven in Lipa listings, never "Bella Vita properties".
+  it("groups the listings context note as Mickey in Lipa (3) and Original Haven in Lipa (2), all in Bella Vita", async () => {
+    providerChat.mockResolvedValue({
+      text: "Here they are!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Hi, what properties do you have?" }] }),
+      "1.2.3.4"
+    );
+
+    const system = providerChat.mock.calls[0][0].system as string;
+    expect(system).toMatch(/ALL of these are in\s+the Bella Vita subdivision/i);
+    expect(system).not.toMatch(/\btwo\s+Bella Vita\b/i);
+    // "Bella Vita properties" only appears quoted inside the instruction never to say it —
+    // never as an unquoted, standalone group label.
+    expect(system).not.toMatch(/\bare\s+Bella\s+Vita\s+properties\b/i);
+    expect(system).toContain("Mickey in Lipa listings (3):");
+    expect(system).toContain("Original Haven in Lipa listings (2):");
+    const mickeyHeaderIndex = system.indexOf("Mickey in Lipa listings (3):");
+    const originalHavenHeaderIndex = system.indexOf("Original Haven in Lipa listings (2):");
+    const mickeyFamilyIndex = system.indexOf("Mickey in Lipa — Family Staycation");
+    const cozyIndex = system.indexOf("Cozy 1BR Haven");
+    expect(mickeyHeaderIndex).toBeGreaterThan(-1);
+    expect(mickeyFamilyIndex).toBeGreaterThan(mickeyHeaderIndex);
+    expect(cozyIndex).toBeGreaterThan(originalHavenHeaderIndex);
+  });
+
   it("falls back to instructing a list_properties call when the listings fetch fails", async () => {
     listingsApi.getPublicListings.mockRejectedValueOnce(new Error("db down"));
     providerChat.mockResolvedValue({
