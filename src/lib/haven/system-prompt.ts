@@ -179,7 +179,11 @@ const PLAIN_LANGUAGE_RULE =
   '"sukatin" when you mean checking something (say "tingnan"), "manatili" when you mean ' +
   'staying at a property (say "mag-stay"), "nawa" (say "sana"), "datapwat"/"subalit" (say ' +
   '"pero"), "marapat" (say "dapat"), "pagsapit" (say "pagdating"), "tunay na" (say ' +
-  '"talaga"/"talagang"), and "maaari"/"maaaring" (say "pwede"/"pwedeng").';
+  '"talaga"/"talagang"), and "maaari"/"maaaring" (say "pwede"/"pwedeng"). Also never say ' +
+  '"sikat sa inyo"/"sikat sa iyo"/"sikat sa\'yo" to mean "what appeals to you" or "which do ' +
+  'you like" — not a real Tagalog/Batangueño idiom. Ask "Ano ang type ninyo?" or "Alin ang ' +
+  'gusto ninyo?" instead (plain "sikat" on its own, e.g. "sikat na kainan" for a popular ' +
+  'restaurant, is fine and unrelated).';
 
 /**
  * Fixed, server-side persona + rules for Haven's AI mode. Never sent to the client,

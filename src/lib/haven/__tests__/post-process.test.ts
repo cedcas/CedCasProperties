@@ -21,6 +21,7 @@ import {
   fixDadalawPhrasing,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
+  replaceSikatSaInyo,
   PROVISIONAL_CAVEAT_EN,
   PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
@@ -924,6 +925,42 @@ describe("replaceTuklasinFamily (owner incident, 2026-10-16)", () => {
   it("is a no-op when there's no 'tuklas' root present", () => {
     const input = "Provisional lang ito, kukumpirmahin sa checkout.";
     expect(replaceTuklasinFamily(input, false)).toBe(input);
+  });
+});
+
+describe("replaceSikatSaInyo (owner incident, 2026-10-23)", () => {
+  it("replaces the exact owner incident sentence", () => {
+    const input = "Anong sikat sa inyo, o ilang guests ang dadalhan ninyo?";
+    expect(replaceSikatSaInyo(input)).toBe("Ano ang type ninyo, o ilang guests ang dadalhan ninyo?");
+  });
+
+  it("maps 'ano ang sikat sa inyo/iyo' to 'ano ang type ninyo', preserving case", () => {
+    expect(replaceSikatSaInyo("Ano ang sikat sa inyo?")).toBe("Ano ang type ninyo?");
+    expect(replaceSikatSaInyo("ano ang sikat sa iyo?")).toBe("ano ang type ninyo?");
+    expect(replaceSikatSaInyo("Anong sikat sa'yo?")).toBe("Ano ang type ninyo?");
+  });
+
+  it("maps any other 'sikat sa inyo/iyo/'yo' occurrence to 'gusto ninyo'", () => {
+    expect(replaceSikatSaInyo("Alamin natin ang sikat sa inyo bago mag-book.")).toBe(
+      "Alamin natin ang gusto ninyo bago mag-book."
+    );
+    expect(replaceSikatSaInyo("Malalaman namin ang sikat sa iyo.")).toBe("Malalaman namin ang gusto ninyo.");
+    expect(replaceSikatSaInyo("Sikat sa'yo ba ang Mickey in Lipa?")).toBe("Gusto ninyo ba ang Mickey in Lipa?");
+  });
+
+  it("leaves a legitimate standalone 'sikat' untouched", () => {
+    const input = "May sikat na kainan malapit sa amin.";
+    expect(replaceSikatSaInyo(input)).toBe(input);
+  });
+
+  it("leaves 'Tinutulungan kita mamili' untouched", () => {
+    const input = "Tinutulungan kita mamili ng tamang property para sa inyo.";
+    expect(replaceSikatSaInyo(input)).toBe(input);
+  });
+
+  it("is a no-op when there's no 'sikat sa inyo/iyo' phrasing", () => {
+    const input = "Ano ang type ninyo?";
+    expect(replaceSikatSaInyo(input)).toBe(input);
   });
 });
 

@@ -302,4 +302,27 @@ describe("buildHavenSystemPrompt", () => {
       expect(fewshot).not.toMatch(/tuklas|sukatin|manatili|\bnawa\b|datapwat|subalit|marapat|pagsapit|tunay\s+na|maaari/i);
     });
   });
+
+  // Owner incident, 2026-10-23: Haven said "Anong sikat sa inyo, o ilang guests ang
+  // dadalhan ninyo?" — not a real Tagalog/Batangueño idiom.
+  describe("'sikat sa inyo' ban (Cedric, 2026-10-23)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("bans 'sikat sa inyo/iyo/'yo' and names the plain replacements", () => {
+      expect(prompt).toMatch(/"sikat sa inyo"\/"sikat sa iyo"\/"sikat sa'yo"/i);
+      expect(prompt).toMatch(/what appeals to you/i);
+      expect(prompt).toMatch(/Ano ang type ninyo\?/);
+      expect(prompt).toMatch(/Alin ang gusto ninyo\?/);
+    });
+
+    it("clarifies a standalone 'sikat' (e.g. a popular restaurant) is unaffected", () => {
+      expect(prompt).toMatch(/sikat na kainan/i);
+    });
+
+    it("the Batangueño few-shot block contains no 'sikat sa' phrasing", () => {
+      const btgPrompt = buildHavenSystemPrompt("btg");
+      const fewshot = btgPrompt.slice(btgPrompt.indexOf("Example exchanges"), btgPrompt.indexOf("Owner-approved facts"));
+      expect(fewshot).not.toMatch(/sikat\s+sa/i);
+    });
+  });
 });

@@ -1,6 +1,19 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-23, latest (Haven AI: Bella Vita grouping correction, branch
+> **Last updated:** 2026-10-23, latest (Haven AI: "sikat sa inyo" ban, branch
+> `hil-pm/haven-sikat-102326`, DEC-029 addendum — Owner-reported: Haven asked "Anong sikat
+> sa inyo, o ilang guests ang dadalhan ninyo?"; "sikat sa inyo"/"sikat sa iyo"/"sikat
+> sa'yo" meaning "what appeals to you" is not a real Tagalog/Batangueño idiom):
+> [Haven AI Chat](#haven-ai-chat) — addendum to the 2026-10-16 plain-language pass below.
+> `system-prompt.ts`'s `PLAIN_LANGUAGE_RULE` gained a clause banning the phrase and naming
+> "Ano ang type ninyo?"/"Alin ang gusto ninyo?" as the plain replacements. New
+> `post-process.ts` backstop `replaceSikatSaInyo()`: the exact incident question form
+> ("anong"/"ano ang" + "sikat sa inyo/iyo/'yo") maps to "ano ang type ninyo"; any other
+> "sikat sa inyo/iyo/'yo" occurrence maps to "gusto ninyo" — both regexes require "sikat
+> sa" immediately before the pronoun, so a standalone "sikat" (e.g. "sikat na kainan," a
+> popular restaurant) never matches. Wired into `chat-service.ts` right after
+> `replaceTuklasinFamily()`. Lint/typecheck/`vitest run` clean (4,326 tests).
+> Prior: 2026-10-23 (Haven AI: Bella Vita grouping correction, branch
 > `hil-pm/haven-listing-grouping-102326`, DEC-029 addendum — Owner-reported: Haven kept
 > saying "2 Bella Vita properties" / "two in the Bella Vita subdivision," wrongly implying
 > only some of the 5 listings share that subdivision; all 5 do): [Haven AI Chat](#haven-ai-chat)
@@ -2428,7 +2441,14 @@ buttons and "Talk to a Human" link are unaffected either way.
   pass; independent backstops `post-process.ts`'s `replaceTuklasinFamily()` — which swaps
   the WHOLE sentence/bullet line for the standard provisional/checkout caveat above, since
   every live occurrence of the "tuklas" root was this exact caveat — and
-  `simplifyDeepTagalogWords()` — a word-level swap for the rest, below)*. Language
+  `simplifyDeepTagalogWords()` — a word-level swap for the rest, below)*. Also banned:
+  "sikat sa inyo"/"sikat sa iyo"/"sikat sa'yo" to mean "what appeals to you"/"which do you
+  like" — not a real idiom, per an Owner incident where Haven asked "Anong sikat sa inyo, o
+  ilang guests ang dadalhan ninyo?" — say "Ano ang type ninyo?" or "Alin ang gusto ninyo?"
+  instead; a standalone "sikat" (e.g. "sikat na kainan," a popular restaurant) is unaffected
+  *(addendum, 2026-10-23, same `PLAIN_LANGUAGE_RULE`; independent backstop
+  `post-process.ts`'s `replaceSikatSaInyo()` — the exact incident question form maps to "ano
+  ang type ninyo", any other occurrence maps to "gusto ninyo", below)*. Language
   mode (`en`/`tl`/`btg`/`auto`) is a parameter, not a separate prompt per language.
   **Terms of address** *(policy added 2026-10-14)*: "partner"/"pare"/"bro"/"sis"/"dude" are
   banned unless the guest used that exact word first; "parekoy" (male) / "marekoy" (female)
@@ -2694,6 +2714,17 @@ buttons and "Talk to a Human" link are unaffected either way.
   `system-prompt.ts` already imports `owner-facts.ts`, which imports `post-process.ts`.
   Both run in `chat-service.ts` right after `fixDadalawPhrasing()`, before
   `stripSystemMentions()`.
+  `replaceSikatSaInyo(text)` *(added 2026-10-23, addendum to the same plain-language pass,
+  branch `hil-pm/haven-sikat-102326`)* is the independent backstop fixing the Owner
+  incident where Haven asked "Anong sikat sa inyo, o ilang guests ang dadalhan ninyo?" —
+  "sikat sa inyo"/"sikat sa iyo"/"sikat sa'yo" ("what appeals to you") is not a real
+  Tagalog/Batangueño idiom. Two regexes, both requiring "sikat sa" immediately before the
+  pronoun so a standalone "sikat" (e.g. "sikat na kainan") never matches: the exact incident
+  question form ("anong"/"ano ang" + "sikat sa inyo/iyo/'yo") is replaced with "ano ang type
+  ninyo"; any other "sikat sa inyo/iyo/'yo" occurrence is replaced with "gusto ninyo" —
+  both capitalization-preserving, same `capitalizeLike()` helper as the other word-level
+  guards. Runs in `chat-service.ts` right after `replaceTuklasinFamily()`, before
+  `simplifyDeepTagalogWords()`.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);
