@@ -21,9 +21,11 @@ import {
   fixDadalawPhrasing,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
+  replaceSikatSaInyo,
   PROVISIONAL_CAVEAT_EN,
   PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
+  fixBellaVitaMiscount,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -926,6 +928,42 @@ describe("replaceTuklasinFamily (owner incident, 2026-10-16)", () => {
   });
 });
 
+describe("replaceSikatSaInyo (owner incident, 2026-10-23)", () => {
+  it("replaces the exact owner incident sentence", () => {
+    const input = "Anong sikat sa inyo, o ilang guests ang dadalhan ninyo?";
+    expect(replaceSikatSaInyo(input)).toBe("Ano ang type ninyo, o ilang guests ang dadalhan ninyo?");
+  });
+
+  it("maps 'ano ang sikat sa inyo/iyo' to 'ano ang type ninyo', preserving case", () => {
+    expect(replaceSikatSaInyo("Ano ang sikat sa inyo?")).toBe("Ano ang type ninyo?");
+    expect(replaceSikatSaInyo("ano ang sikat sa iyo?")).toBe("ano ang type ninyo?");
+    expect(replaceSikatSaInyo("Anong sikat sa'yo?")).toBe("Ano ang type ninyo?");
+  });
+
+  it("maps any other 'sikat sa inyo/iyo/'yo' occurrence to 'gusto ninyo'", () => {
+    expect(replaceSikatSaInyo("Alamin natin ang sikat sa inyo bago mag-book.")).toBe(
+      "Alamin natin ang gusto ninyo bago mag-book."
+    );
+    expect(replaceSikatSaInyo("Malalaman namin ang sikat sa iyo.")).toBe("Malalaman namin ang gusto ninyo.");
+    expect(replaceSikatSaInyo("Sikat sa'yo ba ang Mickey in Lipa?")).toBe("Gusto ninyo ba ang Mickey in Lipa?");
+  });
+
+  it("leaves a legitimate standalone 'sikat' untouched", () => {
+    const input = "May sikat na kainan malapit sa amin.";
+    expect(replaceSikatSaInyo(input)).toBe(input);
+  });
+
+  it("leaves 'Tinutulungan kita mamili' untouched", () => {
+    const input = "Tinutulungan kita mamili ng tamang property para sa inyo.";
+    expect(replaceSikatSaInyo(input)).toBe(input);
+  });
+
+  it("is a no-op when there's no 'sikat sa inyo/iyo' phrasing", () => {
+    const input = "Ano ang type ninyo?";
+    expect(replaceSikatSaInyo(input)).toBe(input);
+  });
+});
+
 describe("simplifyDeepTagalogWords (plain-language pass, 2026-10-16)", () => {
   it("replaces each banned deep word with its plain conversational equivalent", () => {
     expect(simplifyDeepTagalogWords("Sukatin ko muna ang petsa.")).toBe("Tingnan ko muna ang petsa.");
@@ -985,6 +1023,41 @@ describe("stripSystemMentions", () => {
   it("is a no-op when there's no system mention", () => {
     const input = "We have availability for that stay. Want me to help you book it?";
     expect(stripSystemMentions(input)).toBe(input);
+  });
+});
+
+// Owner correction (Cedric, 2026-10-23): Haven kept saying "2 Bella Vita properties" / "two
+// in the Bella Vita subdivision", implying only some of the 5 listings share that
+// subdivision. All 5 do. Cheap backstop for exactly the miscounted phrasings flagged.
+describe("fixBellaVitaMiscount", () => {
+  it('rewrites "2 Bella Vita properties"', () => {
+    const result = fixBellaVitaMiscount("We have 2 Bella Vita properties available.");
+    expect(result).toBe("We have listings in the Bella Vita subdivision available.");
+  });
+
+  it('rewrites "two Bella Vita houses"', () => {
+    const result = fixBellaVitaMiscount("Haven has two Bella Vita houses.");
+    expect(result).toBe("Haven has listings in the Bella Vita subdivision.");
+  });
+
+  it('rewrites "two in the Bella Vita subdivision"', () => {
+    const result = fixBellaVitaMiscount("Only two in the Bella Vita subdivision are bookable this week.");
+    expect(result).toBe("Only listings in the Bella Vita subdivision are bookable this week.");
+  });
+
+  it('rewrites the Tagalog "dalawang Bella Vita listings"', () => {
+    const result = fixBellaVitaMiscount("May dalawang Bella Vita listings kami.");
+    expect(result).toBe("May listings in the Bella Vita subdivision kami.");
+  });
+
+  it("is a no-op when all 5 listings are correctly described as being in Bella Vita", () => {
+    const input = "All 5 of our listings are in the Bella Vita subdivision.";
+    expect(fixBellaVitaMiscount(input)).toBe(input);
+  });
+
+  it("does not touch an unrelated mention of the number two near Bella Vita", () => {
+    const input = "We've been in the Bella Vita subdivision for two years.";
+    expect(fixBellaVitaMiscount(input)).toBe(input);
   });
 });
 

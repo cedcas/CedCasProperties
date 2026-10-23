@@ -1,6 +1,30 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-23 (admin Haven Chats viewer, branch
+> **Last updated:** 2026-10-23, latest (Haven AI: "sikat sa inyo" ban, branch
+> `hil-pm/haven-sikat-102326`, DEC-029 addendum — Owner-reported: Haven asked "Anong sikat
+> sa inyo, o ilang guests ang dadalhan ninyo?"; "sikat sa inyo"/"sikat sa iyo"/"sikat
+> sa'yo" meaning "what appeals to you" is not a real Tagalog/Batangueño idiom):
+> [Haven AI Chat](#haven-ai-chat) — addendum to the 2026-10-16 plain-language pass below.
+> `system-prompt.ts`'s `PLAIN_LANGUAGE_RULE` gained a clause banning the phrase and naming
+> "Ano ang type ninyo?"/"Alin ang gusto ninyo?" as the plain replacements. New
+> `post-process.ts` backstop `replaceSikatSaInyo()`: the exact incident question form
+> ("anong"/"ano ang" + "sikat sa inyo/iyo/'yo") maps to "ano ang type ninyo"; any other
+> "sikat sa inyo/iyo/'yo" occurrence maps to "gusto ninyo" — both regexes require "sikat
+> sa" immediately before the pronoun, so a standalone "sikat" (e.g. "sikat na kainan," a
+> popular restaurant) never matches. Wired into `chat-service.ts` right after
+> `replaceTuklasinFamily()`. Lint/typecheck/`vitest run` clean (4,326 tests).
+> Prior: 2026-10-23 (Haven AI: Bella Vita grouping correction, branch
+> `hil-pm/haven-listing-grouping-102326`, DEC-029 addendum — Owner-reported: Haven kept
+> saying "2 Bella Vita properties" / "two in the Bella Vita subdivision," wrongly implying
+> only some of the 5 listings share that subdivision; all 5 do): [Haven AI Chat](#haven-ai-chat)
+> — Haven now groups the 5 listings as "3 Mickey in Lipa listings" + "2 Original Haven in
+> Lipa listings," states ALL 5 are in Bella Vita, never calls either group "Bella Vita
+> properties," and prefers the new group names over "Block 34"/"Block 38" in a guest-facing
+> reply; `listingsContextNote()` splits under the same two headings; a new, narrow
+> `post-process.ts` backstop (`fixBellaVitaMiscount()`) rewrites exactly the two miscounted
+> phrasings reported. No change to the physical-house inventory model (DEC-001) — wording
+> only. Lint/typecheck/`vitest run` clean (4,299 tests, 27 new).
+> Prior: 2026-10-23 (admin Haven Chats viewer, branch
 > `hil-pm/admin-haven-chats-102326`) — new strictly read-only `/admin/haven-chats` (list) +
 > `/admin/haven-chats/[sessionId]` (detail) for reviewing `HavenChatTranscript`/
 > `HavenChatUsage` data: grouped-by-session list (Prisma `groupBy`, paginated server-side,
@@ -2417,7 +2441,14 @@ buttons and "Talk to a Human" link are unaffected either way.
   pass; independent backstops `post-process.ts`'s `replaceTuklasinFamily()` — which swaps
   the WHOLE sentence/bullet line for the standard provisional/checkout caveat above, since
   every live occurrence of the "tuklas" root was this exact caveat — and
-  `simplifyDeepTagalogWords()` — a word-level swap for the rest, below)*. Language
+  `simplifyDeepTagalogWords()` — a word-level swap for the rest, below)*. Also banned:
+  "sikat sa inyo"/"sikat sa iyo"/"sikat sa'yo" to mean "what appeals to you"/"which do you
+  like" — not a real idiom, per an Owner incident where Haven asked "Anong sikat sa inyo, o
+  ilang guests ang dadalhan ninyo?" — say "Ano ang type ninyo?" or "Alin ang gusto ninyo?"
+  instead; a standalone "sikat" (e.g. "sikat na kainan," a popular restaurant) is unaffected
+  *(addendum, 2026-10-23, same `PLAIN_LANGUAGE_RULE`; independent backstop
+  `post-process.ts`'s `replaceSikatSaInyo()` — the exact incident question form maps to "ano
+  ang type ninyo", any other occurrence maps to "gusto ninyo", below)*. Language
   mode (`en`/`tl`/`btg`/`auto`) is a parameter, not a separate prompt per language.
   **Terms of address** *(policy added 2026-10-14)*: "partner"/"pare"/"bro"/"sis"/"dude" are
   banned unless the guest used that exact word first; "parekoy" (male) / "marekoy" (female)
@@ -2500,13 +2531,28 @@ buttons and "Talk to a Human" link are unaffected either way.
   system-prompt block every turn from the `publicListings` already fetched for property
   pre-resolution (above) — one line per listing with its `shortName`, slug, bedrooms,
   `maxGuests`, and "from ₱X/night", or (if the fetch failed/returned empty) a note saying so
-  and instructing the model to call `list_properties` itself; `system-prompt.ts`'s new
+  and instructing the model to call `list_properties` itself; `system-prompt.ts`'s
   `PROPERTY_OVERVIEW_RULE` tells the model never to name/count/describe properties from
   memory, to use this note (or `list_properties`) for any overview question in English or
-  Tagalog/Batangueño, to name every listing (never only some), and that it may state the
-  two-building fact (Block 34 = Cozy 1BR + Spacious 2BR, Block 38 "Mickey in Lipa" = the
-  three Sleeps-7/11/15 configurations) only as *additional* context, never a substitute for
-  the full per-listing list. (2) `basePricesFromListings()` folds every fetched listing's own
+  Tagalog/Batangueño, to name every listing (never only some), and that it may state a
+  grouping fact only as *additional* context, never a substitute for the full per-listing
+  list. **Bella Vita grouping correction** *(added 2026-10-23, same DEC-029 addendum —
+  Owner-reported: Haven kept saying "2 Bella Vita properties" / "two in the Bella Vita
+  subdivision," wrongly implying only some of the 5 listings share that subdivision; all 5
+  do)*: the grouping fact is now "3 Mickey in Lipa listings" (the three
+  `mickey-in-lipa-*` Sleeps-7/11/15 configurations) + "2 Original Haven in Lipa listings"
+  (`cozy-1-bedroom`, `spacious-2-bedroom`), with an explicit instruction to say ALL 5 are in
+  Bella Vita, never imply only some/2 are, never call either group "Bella Vita properties,"
+  and prefer the new group names over "Block 34"/"Block 38" labels in a guest-facing reply
+  (the persona line at the top of the prompt now also names the subdivision). The listings
+  context note itself (above) is now split under the same two headings rather than a flat
+  list, and opens with "ALL of these are in the Bella Vita subdivision... never call either
+  group... 'Bella Vita properties.'" `post-process.ts`'s new `fixBellaVitaMiscount()` is a
+  narrow, independent backstop — a substring swap (not a sentence drop) for exactly the two
+  miscounted phrasings reported, English and Tagalog — wired into `chat-service.ts`'s
+  post-process chain right after `stripSystemMentions()`. No change to the physical-house
+  inventory model ([DEC-001](HIL_DECISIONS.md)) — wording only; the Tagalog greeting/opener
+  text was not touched. (2) `basePricesFromListings()` folds every fetched listing's own
   `pricePerNight` into both the price guard's `allowedAmounts` and `ensureFromPrefix()`'s
   `basePrices` set (above), so a reply built from the context note's data — rather than an
   actual `list_properties` tool call this turn — states the identical server-fetched price
@@ -2668,6 +2714,17 @@ buttons and "Talk to a Human" link are unaffected either way.
   `system-prompt.ts` already imports `owner-facts.ts`, which imports `post-process.ts`.
   Both run in `chat-service.ts` right after `fixDadalawPhrasing()`, before
   `stripSystemMentions()`.
+  `replaceSikatSaInyo(text)` *(added 2026-10-23, addendum to the same plain-language pass,
+  branch `hil-pm/haven-sikat-102326`)* is the independent backstop fixing the Owner
+  incident where Haven asked "Anong sikat sa inyo, o ilang guests ang dadalhan ninyo?" —
+  "sikat sa inyo"/"sikat sa iyo"/"sikat sa'yo" ("what appeals to you") is not a real
+  Tagalog/Batangueño idiom. Two regexes, both requiring "sikat sa" immediately before the
+  pronoun so a standalone "sikat" (e.g. "sikat na kainan") never matches: the exact incident
+  question form ("anong"/"ano ang" + "sikat sa inyo/iyo/'yo") is replaced with "ano ang type
+  ninyo"; any other "sikat sa inyo/iyo/'yo" occurrence is replaced with "gusto ninyo" —
+  both capitalization-preserving, same `capitalizeLike()` helper as the other word-level
+  guards. Runs in `chat-service.ts` right after `replaceTuklasinFamily()`, before
+  `simplifyDeepTagalogWords()`.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);

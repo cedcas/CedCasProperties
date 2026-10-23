@@ -31,7 +31,9 @@ import {
   fixDadalawPhrasing,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
+  replaceSikatSaInyo,
   stripSystemMentions,
+  fixBellaVitaMiscount,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -237,6 +239,10 @@ function dateContextNote(resolved: ResolvedDates | null): string {
   );
 }
 
+/** Slug prefix for the three Mickey in Lipa configurations — the rest (Cozy 1BR, Spacious
+ * 2BR) are the "Original Haven in Lipa" group (Cedric, 2026-10-23 grouping correction). */
+const MICKEY_SLUG_PREFIX = "mickey-in-lipa";
+
 /**
  * "Public listings (authoritative)" context note — built every turn from the listings
  * already fetched above (`getPublicListings()`), never from the model's own memory. Fixes
@@ -244,8 +250,17 @@ function dateContextNote(resolved: ResolvedDates | null): string {
  * skipped `list_properties` and invented an answer — only the two B34 units, with wrong
  * capacities. This note gives the model the real data directly, and `system-prompt.ts`'s
  * rule tells it to use this note (or call `list_properties`) rather than ever answer an
- * overview question from memory. Kept small: one line per listing. When the fetch failed or
- * returned nothing, says so plainly and tells the model to call `list_properties` itself.
+ * overview question from memory. Kept small: one line per listing, grouped under the two
+ * guest-facing group headings (never "Bella Vita properties" — see the Owner correction
+ * below). When the fetch failed or returned nothing, says so plainly and tells the model to
+ * call `list_properties` itself.
+ *
+ * Owner correction (Cedric, 2026-10-23): Haven had been saying "2 Bella Vita properties" /
+ * "two in the Bella Vita subdivision", implying only some of the 5 listings share that
+ * subdivision. All 5 are in Bella Vita. The note now groups listings by slug prefix — the
+ * three `mickey-in-lipa-*` configurations as "3 Mickey in Lipa listings", the rest (Cozy
+ * 1BR, Spacious 2BR) as "2 Original Haven in Lipa listings" — and states plainly that both
+ * groups are in Bella Vita, never naming either group "Bella Vita properties".
  */
 function listingsContextNote(listings: Awaited<ReturnType<typeof getPublicListings>>): string {
   if (!Array.isArray(listings) || listings.length === 0) {
@@ -256,19 +271,24 @@ function listingsContextNote(listings: Awaited<ReturnType<typeof getPublicListin
     );
   }
   const shortNames = shortPropertyLabels(listings.map((p) => ({ slug: p.slug, name: p.name })));
-  const lines = listings.map((p) => {
+  const lineFor = (p: (typeof listings)[number]) => {
     const shortName = shortNames.get(p.slug) ?? p.name;
     const price = Number(p.pricePerNight);
     const priceText = Number.isFinite(price) ? `from ₱${price.toLocaleString("en-US")}/night` : "price unavailable";
     return `- ${shortName} (slug ${p.slug}): ${p.bedrooms} bed, sleeps up to ${p.maxGuests}, ${priceText}`;
-  });
+  };
+  const mickeyLines = listings.filter((p) => p.slug.startsWith(MICKEY_SLUG_PREFIX)).map(lineFor);
+  const originalHavenLines = listings.filter((p) => !p.slug.startsWith(MICKEY_SLUG_PREFIX)).map(lineFor);
   return (
     "\n\nContext (public listings, authoritative — already fetched this turn, not a guest " +
-    "claim): this is the COMPLETE list of every current public listing. For any overview " +
-    'question ("what properties do you have", "anong property meron kayo", "list your ' +
-    "properties\", etc.), name every one of these — never only some of them, never from " +
-    "memory, and never a name/capacity/price not in this list:\n" +
-    lines.join("\n")
+    "claim): this is the COMPLETE list of every current public listing. ALL of these are in " +
+    "the Bella Vita subdivision, Lipa City — never say only some, or only 2, are there, and " +
+    "never call either group below \"Bella Vita properties\". For any overview question " +
+    '("what properties do you have", "anong property meron kayo", "list your properties", ' +
+    "etc.), name every one of these — never only some of them, never from memory, and never " +
+    "a name/capacity/price not in this list:\n" +
+    `Mickey in Lipa listings (${mickeyLines.length}):\n${mickeyLines.join("\n")}\n` +
+    `Original Haven in Lipa listings (${originalHavenLines.length}):\n${originalHavenLines.join("\n")}`
   );
 }
 
@@ -429,15 +449,22 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // checkout") in favor of Haven's plain, conversational voice — independent backstop for
   // system-prompt.ts's PLAIN_LANGUAGE_RULE.
   const tuklasinFixed = replaceTuklasinFamily(dadalawFixed, englishMode);
-  const plainLanguageFixed = simplifyDeepTagalogWords(tuklasinFixed);
+  // Owner incident (2026-10-23): ban "sikat sa inyo/iyo/'yo" ("what appeals to you") — not a
+  // real Tagalog/Batangueño idiom — independent backstop for system-prompt.ts's
+  // PLAIN_LANGUAGE_RULE, same wiring as replaceTuklasinFamily above.
+  const sikatFixed = replaceSikatSaInyo(tuklasinFixed);
+  const plainLanguageFixed = simplifyDeepTagalogWords(sikatFixed);
   // Haven must never describe her own backend to a guest ("the system"/"ang system"/
   // "sa system"/"our system") — independent backstop for the rule in system-prompt.ts.
   const systemMentionsStripped = stripSystemMentions(plainLanguageFixed);
+  // Owner correction (2026-10-23): independent backstop for the "2 Bella Vita properties" /
+  // "two in the Bella Vita subdivision" miscount — see post-process.ts.
+  const bellaVitaFixed = fixBellaVitaMiscount(systemMentionsStripped);
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
-  const accessLeakDetected = containsAccessLeak(systemMentionsStripped);
-  const accessScrubbed = scrubAccessLeak(systemMentionsStripped, lang, guestMessages);
+  const accessLeakDetected = containsAccessLeak(bellaVitaFixed);
+  const accessScrubbed = scrubAccessLeak(bellaVitaFixed, lang, guestMessages);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));

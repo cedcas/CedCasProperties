@@ -719,6 +719,26 @@ export function simplifyDeepTagalogWords(text: string): string {
   return out.replace(TUNAY_NA_RE, (match) => capitalizeLike(match, "talagang"));
 }
 
+/**
+ * Owner incident (Cedric, 2026-10-23): Haven asked "Anong sikat sa inyo, o ilang guests ang
+ * dadalhan ninyo?" — "sikat sa inyo/iyo/'yo" meaning "what appeals to you" is not a real
+ * Tagalog/Batangueño idiom a local host would use. The "anong"/"ano ang" + "sikat sa
+ * inyo/iyo/'yo" question form (the exact incident phrasing) maps to "Ano ang type ninyo",
+ * matching the owner's suggested replacement; any OTHER "sikat sa inyo/iyo/'yo" occurrence
+ * (not part of that question form) falls back to "gusto ninyo". Both regexes require
+ * "sikat sa" immediately before the pronoun, so a legitimate standalone "sikat" (e.g. "sikat
+ * na kainan" — a popular restaurant) never matches. Independent backstop for the
+ * `PLAIN_LANGUAGE_RULE` instruction in system-prompt.ts, same wiring as `replaceTuklasinFamily`.
+ */
+const SIKAT_TYPE_QUESTION_RE = /\b(?:anong|ano\s+ang)\s+sikat\s+sa\s*(?:inyo|iyo|'yo)\b/gi;
+const SIKAT_SA_INYO_RE = /\bsikat\s+sa\s*(?:inyo|iyo|'yo)\b/gi;
+
+export function replaceSikatSaInyo(text: string): string {
+  return text
+    .replace(SIKAT_TYPE_QUESTION_RE, (match) => capitalizeLike(match, "ano ang type ninyo"))
+    .replace(SIKAT_SA_INYO_RE, (match) => capitalizeLike(match, "gusto ninyo"));
+}
+
 // ── Batangueño marker check ──────────────────────────────────────────────────
 
 /**
@@ -841,6 +861,24 @@ export function tidyAfterSentenceDrop(text: string): string {
  * "our system" — independent backstop for the same rule in system-prompt.ts. */
 export function stripSystemMentions(text: string): string {
   return tidyAfterSentenceDrop(replaceMatchingSentences(text, SYSTEM_MENTION_RE, ""));
+}
+
+// ── Bella Vita miscount guard ────────────────────────────────────────────────
+
+/**
+ * Owner correction (Cedric, 2026-10-23): Haven kept saying "2 Bella Vita properties" / "two
+ * in the Bella Vita subdivision" — implying only some of the 5 listings share that
+ * subdivision, when all 5 do (3 Mickey in Lipa listings + 2 Original Haven in Lipa
+ * listings). The primary fix is `system-prompt.ts`'s PROPERTY_OVERVIEW_RULE and
+ * `chat-service.ts`'s `listingsContextNote` grouping; this is a cheap, narrowly-scoped
+ * backstop for exactly the two miscounted phrasings the Owner flagged — a minimal
+ * substring swap, not a rewrite of the whole sentence.
+ */
+const BELLA_VITA_MISCOUNT_RE =
+  /\b(?:2|two|dalawang)\s+(?:Bella\s+Vita\s+(?:properties|houses|listings)|in\s+the\s+Bella\s+Vita\s+subdivision)\b/gi;
+
+export function fixBellaVitaMiscount(text: string): string {
+  return text.replace(BELLA_VITA_MISCOUNT_RE, "listings in the Bella Vita subdivision");
 }
 
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
