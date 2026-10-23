@@ -234,8 +234,17 @@ export const FALLBACK_FEE_TEXT = `For that fee, please ask us via Messenger (${M
  */
 export const FALLBACK_HOURLY_FEE_TEXT = `Early check-in and late checkout are ₱${HOURLY_FEE_RATE}/hour, subject to availability and confirmation with the team.`;
 
-/** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. */
-const FEE_CONTEXT = /\/\s*(?:hour|hr|night|day|guest)\b|\bper\s+(?:hour|hr|night|day|guest)\b|\bfee\b|\bcharges?\b|\bcharged\b/i;
+/** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. Deliberately
+ * excludes night/day/guest (see `RATE_CONTEXT` below): those describe a property's own base
+ * rate, not a fee/charge, and a disallowed amount in that context is handled differently on
+ * a bullet line (see `processLine`). */
+const FEE_CONTEXT = /\/\s*(?:hour|hr)\b|\bper\s+(?:hour|hr)\b|\bfee\b|\bcharges?\b|\bcharged\b/i;
+/** A per-night/day/guest BASE RATE — a property's own listing price, not a fee or a stay
+ * total. On a bullet line (a property rundown), a disallowed amount in this context drops
+ * just the price rather than replacing the whole bullet with the fee-handoff fallback (see
+ * `dropPriceFromBullet`) — the rest of the bullet (name, capacity) is still useful to the
+ * guest even when the price itself can't be verified this turn. */
+const RATE_CONTEXT = /\/\s*(?:night|day|guest)\b|\bper\s+(?:night|day|guest)\b/i;
 /** Early check-in/late checkout context, in any of the owner-approved phrasings. */
 const HOURLY_FEE_CONTEXT_RE =
   /\/\s*(?:hr|hour)\b|\bper\s+hour\b|\ban\s+hour\b|\bkada\s+oras\b|\bbawat\s+oras\b|\bearly\s*check-?in\b|\blate\s*check-?out\b|\bmaagang\s+check-?in\b/i;
@@ -243,6 +252,26 @@ const HOURLY_FEE_CONTEXT_RE =
 function classifyFallback(unit: string): string {
   if (HOURLY_FEE_CONTEXT_RE.test(unit)) return FALLBACK_HOURLY_FEE_TEXT;
   return FEE_CONTEXT.test(unit) ? FALLBACK_FEE_TEXT : FALLBACK_TOTAL_TEXT;
+}
+
+/**
+ * Drops just the disallowed peso amount (with its "from"/"simula" lead-in and "/night"-style
+ * unit, if present) from a property-bullet line, instead of replacing the whole bullet — an
+ * allowed amount in the same line (rare, but possible if a bullet ever carries two prices) is
+ * left untouched. Used only for a RATE_CONTEXT (night/day/guest) bullet (see `processLine`);
+ * a true fee/total bullet still gets the full-line fallback via `classifyFallback`.
+ */
+function dropPriceFromBullet(rest: string, allowedAmounts: Set<number>): string {
+  const priceWithUnitRe = new RegExp(
+    String.raw`(?:\b(?:from|simula)\s+)?(?:${PESO_AMOUNT_SOURCE})(?:\s*\/\s*(?:night|day|guest)\b|\s+per\s+(?:night|day|guest)\b)?`,
+    "gi"
+  );
+  const stripped = rest.replace(priceWithUnitRe, (match) => {
+    const numeric = Number(match.replace(/[^\d.]/g, ""));
+    const rounded = Math.round(numeric * 100) / 100;
+    return allowedAmounts.has(rounded) ? match : "";
+  });
+  return cleanupStrippedPunctuation(stripped).trim().replace(/[,;:\s]+$/, "");
 }
 
 function unitHasDisallowedAmount(unit: string, allowedAmounts: Set<number>): boolean {
@@ -286,6 +315,9 @@ function processLine(line: string, allowedAmounts: Set<number>): string {
     const [, marker, rest] = bulletMatch;
     if (!pesoAmountRegex().test(rest)) return line;
     if (!unitHasDisallowedAmount(rest, allowedAmounts)) return line;
+    if (!PRICE_ARITHMETIC_RE.test(rest) && RATE_CONTEXT.test(rest) && !HOURLY_FEE_CONTEXT_RE.test(rest) && !FEE_CONTEXT.test(rest)) {
+      return marker + dropPriceFromBullet(rest, allowedAmounts);
+    }
     return marker + classifyFallback(rest);
   }
   return splitSentences(line)

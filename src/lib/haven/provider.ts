@@ -44,6 +44,11 @@ export interface ChatRequest {
   messages: ProviderMessage[];
   tools: ToolDefinition[];
   maxTokens: number;
+  /** When set, forces the model to call exactly this tool this round (both providers
+   * support a single named tool_choice cleanly) — used for the overview-intent fix
+   * (`chat-service.ts`) so a "what properties do you have" question can never skip
+   * `list_properties`. Omitted/undefined means the normal "auto" behavior. */
+  forceToolName?: string;
 }
 
 export interface ChatProvider {
@@ -125,6 +130,7 @@ class AnthropicProvider implements ChatProvider {
             description: t.description,
             input_schema: t.inputSchema,
           })),
+          tool_choice: req.forceToolName ? { type: "tool", name: req.forceToolName } : undefined,
         }),
       },
       REQUEST_TIMEOUT_MS
@@ -219,7 +225,9 @@ class OpenAiProvider implements ChatProvider {
             type: "function",
             function: { name: t.name, description: t.description, parameters: t.inputSchema },
           })),
-          tool_choice: "auto",
+          tool_choice: req.forceToolName
+            ? { type: "function", function: { name: req.forceToolName } }
+            : "auto",
         }),
       },
       REQUEST_TIMEOUT_MS

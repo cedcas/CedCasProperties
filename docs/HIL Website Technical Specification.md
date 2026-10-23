@@ -1,6 +1,32 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-22 (DEC-030 same-day follow-up: the last two hardcoded Airbnb
+> **Last updated:** 2026-10-23 (admin Haven Chats viewer, branch
+> `hil-pm/admin-haven-chats-102326`) — new strictly read-only `/admin/haven-chats` (list) +
+> `/admin/haven-chats/[sessionId]` (detail) for reviewing `HavenChatTranscript`/
+> `HavenChatUsage` data: grouped-by-session list (Prisma `groupBy`, paginated server-side,
+> date-range + text filters via URL search params), per-session cost/turn summary, full
+> transcript with tool names per assistant turn. No schema change, no new write route, no
+> dedicated permission module (gated the same way as `/admin/logs`). See
+> [Haven AI Chat](#haven-ai-chat) → **Admin viewer** below. Lint/typecheck/`vitest run`
+> clean (4,272 tests, 29 new). Prior: 2026-10-22, later (Haven AI: property-overview fix, branch
+> `hil-pm/haven-property-list-102226`, DEC-029 addendum — production incident: asked "Hi,
+> what properties do you have?", Haven ~50% of the time skipped `list_properties` and
+> invented an answer — only the two B34 units, wrong capacities, and once a hallucinated
+> price the price guard replaced with the generic Messenger-fee fallback **inside a
+> property bullet**): [Haven AI Chat](#haven-ai-chat) — a per-turn "Context (public
+> listings, authoritative...)" system-prompt note (`listingsContextNote()`,
+> `chat-service.ts`) built from the already-fetched `publicListings`; `system-prompt.ts`'s
+> new `PROPERTY_OVERVIEW_RULE` forbids answering an overview question from memory; a new
+> `src/lib/haven/overview-intent.ts` (`isPropertyOverviewMessage()`, EN/TL/Batangueño) forces
+> a `list_properties` tool call on round 0 only via a new `provider.ts` `forceToolName` →
+> `tool_choice` mapping (Anthropic `{type: "tool", name}`, OpenAI `{type: "function",
+> function: {name}}`); and `enforcePriceClaims()`'s bullet-line branch now drops just a
+> disallowed price from a property-rundown bullet (new `RATE_CONTEXT`/`dropPriceFromBullet()`,
+> `post-process.ts`) rather than nuking the whole bullet into the Messenger-fee fallback, with
+> every fetched listing's own `pricePerNight` (`basePricesFromListings()`) allowed through the
+> guard the same as a tool-result price. Lint/typecheck/`vitest run` clean (4,185 tests, 44 new).
+> See [Haven AI Chat](#haven-ai-chat) below.
+> Prior: 2026-10-22 (DEC-030 same-day follow-up: the last two hardcoded Airbnb
 > links closed, branch `hil-pm/remove-airbnb-cta-about-102226`. The homepage CTA block
 > (`src/app/page.tsx`, "Ready to Experience Our Comfort?") drops its hardcoded `fa-airbnb`
 > icon rather than replacing it with an on-site icon — the block already has two on-site
@@ -476,6 +502,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - **User management:** create/edit admin and manager accounts with granular permissions
 - **Change password** functionality
 - **Audit logs:** searchable activity log of all admin actions and guest bookings; filterable by actor, module, role; includes IP address and JSON metadata
+- **Haven Chats** *(added 2026-10-23)*: strictly read-only viewer of Haven AI's guest chat transcripts, grouped into conversations by session, with date-range + text filters, server-side pagination, and a per-session cost summary — see [Haven AI Chat → Admin viewer](#haven-ai-chat)
 
 ### Airbnb iCal Sync
 - **Export:** `/api/calendar/[slug]` generates a `.ics` feed for each property (Airbnb imports this). Since 2026-08-06 the feed also carries active manual blocks and shared-inventory sibling blocks where `exportToIcal` is true — see Shared Inventory Groups → iCal export.
@@ -733,6 +760,9 @@ src/
       logs/
         page.tsx                      # Audit log viewer
         LogsClient.tsx
+      haven-chats/
+        page.tsx                      # Haven AI chat transcripts, grouped by session — read-only
+        [sessionId]/page.tsx          # Full transcript for one session, read-only
       users/
         page.tsx                      # Admin user management
         UsersClient.tsx
@@ -2431,7 +2461,9 @@ buttons and "Talk to a Human" link are unaffected either way.
   stay total, "Early check-in and late checkout are ₱200/hour, subject to availability and
   confirmation with the team." (`FALLBACK_HOURLY_FEE_TEXT`) for an early-check-in/late-
   checkout context, or "For that fee, please ask us via Messenger
-  (https://m.me/haveninlipa)." for any other rate/fee context (`/night`, "fee", "charge").
+  (https://m.me/haveninlipa)." for any other rate/fee context (`/hour`, "fee", "charge") —
+  `FEE_CONTEXT` deliberately excludes `/night`/`/day`/`/guest` as of 2026-10-22 (below), since
+  those describe a property's own base rate, not a fee.
   The hourly fallback states the real owner fact instead of deflecting to Messenger,
   because Haven always knows that answer *(reclassification added 2026-10-14,
   preview-retest pass — fixes a live reply that replaced a correct "₱200/hour" alongside a
@@ -2449,6 +2481,44 @@ buttons and "Talk to a Human" link are unaffected either way.
   quote's `total`/`nightlyTotal`/`perNight` rate/`extraGuestFee`), so a dated quote line is
   never touched even when its number happens to equal the base rate; a match already
   preceded by "from"/"simula"/"starting at" is left alone rather than doubled up.
+  **Property-overview fix** *(added 2026-10-22, DEC-029 addendum — production incident: asked
+  "Hi, what properties do you have?", Haven ~50% of the time skipped `list_properties` and
+  invented an answer — only the two B34 units, with wrong capacities (2/4 or 4/6 instead of
+  the real 5/9), and once an invented price the price guard then replaced with the generic
+  Messenger-fee fallback **inside a property bullet**)*: `enforcePriceClaims()`'s bullet-line
+  branch now tells apart a property-listing rundown bullet from a true fee/total bullet via a
+  new `RATE_CONTEXT` regex (`/night`, `/day`, `/guest` — moved out of `FEE_CONTEXT`, which now
+  only matches `/hour`/`/hr`/"fee"/"charge"). A disallowed amount on a `RATE_CONTEXT` bullet
+  with no fee/hourly wording drops just the price (`dropPriceFromBullet()` — removes the
+  peso token plus its "from"/"simula" lead-in and "/night"-style unit, leaving an allowed
+  amount on the same line untouched) instead of replacing the whole bullet, so the rest of
+  the bullet (the property's name/capacity) survives even when its price can't be verified
+  this turn; an explicit "fee"/"charge" bullet, or an hourly one, is unaffected and still gets
+  the full-line fallback via `classifyFallback()`. Three complementary fixes close the rest of
+  the gap, all in `chat-service.ts`'s `runToolLoop()` unless noted: (1) a new
+  `listingsContextNote()` builds a compact "Context (public listings, authoritative...)"
+  system-prompt block every turn from the `publicListings` already fetched for property
+  pre-resolution (above) — one line per listing with its `shortName`, slug, bedrooms,
+  `maxGuests`, and "from ₱X/night", or (if the fetch failed/returned empty) a note saying so
+  and instructing the model to call `list_properties` itself; `system-prompt.ts`'s new
+  `PROPERTY_OVERVIEW_RULE` tells the model never to name/count/describe properties from
+  memory, to use this note (or `list_properties`) for any overview question in English or
+  Tagalog/Batangueño, to name every listing (never only some), and that it may state the
+  two-building fact (Block 34 = Cozy 1BR + Spacious 2BR, Block 38 "Mickey in Lipa" = the
+  three Sleeps-7/11/15 configurations) only as *additional* context, never a substitute for
+  the full per-listing list. (2) `basePricesFromListings()` folds every fetched listing's own
+  `pricePerNight` into both the price guard's `allowedAmounts` and `ensureFromPrefix()`'s
+  `basePrices` set (above), so a reply built from the context note's data — rather than an
+  actual `list_properties` tool call this turn — states the identical server-fetched price
+  and is never wrongly treated as unverified. (3) a new `src/lib/haven/overview-intent.ts`
+  (`isPropertyOverviewMessage()`) detects a plain overview question ("what properties do you
+  have", "anong property/properties meron kayo", "ano (ang) (mga) bahay ninyo", "ilang bahay
+  meron kayo", and their English/Tagalog variants) in the guest's latest message; when it
+  fires, `runToolLoop()` passes a new `forceToolName: "list_properties"` to `provider.chat()`
+  on round 0 only (never on a later round, so the model can still finish normally after the
+  forced call) — `provider.ts`'s `ChatRequest.forceToolName` maps to Anthropic's
+  `tool_choice: {type: "tool", name}` and OpenAI's `tool_choice: {type: "function",
+  function: {name}}`, falling back to each provider's normal "auto" behavior when unset.
   `collectBookingLinks()`
   turns every booking link a tool actually produced this turn (`get_quote`, `find_stay`)
   into a labeled button, still run through the same href allowlist, independent of whether
@@ -2677,6 +2747,41 @@ buttons and "Talk to a Human" link are unaffected either way.
 - `retention.ts` — `purgeExpiredHavenData()`, driven by the daily cron (see Cron Jobs
   above): deletes `HavenChatTranscript` rows older than 90 days and `HavenChatUsage` rows
   older than 13 months.
+
+**Admin viewer** *(added 2026-10-23)* — `/admin/haven-chats` (list) and
+`/admin/haven-chats/[sessionId]` (detail), **strictly read-only** — no edit/delete action,
+no new API write route. Grouping/filtering/parsing logic is pure and tested in
+`src/lib/haven-chats.ts`; the pages themselves (`src/app/admin/haven-chats/page.tsx` and
+`.../[sessionId]/page.tsx`) do the Prisma reads directly, the same pattern as
+`/admin/bookings` and `/admin/messages` (DEC-004's "pages read Prisma directly" convention,
+applied inside admin too).
+- **List** — `HavenChatTranscript` rows are grouped into conversations by `sessionId` via
+  `prisma.havenChatTranscript.groupBy({ by: ["sessionId"], _max: { createdAt } })`,
+  ordered newest-first and paginated (25/page) at the database level — never a `findMany`
+  of every row. Columns: date/time (Asia/Manila, `formatManilaDateTime()`), language,
+  message count, first guest question (truncated to 140 chars), and — joined by
+  `sessionId` from `HavenChatUsage` — summed `costUsd` and a turn count (`HavenChatUsage`
+  row count; it is not a FK, same caveat as `chat-service.ts`'s own write path). Filters
+  (`from`/`to` as Asia/Manila calendar days, free-text `search` over `sessionId` **or**
+  message `content`) live entirely in the URL querystring via a GET form — no client-side
+  fetch, no new API route. The search filter narrows which sessions appear; the per-session
+  stats themselves (count, first message, cost) are always computed from the date-range
+  filter alone, so a session matched by one search hit still shows its true full message
+  count rather than just the matching rows.
+- **Detail** — full transcript for one `sessionId` in order, guest/Haven bubbles, each
+  assistant turn's `toolNames` (parsed from its JSON-array column), and a cost/turn/token
+  summary from that session's `HavenChatUsage` rows. Message content renders as a plain
+  text node (React's default escaping) — never `dangerouslySetInnerHTML` — since
+  `content` is guest-originated text.
+- **Auth** — no dedicated permission module. Like `/admin/logs`, `/admin/bookings`, and
+  `/admin/messages`, access is gated only by the existing session check in
+  `src/middleware.ts` (redirect to `/admin/login` when logged out) — any admin or manager
+  can view it, consistent with every other read-only admin list in this codebase. No
+  `PermissionModule` was added for it.
+- **QA traffic** — a `sessionId` starting `hilpm-` is test traffic, not a real guest
+  (convention set 2026-10-23); the list flags it with a small "QA" badge and the detail
+  page repeats the flag in its header. `isQaSession()` in `haven-chats.ts` is the single
+  definition.
 
 **Route** — `POST /api/haven/chat` (`src/app/api/haven/chat/route.ts`, `runtime = "nodejs"`,
 `dynamic = "force-dynamic"`): parses the body, resolves the caller's IP

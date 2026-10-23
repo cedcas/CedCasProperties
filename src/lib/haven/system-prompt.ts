@@ -139,6 +139,31 @@ const NEXT_WEEKEND_RULE =
  * Backed by `replaceTuklasinFamily` and `simplifyDeepTagalogWords` in post-process.ts as
  * the independent backstop.
  */
+/**
+ * Owner incident (Cedric, 2026-10-22): asked a plain "what properties do you have?", Haven
+ * sometimes skipped list_properties and invented an answer — only the two B34 units, with
+ * wrong capacities, and once invented prices the price guard then replaced with the generic
+ * Messenger-fee fallback INSIDE a property bullet. Fix: never answer from memory; the
+ * "Context (public listings, authoritative...)" note below (chat-service.ts) already has the
+ * real data every turn, and list_properties is also always available to call directly.
+ */
+const PROPERTY_OVERVIEW_RULE =
+  "- Never name, count, or describe our properties/inventory from memory or from a prior " +
+  "conversation's wording — always use the \"Context (public listings, authoritative...)\" " +
+  "note below (already fetched this turn) or call list_properties yourself. For ANY " +
+  'overview-style question — "what properties do you have", "anong property/properties ' +
+  'meron kayo", "ano ang mga bahay ninyo", or similar — list EVERY public listing from that ' +
+  "note/tool, each with its real capacity and its base rate as \"from ₱X/night\" " +
+  '(Tagalog/Batangueño: "simula ₱X kada gabi"), never only some of them and never inventing ' +
+  "a name, capacity, or price not in that data. You may mention, as a true, owner-approved " +
+  "fact, that all 5 listings are two houses in the Bella Vita subdivision — Block 34 (the " +
+  "Cozy 1BR and Spacious 2BR configurations) and Block 38 \"Mickey in Lipa\" (its three " +
+  "Sleeps-7/11/15 configurations) — but you must still name every one of the 5 listings " +
+  "individually; that fact is extra context, never a substitute for the full list. Never " +
+  "let a hallucinated or unverified price inside a property-listing bullet turn into the " +
+  "generic Messenger-fee fallback — a real listing's own base rate from the note/tool always " +
+  "survives as \"from ₱X/night\".";
+
 const PLAIN_LANGUAGE_RULE =
   "- Speak plain, conversational Tagalog/Batangueño — everyday Taglish is fine, but never " +
   'deep or literary Tagalog. Never say "tutuklasin", "tuklasin", or "matutuklasan" (or any ' +
@@ -167,6 +192,7 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "number or date this turn. Never compute, estimate, or recall one from memory or a " +
       "prior turn's wording. The owner-approved facts above are the one exception — those " +
       "are published facts, not tool-only numbers.",
+    PROPERTY_OVERVIEW_RULE,
     "- NEVER multiply, sum, or otherwise do arithmetic on a price yourself — not nights × a " +
       "nightly rate, not a single night's rate carried over to a longer stay (weekday and " +
       "weekend nights can differ). A listing's or get_quote's own `pricePerNight` is a " +

@@ -806,8 +806,65 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, and again 2026-10-15 on `fix/haven-ai-freetext-reset-101526` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, and 2026-10-22 on `hil-pm/haven-property-list-102226` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-22 property-overview fix)
+Production incident, same day: asked "Hi, what properties do you have?", Haven ~50% of the
+time skipped `list_properties` and invented an answer — only the two B34 units (Cozy 1BR
+Haven, Spacious 2BR Getaway), with wrong capacities (2/4 or 4/6 instead of the real 5/9), and
+once an invented price that the price guard then correctly replaced with
+`FALLBACK_FEE_TEXT` ("For that fee, please ask us via Messenger") — but **inside a property
+bullet**, where that fallback reads wrong. Root cause: the system prompt never required a
+`list_properties` call for an overview question, `tool_choice` stayed `"auto"`, and
+`publicListings` (already fetched every turn in `chat-service.ts` for property-name
+pre-resolution) was never put into the model's context — only used for name resolution.
+Closed without changing the decision itself, same tool-only-facts philosophy:
+- **A per-turn listings context note.** `chat-service.ts`'s new `listingsContextNote()`
+  builds a compact "Context (public listings, authoritative — already fetched this turn...)"
+  system-prompt block from the `publicListings` already fetched that turn — one line per
+  listing with `shortName`, slug, bedrooms, `maxGuests`, and "from ₱X/night". When the fetch
+  failed or returned empty, the note says so plainly and instructs the model to call
+  `list_properties` itself rather than guess.
+- **A system-prompt rule.** `system-prompt.ts`'s new `PROPERTY_OVERVIEW_RULE`: never name,
+  count, or describe properties/inventory from memory; always use the listings note or call
+  `list_properties`; for any overview question (English or Tagalog/Batangueño) name every
+  listing from that data, never only some; the two-building fact (Block 34 = Cozy 1BR +
+  Spacious 2BR, Block 38 "Mickey in Lipa" = the three Sleeps-7/11/15 configurations) may be
+  stated as true, owner-approved color, but never as a substitute for naming all 5 listings
+  individually; never let a hallucinated/unverified price inside a property-listing bullet
+  turn into the generic Messenger-fee fallback.
+- **A forced tool call on round 0, for this one question.** A new `src/lib/haven/
+  overview-intent.ts` (`isPropertyOverviewMessage()`) detects a plain property-overview
+  question in the guest's latest message (EN: "what properties do you have", "list your
+  properties", "how many properties"; TL/Batangueño: "anong property/properties meron kayo",
+  "ano (ang) (mga) bahay ninyo", "ilang bahay/property meron kayo"). When it fires,
+  `chat-service.ts`'s `runToolLoop()` passes a new `forceToolName: "list_properties"` to
+  `provider.chat()` on round 0 only (never forced again on a later round, so the model can
+  still finish normally once it has the real data). `provider.ts`'s `ChatRequest` gained
+  `forceToolName?: string`, mapped to a single named `tool_choice` both providers support
+  cleanly — Anthropic `{type: "tool", name}`, OpenAI `{type: "function", function: {name}}`
+  — falling back to each provider's normal `"auto"` behavior when unset.
+- **The price guard no longer clobbers a real base rate.** Two complementary fixes in
+  `post-process.ts`/`chat-service.ts`: (1) `basePricesFromListings()` folds every fetched
+  listing's own `pricePerNight` into both the price guard's `allowedAmounts` and
+  `ensureFromPrefix()`'s `basePrices` set, so a reply built from the context note's data
+  (rather than an actual `list_properties` tool call this turn) states the identical
+  server-fetched price and is never wrongly treated as unverified. (2) `enforcePriceClaims()`
+  now tells apart a property-listing rundown bullet from a true fee/total bullet via a new
+  `RATE_CONTEXT` regex (`/night`, `/day`, `/guest` — moved out of `FEE_CONTEXT`, which now
+  only matches `/hour`/`/hr`/"fee"/"charge"). A disallowed amount on a `RATE_CONTEXT` bullet
+  with no fee/hourly wording drops just the price (`dropPriceFromBullet()`) instead of
+  replacing the whole bullet with the Messenger-fee fallback, so the rest of the bullet (the
+  property's name/capacity) still reaches the guest even when a hallucinated price can't be
+  verified. An explicit "fee"/"charge" bullet, or an hourly one, is unaffected.
+- Regression tests: `overview-intent.test.ts` (new, EN/TL detection), `provider.test.ts`
+  (`forceToolName` → `tool_choice` mapping, both providers), `post-process.test.ts`
+  (bullet price-drop vs. full-line fallback), `system-prompt.test.ts`, and
+  `chat-service.test.ts` (listings note content, forced tool on round 0 only, an overview
+  reply naming all 5 listings' real rates survives the guard, a hallucinated bullet price is
+  dropped not fallback-replaced). Full suite green (4,185 tests, 44 new); `tsc --noEmit` and
+  `eslint` clean.
 
 ### Implementation note (2026-10-15 owner-guardrails pass)
 Cedric (the Owner) approved two more guardrails, closed without changing the decision
