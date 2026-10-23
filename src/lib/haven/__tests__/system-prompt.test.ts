@@ -325,4 +325,33 @@ describe("buildHavenSystemPrompt", () => {
       expect(fewshot).not.toMatch(/sikat\s+sa/i);
     });
   });
+
+  // DEC-029 addendum, 2026-10-23: "5 listings" wording, "titigingan" typo, and "umabot sa N
+  // guests" capacity phrasing.
+  describe("'5 listings' / 'titingnan' / 'kasya hanggang N tao' wording (Cedric, 2026-10-23)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it('always calls the full set of units "5 listings", never "5 properties"/"five properties"', () => {
+      expect(prompt).toMatch(/Always call the full set of units "5 listings"/i);
+      expect(prompt).toMatch(/never "5 properties" or "five properties"/i);
+    });
+
+    it('instructs the correct spelling "titingnan", never the typo "titigingan"', () => {
+      expect(prompt).toMatch(/Spell "titingnan" \(will look at\/check\) correctly/i);
+      expect(prompt).toMatch(/never the typo "titigingan"/i);
+    });
+
+    it('bans "umabot sa/ng N guests/tao" for max capacity, naming "kasya hanggang N tao"', () => {
+      expect(prompt).toMatch(/kasya hanggang N tao/i);
+      expect(prompt).toMatch(/never "umabot sa N guests" or "umabot ng N guests\/tao"/i);
+    });
+
+    it("the Batangueño few-shot block contains neither banned phrasing", () => {
+      const btgPrompt = buildHavenSystemPrompt("btg");
+      const fewshot = btgPrompt.slice(btgPrompt.indexOf("Example exchanges"), btgPrompt.indexOf("Owner-approved facts"));
+      expect(fewshot).not.toMatch(/titigingan/i);
+      expect(fewshot).not.toMatch(/umabot/i);
+      expect(fewshot).not.toMatch(/5 properties/i);
+    });
+  });
 });

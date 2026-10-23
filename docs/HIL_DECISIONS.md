@@ -806,8 +806,42 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, and 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, and 2026-10-23 on `hil-pm/haven-wording-102326` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-23 "5 listings"/"titingnan"/"kasya hanggang N tao" wording pass — addendum)
+Owner correction, same day (Cedric): three small guest-facing wording issues bundled into
+one pass, same tool-only-facts philosophy, same prompt-instruction-plus-independent-backstop
+pattern as the "sikat sa inyo" and Bella Vita notes above — closed without changing the
+decision itself:
+- **"5 listings," never "5 properties."** Haven's own `PROPERTY_OVERVIEW_RULE` already used
+  "listings" almost everywhere, but nothing explicitly banned the model saying "5
+  properties"/"five properties" instead — now banned outright, in English and Tagalog/
+  Batangueño alike. **`system-prompt.ts`:** `PROPERTY_OVERVIEW_RULE` gained a trailing
+  sentence naming the rule. **`post-process.ts`:** new `fixFivePropertiesWording()` — a
+  case-insensitive `/\b(5|five)\s+properties\b/` swap to "5 listings"/"five listings" (the
+  number token is left as written; only "properties" → "listings" swaps, case preserved).
+- **"Titingnan," never the typo "titigingan."** Haven generated "titigingan" — a misspelling
+  of "titingnan" (will look at/check) that doesn't appear anywhere in this prompt's own
+  Tagalog/Batangueño text (including the few-shot block), so it's a model-generated typo, not
+  something learned from here. **`system-prompt.ts`:** new `TITINGNAN_SPELLING_RULE`.
+  **`post-process.ts`:** new `fixTitiginganTypo()`, a straight word-level swap preserving
+  capitalization.
+- **"Kasya hanggang N tao," never "umabot sa/ng N guests/tao."** Haven stated a listing's max
+  capacity as "umabot sa 15 guests" — "umabot" means "to reach/arrive at," so the phrase
+  misreads as how many guests have already arrived rather than how many the listing can
+  hold. **`system-prompt.ts`:** new `MAX_GUESTS_PHRASING_RULE` naming "kasya hanggang N tao"
+  (fits up to N people) as the correct phrasing. **`post-process.ts`:** new
+  `fixUmabotGuestsPhrasing()` — matches `/\bumabot\s+(?:sa|ng)\s+(\d+)\s+(?:guests?|tao)\b/`
+  and rewrites to "kasya hanggang N tao," keeping the captured number and preserving
+  capitalization.
+- **`chat-service.ts`:** all three wired into the post-process chain right after
+  `fixBellaVitaMiscount()`, in the order above, before the access-leak scrub.
+- Tests: `post-process.test.ts` (one `describe` block per backstop — EN/Tagalog phrasing,
+  capitalization preserved, no-op on already-correct text, unrelated numbers/words left
+  alone), `system-prompt.test.ts` (prompt bans each phrasing and names the replacement,
+  few-shot block carries none of the three). Full suite green (51 files, 1,953 tests);
+  `tsc --noEmit` clean. Committed, not pushed, no PR (task constraint for this session).
 
 ### Implementation note (2026-10-23 "sikat sa inyo" ban — addendum to the 2026-10-16 plain-Tagalog pass)
 Owner incident (Cedric, 2026-10-23): Haven asked "Anong sikat sa inyo, o ilang guests ang

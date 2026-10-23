@@ -74,6 +74,27 @@ const DADALAW_RULE =
   'kayo?" or "Ilang guests kayo?" (Batangueño: "Ilan ga kayo?").';
 
 /**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
+ * of "titingnan" (will look at/check) that doesn't appear anywhere in this prompt's own
+ * Tagalog/Batangueño text (see the few-shot block above), so it's a model-generated
+ * misspelling, not something picked up from here. Backed by `fixTitiginganTypo` in
+ * post-process.ts.
+ */
+const TITINGNAN_SPELLING_RULE =
+  'Spell "titingnan" (will look at/check) correctly — never the typo "titigingan".';
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "umabot sa 10 guests"
+ * when stating a listing's maximum capacity — "umabot" means "to reach/arrive at", so the
+ * phrase misreads as describing how many guests have arrived rather than how many the
+ * listing can hold. The correct phrasing is "kasya hanggang N tao" ("fits up to N people").
+ * Backed by `fixUmabotGuestsPhrasing` in post-process.ts.
+ */
+const MAX_GUESTS_PHRASING_RULE =
+  'When stating a listing\'s maximum capacity in Tagalog/Batangueño, say "kasya hanggang N ' +
+  'tao" (fits up to N people) — never "umabot sa N guests" or "umabot ng N guests/tao".';
+
+/**
  * Owner rules 1 & 2 (Cedric, 2026-10-16). A date range is industry-standard parsed —
  * first date is check-in, second is check-out — and the server already resolves it
  * (resolve_dates, or the pre-resolved date context note) before Haven ever needs to ask
@@ -169,7 +190,9 @@ const PROPERTY_OVERVIEW_RULE =
   "\"3 Mickey in Lipa listings at 2 Original Haven in Lipa listings, lahat nasa Bella Vita " +
   "subdivision.\" Never let a hallucinated or unverified price inside a property-listing " +
   "bullet turn into the generic Messenger-fee fallback — a real listing's own base rate from " +
-  "the note/tool always survives as \"from ₱X/night\".";
+  "the note/tool always survives as \"from ₱X/night\". Always call the full set of units " +
+  "\"5 listings\" — in English and in Tagalog/Batangueño alike — never \"5 properties\" or " +
+  "\"five properties\".";
 
 const PLAIN_LANGUAGE_RULE =
   "- Speak plain, conversational Tagalog/Batangueño — everyday Taglish is fine, but never " +
@@ -245,6 +268,8 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     DADALAW_RULE,
+    TITINGNAN_SPELLING_RULE,
+    MAX_GUESTS_PHRASING_RULE,
     "- When a house rule or policy is the same across every listing (quiet hours 10:00 PM " +
       "– 8:00 AM, no pets, no smoking inside, no parties/events without host approval), " +
       "give the general answer directly instead of asking which house. Only ask which " +

@@ -34,6 +34,9 @@ import {
   replaceSikatSaInyo,
   stripSystemMentions,
   fixBellaVitaMiscount,
+  fixFivePropertiesWording,
+  fixTitiginganTypo,
+  fixUmabotGuestsPhrasing,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -460,11 +463,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // Owner correction (2026-10-23): independent backstop for the "2 Bella Vita properties" /
   // "two in the Bella Vita subdivision" miscount — see post-process.ts.
   const bellaVitaFixed = fixBellaVitaMiscount(systemMentionsStripped);
+  // DEC-029 addendum (2026-10-23): "5 properties"/"five properties" always reads "5
+  // listings"/"five listings" — see PROPERTY_OVERVIEW_RULE in system-prompt.ts.
+  const fivePropertiesFixed = fixFivePropertiesWording(bellaVitaFixed);
+  // DEC-029 addendum (2026-10-23): "titigingan" is a model-generated typo of "titingnan".
+  const titigenanFixed = fixTitiginganTypo(fivePropertiesFixed);
+  // DEC-029 addendum (2026-10-23): "umabot sa/ng N guests/tao" (max capacity) always reads
+  // "kasya hanggang N tao" — see MAX_GUESTS_PHRASING_RULE in system-prompt.ts.
+  const umabotFixed = fixUmabotGuestsPhrasing(titigenanFixed);
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
-  const accessLeakDetected = containsAccessLeak(bellaVitaFixed);
-  const accessScrubbed = scrubAccessLeak(bellaVitaFixed, lang, guestMessages);
+  const accessLeakDetected = containsAccessLeak(umabotFixed);
+  const accessScrubbed = scrubAccessLeak(umabotFixed, lang, guestMessages);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));
