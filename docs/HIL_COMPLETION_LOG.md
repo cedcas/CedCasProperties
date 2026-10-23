@@ -4,6 +4,53 @@
 
 ---
 
+## 2026-10-23, latest — Haven AI Bella Vita grouping correction: "3 Mickey in Lipa" + "2 Original Haven in Lipa," all in Bella Vita (hil-pm/haven-listing-grouping-102326)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/haven-listing-grouping-102326` (from `dev` at
+`169eeb0`); targets `dev`. Lint, `tsc --noEmit`, and the full `npx vitest run` suite are
+clean (210 files / 4,299 tests across all three timezone projects, 27 new). `npm run build`
+was not run (forbidden for this task); no schema change, no migration, no `.env` file was
+read or printed; no push, no PR, no merge (explicit task constraints).
+
+### Outcome
+Fixes an Owner-reported wording bug (Cedric, 2026-10-23): Haven kept saying "2 Bella Vita
+properties" / "two in the Bella Vita subdivision," wrongly implying only some of the 5
+listings share that subdivision — all 5 do. Haven now groups the 5 listings as "3 Mickey in
+Lipa listings" and "2 Original Haven in Lipa listings," states plainly that both groups are
+in Bella Vita, and never calls either group "Bella Vita properties." No change to the
+underlying inventory/physical-house model ([DEC-001](HIL_DECISIONS.md)) — wording only. Full
+detail: [DEC-029 addendum](HIL_DECISIONS.md).
+
+### Material Changes
+- **`src/lib/haven/system-prompt.ts`** — `PROPERTY_OVERVIEW_RULE` rewritten to the new
+  grouping, with an explicit ban on implying only some/2 of the 5 are in Bella Vita or
+  calling a group "Bella Vita properties," and a preference for the new group names over
+  "Block 34"/"Block 38" labels in guest replies. The persona intro line now names the
+  subdivision ("two houses in the Bella Vita subdivision, Lipa City").
+- **`src/lib/haven/chat-service.ts`** — `listingsContextNote()` now splits the fetched
+  listings by slug prefix (`mickey-in-lipa` vs. everything else) into two headed groups
+  ("Mickey in Lipa listings (3):" / "Original Haven in Lipa listings (2):") and opens with
+  an explicit "ALL of these are in the Bella Vita subdivision" statement. New
+  `fixBellaVitaMiscount()` call wired into the post-process chain (right after
+  `stripSystemMentions()`).
+- **`src/lib/haven/post-process.ts`** — new `fixBellaVitaMiscount()`: a narrow, independent
+  backstop that rewrites exactly the two miscounted phrasings the Owner flagged ("2 Bella
+  Vita properties"/"two Bella Vita houses"/"two in the Bella Vita subdivision," EN and
+  Tagalog) to "listings in the Bella Vita subdivision" — deliberately minimal, not a general
+  rewrite.
+- **Checked, not changed**: `tools.ts`, `welcome-book.ts`, `owner-facts.ts` — no "Bella Vita
+  = only some listings" wording found; their B34/B38 scoping comments/strings are about
+  which listings have a detailed house manual, unrelated to the subdivision-count bug.
+  Tagalog greeting/opener text was not touched, per task constraint.
+- **Tests**: `system-prompt.test.ts`, `chat-service.test.ts`, `post-process.test.ts` —
+  grouping + all-in-Bella-Vita assertions, no-miscount-phrase assertions, and dedicated
+  `fixBellaVitaMiscount` unit tests (EN/Tagalog miscounts rewritten; a correct "all 5" claim
+  and an unrelated "two years" phrase left untouched).
+
+---
+
 ## 2026-10-23 — Admin Haven Chats viewer: read-only transcript list + detail page (hil-pm/admin-haven-chats-102326)
 
 Area: Website

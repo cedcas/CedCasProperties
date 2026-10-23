@@ -241,11 +241,24 @@ describe("buildHavenSystemPrompt", () => {
       expect(prompt).toMatch(/anong property\/properties/i);
     });
 
-    it("allows the two-building fact but still requires every listing named individually", () => {
-      expect(prompt).toMatch(/Bella Vita subdivision/i);
-      expect(prompt).toMatch(/Block 34/i);
-      expect(prompt).toMatch(/Block 38/i);
+    // Owner correction, 2026-10-23: Haven had been saying "2 Bella Vita properties" / "two
+    // in the Bella Vita subdivision", implying only some of the 5 listings are there. All 5
+    // are, grouped as 3 Mickey in Lipa listings + 2 Original Haven in Lipa listings.
+    it("groups all 5 listings as Mickey in Lipa (3) and Original Haven in Lipa (2), all in Bella Vita", () => {
+      expect(prompt).toMatch(/ALL 5 listings are in the Bella Vita subdivision/i);
+      expect(prompt).toMatch(/3 Mickey in Lipa listings/i);
+      expect(prompt).toMatch(/2 Original Haven in Lipa listings/i);
       expect(prompt).toMatch(/must still name every one of the 5 listings individually/i);
+    });
+
+    it('never implies only some/2 of the 5 are in Bella Vita, and never calls a group "Bella Vita properties"', () => {
+      expect(prompt).toMatch(/NEVER imply only some, or only 2, of the 5 are there/i);
+      expect(prompt).toMatch(/NEVER call either group[\s\S]{0,60}"Bella Vita properties"/i);
+      expect(prompt).not.toMatch(/\btwo\s+Bella Vita\b/i);
+    });
+
+    it('prefers "Mickey in Lipa listings"/"Original Haven in Lipa listings" over Block 34/38 in guest replies', () => {
+      expect(prompt).toMatch(/prefer "Mickey in Lipa listings"\/"Original Haven in Lipa listings" over "Block 34"\/"Block 38"/i);
     });
 
     it("forbids the Messenger-fee fallback from standing in for a real property price", () => {

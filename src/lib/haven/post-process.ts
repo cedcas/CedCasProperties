@@ -843,6 +843,24 @@ export function stripSystemMentions(text: string): string {
   return tidyAfterSentenceDrop(replaceMatchingSentences(text, SYSTEM_MENTION_RE, ""));
 }
 
+// ── Bella Vita miscount guard ────────────────────────────────────────────────
+
+/**
+ * Owner correction (Cedric, 2026-10-23): Haven kept saying "2 Bella Vita properties" / "two
+ * in the Bella Vita subdivision" — implying only some of the 5 listings share that
+ * subdivision, when all 5 do (3 Mickey in Lipa listings + 2 Original Haven in Lipa
+ * listings). The primary fix is `system-prompt.ts`'s PROPERTY_OVERVIEW_RULE and
+ * `chat-service.ts`'s `listingsContextNote` grouping; this is a cheap, narrowly-scoped
+ * backstop for exactly the two miscounted phrasings the Owner flagged — a minimal
+ * substring swap, not a rewrite of the whole sentence.
+ */
+const BELLA_VITA_MISCOUNT_RE =
+  /\b(?:2|two|dalawang)\s+(?:Bella\s+Vita\s+(?:properties|houses|listings)|in\s+the\s+Bella\s+Vita\s+subdivision)\b/gi;
+
+export function fixBellaVitaMiscount(text: string): string {
+  return text.replace(BELLA_VITA_MISCOUNT_RE, "listings in the Bella Vita subdivision");
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the

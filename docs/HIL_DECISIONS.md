@@ -806,8 +806,56 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, and 2026-10-22 on `hil-pm/haven-property-list-102226` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-22 on `hil-pm/haven-property-list-102226`, and 2026-10-23 on `hil-pm/haven-listing-grouping-102326` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-23 Bella Vita grouping correction)
+Owner correction, same day (Cedric): the 2026-10-22 property-overview fix's own
+"two-building" color fact — "Block 34 (Cozy 1BR + Spacious 2BR)" and "Block 38 'Mickey in
+Lipa'" — led Haven to say things like "2 Bella Vita properties" or "two in the Bella Vita
+subdivision," wrongly implying only some of the 5 listings share that subdivision. **All 5
+listings are in the Bella Vita subdivision.** Corrected the grouping Haven uses in every
+overview answer and in the per-turn listings note, without changing the underlying
+inventory/physical-house model ([DEC-001](#dec-001--five-public-listings-are-two-physical-houses-capacity-claims-must-sum-per-house)
+is unchanged — this is wording only):
+- **New guest-facing grouping.** Both houses are now named "3 Mickey in Lipa listings" (the
+  three `mickey-in-lipa-*` Sleeps-7/11/15 configurations) and "2 Original Haven in Lipa
+  listings" (`cozy-1-bedroom`, `spacious-2-bedroom`) — short forms "Mickey in Lipa
+  listings"/"Original Haven in Lipa listings" are fine. `system-prompt.ts`'s
+  `PROPERTY_OVERVIEW_RULE` now states plainly that ALL 5 are in Bella Vita, bans ever
+  implying only some/2 are there, bans calling either group (or any subset) "Bella Vita
+  properties," and tells the model to prefer the new group names over "Block 34"/"Block 38"
+  labels in a guest-facing reply — those block numbers aren't needed. The persona line at
+  the top of the prompt also now names the subdivision ("two houses in the Bella Vita
+  subdivision, Lipa City"). Tagalog/Batangueño keeps the same two group names (e.g. "3
+  Mickey in Lipa listings at 2 Original Haven in Lipa listings, lahat nasa Bella Vita
+  subdivision") — the Tagalog greeting/opener text itself was not touched.
+- **The per-turn listings note is now grouped, not a flat list.** `chat-service.ts`'s
+  `listingsContextNote()` splits the fetched `publicListings` by slug prefix
+  (`mickey-in-lipa` vs. everything else) into two headed sub-lists — "Mickey in Lipa
+  listings (3):" / "Original Haven in Lipa listings (2):" — and opens with "ALL of these
+  are in the Bella Vita subdivision... never call either group... 'Bella Vita properties'."
+  Per-listing lines (shortName, slug, bedrooms, maxGuests, "from ₱X/night") are unchanged.
+- **A narrow, independent post-process backstop.** `post-process.ts`'s new
+  `fixBellaVitaMiscount()` is a cheap substring swap (not a sentence drop) for exactly the
+  two miscounted phrasings the Owner flagged — `/(?:2|two|dalawang)\s+(?:Bella\s+Vita\s+
+  (?:properties|houses|listings)|in\s+the\s+Bella\s+Vita\s+subdivision)/gi` — rewritten to
+  "listings in the Bella Vita subdivision." Wired into `chat-service.ts`'s post-process
+  chain right after `stripSystemMentions()`. Deliberately narrow per the task's own
+  instruction ("rewrite minimally — only if simple and safe") — it does not attempt to
+  catch every possible miscount phrasing, only the two literal ones reported.
+- `tools.ts`/`welcome-book.ts`/`owner-facts.ts` were checked for the same "Bella Vita =
+  only some listings" implication — none found; their B34/B38 scoping language (house
+  rules/how-tos/check-out steps staying B34-only) is about which listings have a detailed
+  house manual, not about which share the subdivision, and was left unchanged as internal
+  scoping, not guest-facing miscount.
+- Regression tests: `system-prompt.test.ts` (grouping + all-in-Bella-Vita + no "two Bella
+  Vita" + prefers group names over Block 34/38), `chat-service.test.ts` (listings note
+  grouped under the two headings, all in Bella Vita, no miscount phrase), `post-process.test.ts`
+  (`fixBellaVitaMiscount` — EN/Tagalog miscount phrasings rewritten, correct "all 5" and
+  unrelated "two years" phrasing left untouched). Full suite green (210 files, 4,299 tests,
+  27 new); `tsc --noEmit` and `eslint` clean. Committed, **not pushed, no PR** (explicit
+  task constraint for this session).
 
 ### Implementation note (2026-10-22 property-overview fix)
 Production incident, same day: asked "Hi, what properties do you have?", Haven ~50% of the
