@@ -881,6 +881,52 @@ export function fixBellaVitaMiscount(text: string): string {
   return text.replace(BELLA_VITA_MISCOUNT_RE, "listings in the Bella Vita subdivision");
 }
 
+// ── "5 listings" wording guard ───────────────────────────────────────────────
+
+/**
+ * Owner rule (Cedric, 2026-10-23 — DEC-029 addendum): the full set of units is always
+ * "5 listings", in English and Tagalog/Batangueño alike — never "5 properties"/"five
+ * properties". Independent backstop for the `PROPERTY_OVERVIEW_RULE` instruction in
+ * system-prompt.ts. Only the number stays as the model wrote it (digit or spelled-out
+ * word) — just "properties" swaps for "listings", case preserved.
+ */
+const FIVE_PROPERTIES_RE = /\b(5|five)(\s+)(properties)\b/gi;
+
+export function fixFivePropertiesWording(text: string): string {
+  return text.replace(FIVE_PROPERTIES_RE, (_match, num: string, space: string, propertiesWord: string) => {
+    return `${num}${space}${capitalizeLike(propertiesWord, "listings")}`;
+  });
+}
+
+// ── "Titigingan" typo guard ──────────────────────────────────────────────────
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
+ * of "titingnan" (will look at/check) that isn't in any of this prompt's own Tagalog/
+ * Batangueño text, so it's a model-generated misspelling. Independent backstop for the
+ * `TITINGNAN_SPELLING_RULE` instruction in system-prompt.ts.
+ */
+const TITIGINGAN_RE = /\btitigingan\b/gi;
+
+export function fixTitiginganTypo(text: string): string {
+  return text.replace(TITIGINGAN_RE, (match) => capitalizeLike(match, "titingnan"));
+}
+
+// ── "Umabot sa N guests" capacity-phrasing guard ─────────────────────────────
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "umabot sa 10 guests"/
+ * "umabot ng 10 tao" when stating a listing's maximum capacity — "umabot" means "to reach/
+ * arrive at", so it misreads as how many guests have arrived rather than how many the
+ * listing can hold. Correct phrasing is "kasya hanggang N tao" (fits up to N people).
+ * Independent backstop for the `MAX_GUESTS_PHRASING_RULE` instruction in system-prompt.ts.
+ */
+const UMABOT_GUESTS_RE = /\bumabot\s+(?:sa|ng)\s+(\d+)\s+(?:guests?|tao)\b/gi;
+
+export function fixUmabotGuestsPhrasing(text: string): string {
+  return text.replace(UMABOT_GUESTS_RE, (match, num: string) => capitalizeLike(match, `kasya hanggang ${num} tao`));
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the

@@ -26,6 +26,9 @@ import {
   PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
   fixBellaVitaMiscount,
+  fixFivePropertiesWording,
+  fixTitiginganTypo,
+  fixUmabotGuestsPhrasing,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -1058,6 +1061,83 @@ describe("fixBellaVitaMiscount", () => {
   it("does not touch an unrelated mention of the number two near Bella Vita", () => {
     const input = "We've been in the Bella Vita subdivision for two years.";
     expect(fixBellaVitaMiscount(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): the full set of units is always "5 listings" — in
+// English and Tagalog/Batangueño alike — never "5 properties"/"five properties".
+describe("fixFivePropertiesWording", () => {
+  it('rewrites "5 properties" to "5 listings"', () => {
+    expect(fixFivePropertiesWording("We have 5 properties in Lipa.")).toBe("We have 5 listings in Lipa.");
+  });
+
+  it('rewrites "five properties" to "five listings"', () => {
+    expect(fixFivePropertiesWording("We have five properties in Lipa.")).toBe("We have five listings in Lipa.");
+  });
+
+  it("preserves capitalization of the word being swapped", () => {
+    expect(fixFivePropertiesWording("5 Properties are listed below.")).toBe("5 Listings are listed below.");
+  });
+
+  it("is case-insensitive on the match itself", () => {
+    expect(fixFivePropertiesWording("FIVE PROPERTIES available.")).toBe("FIVE Listings available.");
+  });
+
+  it("works in a Tagalog sentence (the English word 'properties' stays swapped)", () => {
+    expect(fixFivePropertiesWording("May 5 properties kami sa Bella Vita.")).toBe("May 5 listings kami sa Bella Vita.");
+  });
+
+  it("is a no-op when already saying listings", () => {
+    const input = "We have 5 listings in Lipa.";
+    expect(fixFivePropertiesWording(input)).toBe(input);
+  });
+
+  it("does not touch an unrelated count of properties", () => {
+    const input = "We have 3 properties available this week.";
+    expect(fixFivePropertiesWording(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): "titigingan" is a model-generated typo of
+// "titingnan" (will look at/check) — not in any of Haven's own prompt text.
+describe("fixTitiginganTypo", () => {
+  it('rewrites "titigingan" to "titingnan"', () => {
+    expect(fixTitiginganTypo("Titigingan ko agad kung bakante.")).toBe("Titingnan ko agad kung bakante.");
+  });
+
+  it("preserves lowercase", () => {
+    expect(fixTitiginganTypo("Sandali, titigingan ko muna.")).toBe("Sandali, titingnan ko muna.");
+  });
+
+  it("is a no-op when the word is already correct", () => {
+    const input = "Titingnan ko agad kung bakante ito.";
+    expect(fixTitiginganTypo(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): "umabot sa/ng N guests/tao" (stating max capacity)
+// always reads "kasya hanggang N tao" (fits up to N people) — "umabot" means "to reach/
+// arrive at", which misreads as how many guests have arrived.
+describe("fixUmabotGuestsPhrasing", () => {
+  it('rewrites "umabot sa N guests"', () => {
+    expect(fixUmabotGuestsPhrasing("Ang Mickey ay umabot sa 15 guests.")).toBe("Ang Mickey ay kasya hanggang 15 tao.");
+  });
+
+  it('rewrites "umabot ng N guests"', () => {
+    expect(fixUmabotGuestsPhrasing("Umabot ng 9 guests ang Spacious 2BR.")).toBe("Kasya hanggang 9 tao ang Spacious 2BR.");
+  });
+
+  it('rewrites "umabot ng N tao"', () => {
+    expect(fixUmabotGuestsPhrasing("Umabot ng 11 tao ang bahay na ito.")).toBe("Kasya hanggang 11 tao ang bahay na ito.");
+  });
+
+  it("preserves capitalization of the matched phrase", () => {
+    expect(fixUmabotGuestsPhrasing("Umabot sa 7 guests ang Cozy 1BR.")).toBe("Kasya hanggang 7 tao ang Cozy 1BR.");
+  });
+
+  it("is a no-op when already saying kasya hanggang", () => {
+    const input = "Kasya hanggang 15 tao ang Mickey in Lipa.";
+    expect(fixUmabotGuestsPhrasing(input)).toBe(input);
   });
 });
 
