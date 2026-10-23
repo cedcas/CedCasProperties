@@ -4,6 +4,62 @@
 
 ---
 
+## 2026-10-23 — Admin Haven Chats viewer: read-only transcript list + detail page (hil-pm/admin-haven-chats-102326)
+
+Area: Website
+
+Status: Built and tested on branch `hil-pm/admin-haven-chats-102326` (from `dev`); targets
+`dev`. Lint (`npm run lint`), typecheck (`npx tsc --noEmit`), and the full `npx vitest run`
+suite are clean (210 test files / 4,272 tests, all three timezone projects — 87 new tests,
+29 unique cases × 3 projects). `npm run build` was not run (forbidden for this task); no
+schema change, no migration, no `.env` file was read or printed.
+
+### Outcome
+Gives the Owner a way to review what Haven AI actually said to guests (Cedric-approved,
+2026-10-23). Entirely read-only: no edit/delete action anywhere, no new write API route.
+Built on the existing `HavenChatTranscript`/`HavenChatUsage` tables from H0+H1 ([DEC-029](HIL_DECISIONS.md)) —
+no schema change needed.
+
+### Material Changes
+- **`src/lib/haven-chats.ts` (new)** — pure, unit-tested helpers: URL-search-param parsing
+  (`parseHavenChatsParams`, silently drops malformed input rather than erroring), a
+  Manila-calendar-day → UTC-instant converter (`manilaDayRangeUtc`) and the `where`-clause
+  builders that use it (`buildDateRangeWhere`/`buildListWhere`), `truncate()`, the QA-session
+  convention (`isQaSession()` — a `sessionId` starting `hilpm-` is test traffic, not a real
+  guest), safe `toolNames` JSON parsing (`parseToolNames()`), a Manila-time formatter
+  (`formatManilaDateTime()`), and `buildConversationSummaries()` which merges the three
+  separately-fetched per-session stat arrays (message count, first guest message, usage
+  sum) against the page's ordered session-id list, defaulting sanely when a session has no
+  matching row in one of them.
+- **`src/app/admin/haven-chats/page.tsx` (new)** — list view. Conversations are grouped by
+  `sessionId` via `prisma.havenChatTranscript.groupBy()` (ordered by latest message
+  descending, `skip`/`take` for 25-per-page pagination — no in-memory grouping of a full
+  table scan). Filters (`from`/`to`/`search`/`page`) live in the URL querystring via a GET
+  `<form>`, matching the `/admin/bookings`/`/admin/messages` server-component pattern
+  rather than `/admin/logs`'s client-fetch pattern — no new API route needed. Columns:
+  date/time (Asia/Manila), language, message count, first guest question (truncated), and
+  cost + turn count joined from `HavenChatUsage` by `sessionId`.
+- **`src/app/admin/haven-chats/[sessionId]/page.tsx` (new)** — detail view: full transcript
+  in order, guest/Haven bubbles, each assistant turn's tool names, and a session-level
+  cost/turn/token summary. Message content renders as a plain React text node — never
+  `dangerouslySetInnerHTML`.
+- **`src/components/admin/AdminSidebar.tsx`** — added a "Haven Chats" nav entry between
+  Messages and Testimonials.
+- **Auth**: no new permission module. Gated only by the existing `src/middleware.ts` session
+  check, same as `/admin/logs`, `/admin/bookings`, and `/admin/messages` — none of those add
+  a module-specific `checkPermission()` either, so this follows the established pattern
+  rather than introducing a new one. No auth-guard unit test was added for the same reason:
+  no other read-only admin page in this codebase has one (middleware itself is untested;
+  the only `checkPermission()`-level tests in the repo cover mutation routes).
+- **Tests**: `src/lib/__tests__/haven-chats.test.ts` (new) — 29 cases covering every pure
+  helper above, including the Manila UTC-offset conversion and the summary-merging
+  defaults.
+- **Docs**: [HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md) →
+  Admin Panel bullet + a new "Admin viewer" subsection under Haven AI Chat; File Structure
+  updated.
+
+---
+
 ## 2026-10-22, latest — Haven AI property-overview fix: forced `list_properties`, a per-turn listings context note, and a price-guard bullet fix (hil-pm/haven-property-list-102226)
 
 Area: Website

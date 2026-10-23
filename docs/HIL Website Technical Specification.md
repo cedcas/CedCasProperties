@@ -1,6 +1,14 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-22, later (Haven AI: property-overview fix, branch
+> **Last updated:** 2026-10-23 (admin Haven Chats viewer, branch
+> `hil-pm/admin-haven-chats-102326`) — new strictly read-only `/admin/haven-chats` (list) +
+> `/admin/haven-chats/[sessionId]` (detail) for reviewing `HavenChatTranscript`/
+> `HavenChatUsage` data: grouped-by-session list (Prisma `groupBy`, paginated server-side,
+> date-range + text filters via URL search params), per-session cost/turn summary, full
+> transcript with tool names per assistant turn. No schema change, no new write route, no
+> dedicated permission module (gated the same way as `/admin/logs`). See
+> [Haven AI Chat](#haven-ai-chat) → **Admin viewer** below. Lint/typecheck/`vitest run`
+> clean (4,272 tests, 29 new). Prior: 2026-10-22, later (Haven AI: property-overview fix, branch
 > `hil-pm/haven-property-list-102226`, DEC-029 addendum — production incident: asked "Hi,
 > what properties do you have?", Haven ~50% of the time skipped `list_properties` and
 > invented an answer — only the two B34 units, wrong capacities, and once a hallucinated
@@ -494,6 +502,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - **User management:** create/edit admin and manager accounts with granular permissions
 - **Change password** functionality
 - **Audit logs:** searchable activity log of all admin actions and guest bookings; filterable by actor, module, role; includes IP address and JSON metadata
+- **Haven Chats** *(added 2026-10-23)*: strictly read-only viewer of Haven AI's guest chat transcripts, grouped into conversations by session, with date-range + text filters, server-side pagination, and a per-session cost summary — see [Haven AI Chat → Admin viewer](#haven-ai-chat)
 
 ### Airbnb iCal Sync
 - **Export:** `/api/calendar/[slug]` generates a `.ics` feed for each property (Airbnb imports this). Since 2026-08-06 the feed also carries active manual blocks and shared-inventory sibling blocks where `exportToIcal` is true — see Shared Inventory Groups → iCal export.
@@ -751,6 +760,9 @@ src/
       logs/
         page.tsx                      # Audit log viewer
         LogsClient.tsx
+      haven-chats/
+        page.tsx                      # Haven AI chat transcripts, grouped by session — read-only
+        [sessionId]/page.tsx          # Full transcript for one session, read-only
       users/
         page.tsx                      # Admin user management
         UsersClient.tsx
@@ -2735,6 +2747,41 @@ buttons and "Talk to a Human" link are unaffected either way.
 - `retention.ts` — `purgeExpiredHavenData()`, driven by the daily cron (see Cron Jobs
   above): deletes `HavenChatTranscript` rows older than 90 days and `HavenChatUsage` rows
   older than 13 months.
+
+**Admin viewer** *(added 2026-10-23)* — `/admin/haven-chats` (list) and
+`/admin/haven-chats/[sessionId]` (detail), **strictly read-only** — no edit/delete action,
+no new API write route. Grouping/filtering/parsing logic is pure and tested in
+`src/lib/haven-chats.ts`; the pages themselves (`src/app/admin/haven-chats/page.tsx` and
+`.../[sessionId]/page.tsx`) do the Prisma reads directly, the same pattern as
+`/admin/bookings` and `/admin/messages` (DEC-004's "pages read Prisma directly" convention,
+applied inside admin too).
+- **List** — `HavenChatTranscript` rows are grouped into conversations by `sessionId` via
+  `prisma.havenChatTranscript.groupBy({ by: ["sessionId"], _max: { createdAt } })`,
+  ordered newest-first and paginated (25/page) at the database level — never a `findMany`
+  of every row. Columns: date/time (Asia/Manila, `formatManilaDateTime()`), language,
+  message count, first guest question (truncated to 140 chars), and — joined by
+  `sessionId` from `HavenChatUsage` — summed `costUsd` and a turn count (`HavenChatUsage`
+  row count; it is not a FK, same caveat as `chat-service.ts`'s own write path). Filters
+  (`from`/`to` as Asia/Manila calendar days, free-text `search` over `sessionId` **or**
+  message `content`) live entirely in the URL querystring via a GET form — no client-side
+  fetch, no new API route. The search filter narrows which sessions appear; the per-session
+  stats themselves (count, first message, cost) are always computed from the date-range
+  filter alone, so a session matched by one search hit still shows its true full message
+  count rather than just the matching rows.
+- **Detail** — full transcript for one `sessionId` in order, guest/Haven bubbles, each
+  assistant turn's `toolNames` (parsed from its JSON-array column), and a cost/turn/token
+  summary from that session's `HavenChatUsage` rows. Message content renders as a plain
+  text node (React's default escaping) — never `dangerouslySetInnerHTML` — since
+  `content` is guest-originated text.
+- **Auth** — no dedicated permission module. Like `/admin/logs`, `/admin/bookings`, and
+  `/admin/messages`, access is gated only by the existing session check in
+  `src/middleware.ts` (redirect to `/admin/login` when logged out) — any admin or manager
+  can view it, consistent with every other read-only admin list in this codebase. No
+  `PermissionModule` was added for it.
+- **QA traffic** — a `sessionId` starting `hilpm-` is test traffic, not a real guest
+  (convention set 2026-10-23); the list flags it with a small "QA" badge and the detail
+  page repeats the flag in its header. `isQaSession()` in `haven-chats.ts` is the single
+  definition.
 
 **Route** — `POST /api/haven/chat` (`src/app/api/haven/chat/route.ts`, `runtime = "nodejs"`,
 `dynamic = "force-dynamic"`): parses the body, resolves the caller's IP
