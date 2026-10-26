@@ -806,8 +806,94 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, and 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, 2026-10-23 on `hil-pm/haven-wording-102326`, and 2026-10-26 on `hil-pm/haven-socials-102626` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-10-26 "social links" fix — addendum)
+Production incident, same day: asked "San ang mga social medias nyo", Haven only pointed to
+Messenger — the system prompt had never told her about any other official channel, so
+Messenger (the one URL she's always allowed to write out) was the only thing she *could*
+offer. Separately, the owner also saw a reply render literally as `**Messenger**` in the
+admin transcript viewer. Closed without changing the decision itself, same tool-only-facts
+philosophy — a prompt instruction plus an independent post-processing backstop:
+- **The social-profile list is sourced from the footer's own config, not duplicated.**
+  `system-prompt.ts`'s new `SOCIAL_LINKS_RULE` imports `SOCIAL_LINKS` from
+  `src/lib/social-links.ts` — the exact same config `Footer.tsx`, the homepage CTA row, and
+  the `LodgingBusiness`/Person `sameAs` schema already read from ([DEC-030](#dec-030--no-individual-airbnb-listing-link-anywhere-footer-social-row-is-facebookinstagramtiktokyoutube-only-the-blogs-broken-airbnb-vanity-link-repoints-to-direct-booking))
+  — so the chat assistant can never drift from the footer's list, and Airbnb (deliberately
+  absent from that config) is excluded here too. The rule tells the model to list EVERY
+  profile plainly with its exact URL, in the guest's language, whenever asked about socials
+  or a named platform (Facebook/Instagram/TikTok/YouTube/Messenger/etc.) — never only
+  Messenger, never an invented account or URL.
+- **The literal-URL ban now has a second exception.** `system-prompt.ts`'s existing "never
+  write a URL in your reply text" rule previously carved out only the Messenger handoff; it
+  now also exempts the official social links rule, since stating "San ang mga social
+  medias nyo" plainly with real URLs requires writing them out.
+- **The link guard would have silently defeated this anyway — now it doesn't.**
+  `post-process.ts`'s `isAllowedHref` (markdown-link allowlist) and `stripBareUrls`'s bare-URL
+  exemption (previously Messenger-only) both gained `isOfficialSocialUrl()`, matching a
+  social URL loosely (scheme/`www.`/trailing-slash-insensitive) against the same
+  `SOCIAL_LINK_URLS`. Without this, every social URL except Messenger was being stripped out
+  of the reply as an unrecognized bare URL even if the model correctly named all four — this,
+  not a missing fact, was the dominant cause of the reported bug. A new
+  `ensureSocialLinkButtons()` (same pattern as `ensureHandoffLink`) adds a button for any
+  platform the reply names, wired into `chat-service.ts` right before `ensureHandoffLink`.
+- **Rendering finding: the live chat bubble already renders `**bold**` correctly; the admin
+  transcript viewer didn't.** `ChatMessage.tsx` (the guest-facing bubble, used for both
+  static-tree and AI-mode replies) already had a correct `**bold**` → `<strong>` parser —
+  investigation found no path where it mis-renders a well-formed bold run. The actual literal
+  `**Messenger**` the owner saw was in a *different* component: the admin transcript viewer
+  (`src/app/admin/haven-chats/[sessionId]/page.tsx`) rendered stored `HavenChatTranscript`
+  content as a raw text node by explicit design ("Plain text only... never HTML"), so any
+  `**bold**` in a stored reply showed as literal asterisks there. Fix: extracted the chat
+  bubble's existing parser into a shared `src/lib/chat/render-markdown-bold.tsx`
+  (`renderMarkdownBold`) and reused it in the transcript viewer too — chosen over stripping
+  `**` in post-processing, since the masked, stored transcript content is meant to reflect
+  what the model actually said, and the existing parser only ever builds `<strong>`/`<br/>`
+  React elements (never `dangerouslySetInnerHTML`), so reusing it adds no HTML-injection
+  surface.
+- Tests: `social-links.test.ts`/`isOfficialSocialUrl`/`isAllowedHref`/`stripBareUrls`
+  (every owner-approved URL survives, an unrelated "facebook-looking" URL doesn't, Airbnb
+  rejected), `ensureSocialLinkButtons` (button per named platform, no duplicate, no Airbnb),
+  `system-prompt.test.ts` (rule lists every `SOCIAL_LINKS` entry, Airbnb absent from the rule
+  text, Messenger framed as one-of-several), and a new `render-markdown-bold.test.ts`
+  covering the exact failing shape (a bulleted social list with bold headings) plus the
+  no-HTML-injection guarantee. Full suite green (213 files, 4,458 tests, 20 new); `tsc
+  --noEmit` and `eslint` clean on every changed file.
+
+### Implementation note (2026-10-23 "5 listings"/"titingnan"/"kasya hanggang N tao" wording pass — addendum)
+Owner correction, same day (Cedric): three small guest-facing wording issues bundled into
+one pass, same tool-only-facts philosophy, same prompt-instruction-plus-independent-backstop
+pattern as the "sikat sa inyo" and Bella Vita notes above — closed without changing the
+decision itself:
+- **"5 listings," never "5 properties."** Haven's own `PROPERTY_OVERVIEW_RULE` already used
+  "listings" almost everywhere, but nothing explicitly banned the model saying "5
+  properties"/"five properties" instead — now banned outright, in English and Tagalog/
+  Batangueño alike. **`system-prompt.ts`:** `PROPERTY_OVERVIEW_RULE` gained a trailing
+  sentence naming the rule. **`post-process.ts`:** new `fixFivePropertiesWording()` — a
+  case-insensitive `/\b(5|five)\s+properties\b/` swap to "5 listings"/"five listings" (the
+  number token is left as written; only "properties" → "listings" swaps, case preserved).
+- **"Titingnan," never the typo "titigingan."** Haven generated "titigingan" — a misspelling
+  of "titingnan" (will look at/check) that doesn't appear anywhere in this prompt's own
+  Tagalog/Batangueño text (including the few-shot block), so it's a model-generated typo, not
+  something learned from here. **`system-prompt.ts`:** new `TITINGNAN_SPELLING_RULE`.
+  **`post-process.ts`:** new `fixTitiginganTypo()`, a straight word-level swap preserving
+  capitalization.
+- **"Kasya hanggang N tao," never "umabot sa/ng N guests/tao."** Haven stated a listing's max
+  capacity as "umabot sa 15 guests" — "umabot" means "to reach/arrive at," so the phrase
+  misreads as how many guests have already arrived rather than how many the listing can
+  hold. **`system-prompt.ts`:** new `MAX_GUESTS_PHRASING_RULE` naming "kasya hanggang N tao"
+  (fits up to N people) as the correct phrasing. **`post-process.ts`:** new
+  `fixUmabotGuestsPhrasing()` — matches `/\bumabot\s+(?:sa|ng)\s+(\d+)\s+(?:guests?|tao)\b/`
+  and rewrites to "kasya hanggang N tao," keeping the captured number and preserving
+  capitalization.
+- **`chat-service.ts`:** all three wired into the post-process chain right after
+  `fixBellaVitaMiscount()`, in the order above, before the access-leak scrub.
+- Tests: `post-process.test.ts` (one `describe` block per backstop — EN/Tagalog phrasing,
+  capitalization preserved, no-op on already-correct text, unrelated numbers/words left
+  alone), `system-prompt.test.ts` (prompt bans each phrasing and names the replacement,
+  few-shot block carries none of the three). Full suite green (51 files, 1,953 tests);
+  `tsc --noEmit` clean. Committed, not pushed, no PR (task constraint for this session).
 
 ### Implementation note (2026-10-23 "sikat sa inyo" ban — addendum to the 2026-10-16 plain-Tagalog pass)
 Owner incident (Cedric, 2026-10-23): Haven asked "Anong sikat sa inyo, o ilang guests ang

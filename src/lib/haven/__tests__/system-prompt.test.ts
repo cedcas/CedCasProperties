@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildHavenSystemPrompt } from "../system-prompt";
+import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 
 describe("buildHavenSystemPrompt", () => {
   it("always offers the https Messenger handoff link, never the scheme-less form alone", () => {
@@ -323,6 +324,70 @@ describe("buildHavenSystemPrompt", () => {
       const btgPrompt = buildHavenSystemPrompt("btg");
       const fewshot = btgPrompt.slice(btgPrompt.indexOf("Example exchanges"), btgPrompt.indexOf("Owner-approved facts"));
       expect(fewshot).not.toMatch(/sikat\s+sa/i);
+    });
+  });
+
+  // DEC-029 addendum, 2026-10-23: "5 listings" wording, "titigingan" typo, and "umabot sa N
+  // guests" capacity phrasing.
+  describe("'5 listings' / 'titingnan' / 'kasya hanggang N tao' wording (Cedric, 2026-10-23)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it('always calls the full set of units "5 listings", never "5 properties"/"five properties"', () => {
+      expect(prompt).toMatch(/Always call the full set of units "5 listings"/i);
+      expect(prompt).toMatch(/never "5 properties" or "five properties"/i);
+    });
+
+    it('instructs the correct spelling "titingnan", never the typo "titigingan"', () => {
+      expect(prompt).toMatch(/Spell "titingnan" \(will look at\/check\) correctly/i);
+      expect(prompt).toMatch(/never the typo "titigingan"/i);
+    });
+
+    it('bans "umabot sa/ng N guests/tao" for max capacity, naming "kasya hanggang N tao"', () => {
+      expect(prompt).toMatch(/kasya hanggang N tao/i);
+      expect(prompt).toMatch(/never "umabot sa N guests" or "umabot ng N guests\/tao"/i);
+    });
+
+    it("the Batangueño few-shot block contains neither banned phrasing", () => {
+      const btgPrompt = buildHavenSystemPrompt("btg");
+      const fewshot = btgPrompt.slice(btgPrompt.indexOf("Example exchanges"), btgPrompt.indexOf("Owner-approved facts"));
+      expect(fewshot).not.toMatch(/titigingan/i);
+      expect(fewshot).not.toMatch(/umabot/i);
+      expect(fewshot).not.toMatch(/5 properties/i);
+    });
+  });
+
+  // Owner incident (Cedric, 2026-10-26): asked "San ang mga social medias nyo", Haven only
+  // pointed to Messenger. The fix sources the social-profile list directly from
+  // src/lib/social-links.ts — the SAME config Footer.tsx/the homepage CTA/the sameAs schema
+  // read from (DEC-030) — so it can never drift from the footer's list.
+  describe("social links rule (Cedric, 2026-10-26) — sourced from the shared footer config", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it("lists every URL from the shared SOCIAL_LINKS config (the same one Footer.tsx uses)", () => {
+      for (const social of SOCIAL_LINKS) {
+        expect(prompt).toContain(social.url);
+        expect(prompt).toContain(social.name);
+      }
+    });
+
+    it("never mentions Airbnb as a social channel — excluded from the shared config", () => {
+      const socialRuleStart = prompt.indexOf("When a guest asks where to find us on social media");
+      const socialRuleEnd = prompt.indexOf("Messenger is one of the channels above");
+      const socialRuleText = prompt.slice(socialRuleStart, socialRuleEnd);
+      expect(socialRuleText.toLowerCase()).not.toContain("airbnb");
+      expect(SOCIAL_LINK_URLS.some((u) => u.toLowerCase().includes("airbnb"))).toBe(false);
+    });
+
+    it("tells the model Messenger is one of several channels, never the only answer", () => {
+      expect(prompt).toMatch(/Messenger is one of the channels above, never the only answer/i);
+    });
+
+    it("bans inventing a profile or URL not in the list", () => {
+      expect(prompt).toMatch(/never invent, guess, or state a profile on a platform not listed here/i);
+    });
+
+    it("the URL-in-reply-text ban now names the social links rule as a second exception, alongside Messenger", () => {
+      expect(prompt).toMatch(/exceptions are the Messenger handoff rule and the official social links rule/i);
     });
   });
 });

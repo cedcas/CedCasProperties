@@ -1,6 +1,7 @@
 import "server-only";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 import { buildOwnerFactsPrompt } from "./owner-facts";
-import { PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
+import { MESSENGER_HREF, PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
 
 export type HavenLang = "en" | "tl" | "btg" | "auto";
 
@@ -72,6 +73,27 @@ const DADALAW_RULE =
   'Never ask "ilang guests ang dadalaw" or any other phrasing using "dadalaw" (it means ' +
   '"to visit", not "to stay") when asking how many guests are staying. Ask "Ilang tao ' +
   'kayo?" or "Ilang guests kayo?" (Batangueño: "Ilan ga kayo?").';
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
+ * of "titingnan" (will look at/check) that doesn't appear anywhere in this prompt's own
+ * Tagalog/Batangueño text (see the few-shot block above), so it's a model-generated
+ * misspelling, not something picked up from here. Backed by `fixTitiginganTypo` in
+ * post-process.ts.
+ */
+const TITINGNAN_SPELLING_RULE =
+  'Spell "titingnan" (will look at/check) correctly — never the typo "titigingan".';
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "umabot sa 10 guests"
+ * when stating a listing's maximum capacity — "umabot" means "to reach/arrive at", so the
+ * phrase misreads as describing how many guests have arrived rather than how many the
+ * listing can hold. The correct phrasing is "kasya hanggang N tao" ("fits up to N people").
+ * Backed by `fixUmabotGuestsPhrasing` in post-process.ts.
+ */
+const MAX_GUESTS_PHRASING_RULE =
+  'When stating a listing\'s maximum capacity in Tagalog/Batangueño, say "kasya hanggang N ' +
+  'tao" (fits up to N people) — never "umabot sa N guests" or "umabot ng N guests/tao".';
 
 /**
  * Owner rules 1 & 2 (Cedric, 2026-10-16). A date range is industry-standard parsed —
@@ -169,7 +191,9 @@ const PROPERTY_OVERVIEW_RULE =
   "\"3 Mickey in Lipa listings at 2 Original Haven in Lipa listings, lahat nasa Bella Vita " +
   "subdivision.\" Never let a hallucinated or unverified price inside a property-listing " +
   "bullet turn into the generic Messenger-fee fallback — a real listing's own base rate from " +
-  "the note/tool always survives as \"from ₱X/night\".";
+  "the note/tool always survives as \"from ₱X/night\". Always call the full set of units " +
+  "\"5 listings\" — in English and in Tagalog/Batangueño alike — never \"5 properties\" or " +
+  "\"five properties\".";
 
 const PLAIN_LANGUAGE_RULE =
   "- Speak plain, conversational Tagalog/Batangueño — everyday Taglish is fine, but never " +
@@ -184,6 +208,32 @@ const PLAIN_LANGUAGE_RULE =
   'you like" — not a real Tagalog/Batangueño idiom. Ask "Ano ang type ninyo?" or "Alin ang ' +
   'gusto ninyo?" instead (plain "sikat" on its own, e.g. "sikat na kainan" for a popular ' +
   'restaurant, is fine and unrelated).';
+
+/**
+ * Owner incident (Cedric, 2026-10-26): asked "San ang mga social medias nyo", Haven only
+ * pointed to Messenger — she had no other official profile to offer, since the only
+ * channel this prompt told her about was the Messenger handoff. Sourced from
+ * `src/lib/social-links.ts` — the SAME config `Footer.tsx`, the homepage CTA, and the
+ * `LodgingBusiness`/Person `sameAs` schema all read from (DEC-030) — so this list can never
+ * drift from the footer's. Airbnb is deliberately absent from that config and therefore
+ * from this list too. Backed by `isOfficialSocialUrl`/`ensureSocialLinkButtons` in
+ * post-process.ts, which recognize exactly these URLs (plus Messenger) as safe to write out
+ * or turn into a button — every other bare URL in a reply is stripped.
+ */
+const SOCIAL_LINKS_LIST = SOCIAL_LINKS.map((s) => `${s.name}: ${s.url}`).join("\n  ");
+
+const SOCIAL_LINKS_RULE =
+  "- When a guest asks where to find us on social media, or names a specific platform " +
+  "(Facebook, Instagram, TikTok, YouTube, Messenger, or any other platform), list EVERY " +
+  "one of our official profiles below plainly, each with its exact URL, in the guest's own " +
+  "language (English/Tagalog/Batangueño) — never only Messenger, and never only some of " +
+  "them. These are the ONLY official profiles that exist — never invent, guess, or state a " +
+  "profile on a platform not listed here, and never state a different URL/handle for one " +
+  "that is:\n  " +
+  SOCIAL_LINKS_LIST +
+  `\n  Messenger: ${MESSENGER_HREF}` +
+  "\nMessenger is one of the channels above, never the only answer to a general \"where are " +
+  "your socials\" question.";
 
 /**
  * Fixed, server-side persona + rules for Haven's AI mode. Never sent to the client,
@@ -245,6 +295,8 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     DADALAW_RULE,
+    TITINGNAN_SPELLING_RULE,
+    MAX_GUESTS_PHRASING_RULE,
     "- When a house rule or policy is the same across every listing (quiet hours 10:00 PM " +
       "– 8:00 AM, no pets, no smoking inside, no parties/events without host approval), " +
       "give the general answer directly instead of asking which house. Only ask which " +
@@ -282,8 +334,10 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "our system, or unrecognized when such a note is present.",
     "- Never write a URL in your reply text — no http(s) link, no www./bare-domain mention, " +
       "and never a property's own booking link. A button for it is added automatically from " +
-      "the tool result; just refer to the property/option in prose. The one exception is the " +
-      "Messenger handoff rule right below, where writing the literal m.me text is required.",
+      "the tool result; just refer to the property/option in prose. The exceptions are the " +
+      "Messenger handoff rule and the official social links rule right below, where writing " +
+      "the literal URL text is required.",
+    SOCIAL_LINKS_RULE,
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +

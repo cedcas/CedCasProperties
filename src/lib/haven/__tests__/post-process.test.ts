@@ -8,7 +8,9 @@ import {
   extractAllowedLinks,
   stripBareUrls,
   isAllowedHref,
+  isOfficialSocialUrl,
   normalizeHref,
+  ensureSocialLinkButtons,
   dedupeLinks,
   collectBookingLinks,
   ensureHandoffLink,
@@ -26,6 +28,9 @@ import {
   PROVISIONAL_CAVEAT_TL,
   stripSystemMentions,
   fixBellaVitaMiscount,
+  fixFivePropertiesWording,
+  fixTitiginganTypo,
+  fixUmabotGuestsPhrasing,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -42,6 +47,7 @@ import {
   type ToolExchange,
 } from "../post-process";
 import { buildStayLabel } from "../dates";
+import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 
 describe("isAllowedHref", () => {
   it("allows a relative site path", () => {
@@ -64,6 +70,40 @@ describe("isAllowedHref", () => {
 
   it("rejects a malformed URL", () => {
     expect(isAllowedHref("not a url at all :: ??")).toBe(false);
+  });
+
+  it("allows every owner-approved social profile from the shared config (DEC-030) — same config the footer uses", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      expect(isAllowedHref(url)).toBe(true);
+    }
+  });
+
+  it("rejects Airbnb — deliberately excluded from the shared social-links config", () => {
+    expect(isAllowedHref("https://airbnb.com/h/haveninlipa")).toBe(false);
+    expect(SOCIAL_LINK_URLS.some((u) => u.includes("airbnb"))).toBe(false);
+  });
+});
+
+describe("isOfficialSocialUrl", () => {
+  it("matches every URL in the shared SOCIAL_LINK_URLS config exactly as written", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      expect(isOfficialSocialUrl(url)).toBe(true);
+    }
+  });
+
+  it("matches the same profile written without a scheme or 'www.'", () => {
+    expect(isOfficialSocialUrl("facebook.com/haveninlipa")).toBe(true);
+    expect(isOfficialSocialUrl("www.facebook.com/haveninlipa")).toBe(true);
+  });
+
+  it("matches with or without a trailing slash", () => {
+    expect(isOfficialSocialUrl("https://www.instagram.com/haven_inlipa")).toBe(true);
+    expect(isOfficialSocialUrl("https://www.instagram.com/haven_inlipa/")).toBe(true);
+  });
+
+  it("rejects an unrelated or invented social URL, including Airbnb", () => {
+    expect(isOfficialSocialUrl("https://www.facebook.com/someoneelse")).toBe(false);
+    expect(isOfficialSocialUrl("https://airbnb.com/h/haveninlipa")).toBe(false);
   });
 });
 
@@ -157,6 +197,18 @@ describe("stripBareUrls (live bug: a bare URL, including an invented domain, sli
   it("leaves a scheme-less bare m.me/haveninlipa mention in place", () => {
     const text = "Message us at m.me/haveninlipa, or use the contact page.";
     expect(stripBareUrls(text)).toBe(text);
+  });
+
+  it("leaves every owner-approved social URL in place — the reported bug (only Messenger survived)", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      const text = `You can find us there: ${url}.`;
+      expect(stripBareUrls(text)).toBe(text);
+    }
+  });
+
+  it("still removes an unrelated/invented social-looking URL that isn't in the owner-approved list", () => {
+    const text = "You can find us at https://www.facebook.com/not-the-real-page for more info.";
+    expect(stripBareUrls(text)).toBe("You can find us at for more info.");
   });
 });
 
@@ -633,6 +685,38 @@ describe("ensureHandoffLink", () => {
   });
 });
 
+describe("ensureSocialLinkButtons — socials rule backed by the shared footer config (DEC-030)", () => {
+  it("adds a button for every official profile named in the reply, using the exact shared-config URL", () => {
+    const text =
+      "You can find us on Facebook, Instagram, TikTok, and YouTube — here are the links.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links).toEqual(SOCIAL_LINKS.map((s) => ({ label: s.name, href: s.url })));
+  });
+
+  it("only adds a button for a platform actually named in the reply", () => {
+    const text = "You can find us on Facebook.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links).toEqual([{ label: "Facebook", href: "https://www.facebook.com/haveninlipa" }]);
+  });
+
+  it("never adds Airbnb — it's not in the shared social-links config", () => {
+    const text = "You can find us on Facebook or Airbnb.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links.some((l) => l.href.includes("airbnb"))).toBe(false);
+  });
+
+  it("doesn't duplicate a button the model's own markdown link already produced", () => {
+    const existing = [{ label: "Facebook", href: "https://www.facebook.com/haveninlipa" }];
+    const text = "Find us on Facebook: [Facebook](https://www.facebook.com/haveninlipa).";
+    expect(ensureSocialLinkButtons(text, existing)).toEqual(existing);
+  });
+
+  it("leaves links untouched when the reply mentions no social platform", () => {
+    const links = [{ label: "Book Now", href: "/properties/a/book" }];
+    expect(ensureSocialLinkButtons("Your stay is all set!", links)).toBe(links);
+  });
+});
+
 describe("limitToOneProvisional", () => {
   it("keeps only the first occurrence of the word 'provisional' in a reply", () => {
     const input = "This total is provisional. Everything here is provisional, truly provisional.";
@@ -1058,6 +1142,83 @@ describe("fixBellaVitaMiscount", () => {
   it("does not touch an unrelated mention of the number two near Bella Vita", () => {
     const input = "We've been in the Bella Vita subdivision for two years.";
     expect(fixBellaVitaMiscount(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): the full set of units is always "5 listings" — in
+// English and Tagalog/Batangueño alike — never "5 properties"/"five properties".
+describe("fixFivePropertiesWording", () => {
+  it('rewrites "5 properties" to "5 listings"', () => {
+    expect(fixFivePropertiesWording("We have 5 properties in Lipa.")).toBe("We have 5 listings in Lipa.");
+  });
+
+  it('rewrites "five properties" to "five listings"', () => {
+    expect(fixFivePropertiesWording("We have five properties in Lipa.")).toBe("We have five listings in Lipa.");
+  });
+
+  it("preserves capitalization of the word being swapped", () => {
+    expect(fixFivePropertiesWording("5 Properties are listed below.")).toBe("5 Listings are listed below.");
+  });
+
+  it("is case-insensitive on the match itself", () => {
+    expect(fixFivePropertiesWording("FIVE PROPERTIES available.")).toBe("FIVE Listings available.");
+  });
+
+  it("works in a Tagalog sentence (the English word 'properties' stays swapped)", () => {
+    expect(fixFivePropertiesWording("May 5 properties kami sa Bella Vita.")).toBe("May 5 listings kami sa Bella Vita.");
+  });
+
+  it("is a no-op when already saying listings", () => {
+    const input = "We have 5 listings in Lipa.";
+    expect(fixFivePropertiesWording(input)).toBe(input);
+  });
+
+  it("does not touch an unrelated count of properties", () => {
+    const input = "We have 3 properties available this week.";
+    expect(fixFivePropertiesWording(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): "titigingan" is a model-generated typo of
+// "titingnan" (will look at/check) — not in any of Haven's own prompt text.
+describe("fixTitiginganTypo", () => {
+  it('rewrites "titigingan" to "titingnan"', () => {
+    expect(fixTitiginganTypo("Titigingan ko agad kung bakante.")).toBe("Titingnan ko agad kung bakante.");
+  });
+
+  it("preserves lowercase", () => {
+    expect(fixTitiginganTypo("Sandali, titigingan ko muna.")).toBe("Sandali, titingnan ko muna.");
+  });
+
+  it("is a no-op when the word is already correct", () => {
+    const input = "Titingnan ko agad kung bakante ito.";
+    expect(fixTitiginganTypo(input)).toBe(input);
+  });
+});
+
+// DEC-029 addendum (Cedric, 2026-10-23): "umabot sa/ng N guests/tao" (stating max capacity)
+// always reads "kasya hanggang N tao" (fits up to N people) — "umabot" means "to reach/
+// arrive at", which misreads as how many guests have arrived.
+describe("fixUmabotGuestsPhrasing", () => {
+  it('rewrites "umabot sa N guests"', () => {
+    expect(fixUmabotGuestsPhrasing("Ang Mickey ay umabot sa 15 guests.")).toBe("Ang Mickey ay kasya hanggang 15 tao.");
+  });
+
+  it('rewrites "umabot ng N guests"', () => {
+    expect(fixUmabotGuestsPhrasing("Umabot ng 9 guests ang Spacious 2BR.")).toBe("Kasya hanggang 9 tao ang Spacious 2BR.");
+  });
+
+  it('rewrites "umabot ng N tao"', () => {
+    expect(fixUmabotGuestsPhrasing("Umabot ng 11 tao ang bahay na ito.")).toBe("Kasya hanggang 11 tao ang bahay na ito.");
+  });
+
+  it("preserves capitalization of the matched phrase", () => {
+    expect(fixUmabotGuestsPhrasing("Umabot sa 7 guests ang Cozy 1BR.")).toBe("Kasya hanggang 7 tao ang Cozy 1BR.");
+  });
+
+  it("is a no-op when already saying kasya hanggang", () => {
+    const input = "Kasya hanggang 15 tao ang Mickey in Lipa.";
+    expect(fixUmabotGuestsPhrasing(input)).toBe(input);
   });
 });
 

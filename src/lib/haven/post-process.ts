@@ -2,6 +2,7 @@ import "server-only";
 import { formatStayRangeShort, toUtcMidnight, addUtcDays } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
 import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
+import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 import type { HavenLang } from "./system-prompt";
 import type { StayLabel } from "./dates";
 
@@ -31,10 +32,37 @@ const MARKDOWN_LINK = /\[([^\]]+)\]\(([^)]+)\)/g;
 export const MESSENGER_HREF = "https://m.me/haveninlipa";
 const MESSENGER_HREF_RE = /^m\.me\/haveninlipa\/?$/i;
 
+/**
+ * Normalizes a URL for loose comparison against the owner-approved social profiles
+ * (`src/lib/social-links.ts` — the same config the site footer reads from): scheme and
+ * leading "www." dropped, trailing slash dropped, lowercased. Lets a guest or the model
+ * write "facebook.com/haveninlipa" or "https://www.facebook.com/haveninlipa" and still
+ * match the one official URL.
+ */
+function normalizeUrlForCompare(u: string): string {
+  return u
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+}
+
+const OFFICIAL_SOCIAL_URL_SET = new Set(SOCIAL_LINK_URLS.map(normalizeUrlForCompare));
+
+/**
+ * True for one of the four owner-approved social profiles — the SAME config the footer
+ * (`Footer.tsx`), homepage CTA, and `LodgingBusiness`/Person `sameAs` schema all read from
+ * (see DEC-030). Airbnb is deliberately not in that config, so it never matches here either.
+ */
+export function isOfficialSocialUrl(href: string): boolean {
+  return OFFICIAL_SOCIAL_URL_SET.has(normalizeUrlForCompare(href));
+}
+
 export function isAllowedHref(href: string): boolean {
   const trimmed = href.trim();
   if (trimmed.startsWith("/")) return true;
   if (trimmed === "m.me/haveninlipa" || trimmed === MESSENGER_HREF) return true;
+  if (isOfficialSocialUrl(trimmed)) return true;
   try {
     const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
     return url.hostname === "haveninlipa.com" || url.hostname === "www.haveninlipa.com";
@@ -110,19 +138,31 @@ function isMessengerUrl(urlToken: string): boolean {
 }
 
 /**
+ * True for the Messenger handoff href OR one of the four owner-approved social profiles
+ * (`isOfficialSocialUrl` — same config as the footer, DEC-030). Both are deliberately
+ * written out in full rather than left to a button alone (see `SOCIAL_LINKS_RULE` in
+ * system-prompt.ts) — without this, every social URL except Messenger used to be stripped
+ * out here as an unrecognized bare URL, so Haven could never actually answer a "where are
+ * your socials" question even when told the real profiles (the reported bug).
+ */
+function isExemptBareUrl(urlToken: string): boolean {
+  return isMessengerUrl(urlToken) || isOfficialSocialUrl(urlToken);
+}
+
+/**
  * Removes every other bare (non-markdown) URL from the reply text, together with a lead-in
  * phrase immediately before it — independent of whether its host would pass `isAllowedHref`.
  * Run AFTER `extractAllowedLinks` so a markdown link's visible label text (which can itself
  * be a raw URL, e.g. `[https://x](https://x)`) is also caught. The booking-link buttons
  * (`collectBookingLinks`) and any markdown link already converted to a button carry the
- * real links — the reply text itself should never carry one, with the single Messenger
- * exception above.
+ * real links — the reply text itself should never carry one, with the Messenger and
+ * official-social-profile exceptions above.
  */
 export function stripBareUrls(text: string): string {
   const stripped = text.replace(BARE_URL_WITH_LEAD_IN_RE, (match, urlPart: string) => {
     const trailing = urlPart.match(URL_TRAILING_PUNCT_RE)?.[0] ?? "";
     const core = trailing ? urlPart.slice(0, -trailing.length) : urlPart;
-    if (isMessengerUrl(core)) return match;
+    if (isExemptBareUrl(core)) return match;
     return trailing;
   });
   return cleanupStrippedPunctuation(stripped)
@@ -620,6 +660,27 @@ export function ensureHandoffLink(originalText: string, links: LinkButton[]): Li
   return [...links, { label: "Message us on Messenger", href: MESSENGER_HREF }];
 }
 
+// ── Social links safety net ─────────────────────────────────────────────────
+
+/**
+ * Same pattern as `ensureHandoffLink` above, generalized to every owner-approved social
+ * profile (`src/lib/social-links.ts` — the same config the footer reads from, DEC-030):
+ * whenever the reply names a platform (e.g. "Facebook"), a button for ITS official URL is
+ * guaranteed even if the model wrote the platform's name without also formatting a markdown
+ * link for it. Never adds a button for a platform the reply doesn't mention, and never
+ * duplicates one that's already there (e.g. one `extractAllowedLinks` already produced from
+ * a correctly-formatted markdown link).
+ */
+export function ensureSocialLinkButtons(originalText: string, links: LinkButton[]): LinkButton[] {
+  let out = links;
+  for (const social of SOCIAL_LINKS) {
+    if (!new RegExp(`\\b${social.name}\\b`, "i").test(originalText)) continue;
+    if (out.some((l) => isOfficialSocialUrl(l.href) && normalizeUrlForCompare(l.href) === normalizeUrlForCompare(social.url))) continue;
+    out = [...out, { label: social.name, href: social.url }];
+  }
+  return out;
+}
+
 // ── "Provisional" dedupe ─────────────────────────────────────────────────────
 
 /**
@@ -879,6 +940,52 @@ const BELLA_VITA_MISCOUNT_RE =
 
 export function fixBellaVitaMiscount(text: string): string {
   return text.replace(BELLA_VITA_MISCOUNT_RE, "listings in the Bella Vita subdivision");
+}
+
+// ── "5 listings" wording guard ───────────────────────────────────────────────
+
+/**
+ * Owner rule (Cedric, 2026-10-23 — DEC-029 addendum): the full set of units is always
+ * "5 listings", in English and Tagalog/Batangueño alike — never "5 properties"/"five
+ * properties". Independent backstop for the `PROPERTY_OVERVIEW_RULE` instruction in
+ * system-prompt.ts. Only the number stays as the model wrote it (digit or spelled-out
+ * word) — just "properties" swaps for "listings", case preserved.
+ */
+const FIVE_PROPERTIES_RE = /\b(5|five)(\s+)(properties)\b/gi;
+
+export function fixFivePropertiesWording(text: string): string {
+  return text.replace(FIVE_PROPERTIES_RE, (_match, num: string, space: string, propertiesWord: string) => {
+    return `${num}${space}${capitalizeLike(propertiesWord, "listings")}`;
+  });
+}
+
+// ── "Titigingan" typo guard ──────────────────────────────────────────────────
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
+ * of "titingnan" (will look at/check) that isn't in any of this prompt's own Tagalog/
+ * Batangueño text, so it's a model-generated misspelling. Independent backstop for the
+ * `TITINGNAN_SPELLING_RULE` instruction in system-prompt.ts.
+ */
+const TITIGINGAN_RE = /\btitigingan\b/gi;
+
+export function fixTitiginganTypo(text: string): string {
+  return text.replace(TITIGINGAN_RE, (match) => capitalizeLike(match, "titingnan"));
+}
+
+// ── "Umabot sa N guests" capacity-phrasing guard ─────────────────────────────
+
+/**
+ * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "umabot sa 10 guests"/
+ * "umabot ng 10 tao" when stating a listing's maximum capacity — "umabot" means "to reach/
+ * arrive at", so it misreads as how many guests have arrived rather than how many the
+ * listing can hold. Correct phrasing is "kasya hanggang N tao" (fits up to N people).
+ * Independent backstop for the `MAX_GUESTS_PHRASING_RULE` instruction in system-prompt.ts.
+ */
+const UMABOT_GUESTS_RE = /\bumabot\s+(?:sa|ng)\s+(\d+)\s+(?:guests?|tao)\b/gi;
+
+export function fixUmabotGuestsPhrasing(text: string): string {
+  return text.replace(UMABOT_GUESTS_RE, (match, num: string) => capitalizeLike(match, `kasya hanggang ${num} tao`));
 }
 
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────

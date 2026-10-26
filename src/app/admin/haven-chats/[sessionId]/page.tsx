@@ -7,6 +7,7 @@ import {
   isQaSession,
   formatManilaDateTime,
 } from "@/lib/haven-chats";
+import { renderMarkdownBold } from "@/lib/chat/render-markdown-bold";
 
 export const dynamic = "force-dynamic";
 
@@ -83,9 +84,14 @@ export default async function HavenChatDetailPage({ params }: { params: Promise<
                 <div className={`text-[11px] mb-1.5 ${isUser ? "text-white/60" : "text-charcoal/40"}`}>
                   {isUser ? "Guest" : "Haven"} · {formatManilaDateTime(m.createdAt)}
                 </div>
-                {/* Plain text only — content is rendered as a text node, never HTML. */}
-                <p className={`text-[13.5px] leading-[1.6] whitespace-pre-wrap ${isUser ? "text-white" : "text-charcoal/85"}`}>
-                  {m.content}
+                {/* Markdown bold (**text**) renders via safe React elements — same
+                    renderMarkdownBold the live chat bubble uses — never
+                    dangerouslySetInnerHTML, so there's no HTML-injection surface even though
+                    this is stored, untrusted conversation content. Without this, a reply like
+                    "...via **Messenger**" showed literal asterisks here (the owner reviews
+                    transcripts on this page). */}
+                <p className={`text-[13.5px] leading-[1.6] ${isUser ? "text-white" : "text-charcoal/85"}`}>
+                  {renderMarkdownBold(m.content)}
                 </p>
                 {!isUser && tools.length > 0 && (
                   <div className="mt-2 pt-2 border-t border-black/[.06] flex flex-wrap gap-1.5">
