@@ -1,6 +1,22 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-23, latest (Haven AI: "5 listings"/"titingnan"/"kasya hanggang
+> **Last updated:** 2026-10-26, latest (Haven AI: social links fix, branch
+> `hil-pm/haven-socials-102626`, DEC-029 addendum — Owner-reported: a guest asked "San ang
+> mga social medias nyo" and Haven only pointed to Messenger, and a reply reviewed in the
+> admin transcript viewer showed literal `**Messenger**` asterisks): [Haven AI Chat](#haven-ai-chat)
+> — `system-prompt.ts`'s new `SOCIAL_LINKS_RULE` lists every owner-approved profile, sourced
+> directly from `src/lib/social-links.ts` (the same config `Footer.tsx`/DEC-030 reads from,
+> so it can never drift), and gets a second exception to the "never write a URL" rule.
+> `post-process.ts`'s `isAllowedHref`/`stripBareUrls` gained `isOfficialSocialUrl()` so a
+> social URL survives the link guard the way only Messenger previously did — this, not a
+> missing fact, was the main cause of the reported bug — and a new `ensureSocialLinkButtons()`
+> adds a button per platform named. Separately, `ChatMessage.tsx`'s existing `**bold**`
+> parser was extracted into a shared `src/lib/chat/render-markdown-bold.tsx`
+> (`renderMarkdownBold`) and reused by the admin Haven-chat transcript viewer
+> (`/admin/haven-chats/[sessionId]`), which previously rendered stored content as a raw text
+> node — that page, not the live chat bubble, is where the literal asterisks were actually
+> coming from. Lint/typecheck/`vitest run` clean (213 files, 4,458 tests, 20 new).
+> Prior: 2026-10-23 (Haven AI: "5 listings"/"titingnan"/"kasya hanggang
 > N tao" wording pass, branch `hil-pm/haven-wording-102326`, DEC-029 addendum — three small
 > guest-facing wording fixes bundled together): [Haven AI Chat](#haven-ai-chat) — (1) the
 > full set of units is always "5 listings," never "5 properties"/"five properties," in
@@ -2504,7 +2520,16 @@ buttons and "Talk to a Human" link are unaffected either way.
   replacing an earlier pass's looser, partly-inaccurate marker glosses)*.
 - `post-process.ts` — guardrails applied to the model's text after generation, regardless
   of what the prompt says. `extractAllowedLinks()` strips any link that isn't a relative
-  site path, `haveninlipa.com`, or the Messenger handoff; `normalizeHref()` rewrites a
+  site path, `haveninlipa.com`, the Messenger handoff, or one of the four owner-approved
+  social profiles (`isOfficialSocialUrl()`, matching loosely on scheme/`www.`/trailing
+  slash against `SOCIAL_LINK_URLS` from `src/lib/social-links.ts` — the same config
+  `Footer.tsx` reads from, DEC-030); `stripBareUrls()`'s bare-URL exemption (previously
+  Messenger-only) carries the same social-URL exception, and `ensureSocialLinkButtons()`
+  (mirroring `ensureHandoffLink()`) adds a button for any platform the reply names *(added
+  2026-10-26, DEC-029 addendum — fixes a live bug where a guest asking "San ang mga social
+  medias nyo" got pointed only to Messenger: every other social URL was being silently
+  stripped out as an unrecognized bare link even once the prompt knew about them)*.
+  `normalizeHref()` rewrites a
   scheme-less `m.me/haveninlipa` (wherever the model or `ensureHandoffLink()` emits one) to
   `https://m.me/haveninlipa` — the bare form renders as a broken relative link in the widget
   *(bug found in live testing, fixed 2026-10-14)*. `enforcePriceClaims()` replaces the
@@ -2871,9 +2896,14 @@ applied inside admin too).
   count rather than just the matching rows.
 - **Detail** — full transcript for one `sessionId` in order, guest/Haven bubbles, each
   assistant turn's `toolNames` (parsed from its JSON-array column), and a cost/turn/token
-  summary from that session's `HavenChatUsage` rows. Message content renders as a plain
-  text node (React's default escaping) — never `dangerouslySetInnerHTML` — since
-  `content` is guest-originated text.
+  summary from that session's `HavenChatUsage` rows. Message content renders through the
+  shared `renderMarkdownBold()` (`src/lib/chat/render-markdown-bold.tsx`) — the same
+  `**bold**`/newline parser the live chat bubble (`ChatMessage.tsx`) uses — never
+  `dangerouslySetInnerHTML`, so there's still no HTML-injection surface even though
+  `content` is untrusted conversation text *(changed 2026-10-26, DEC-029 addendum: this
+  page previously rendered `content` as a raw text node, so a stored reply like
+  "...via **Messenger**" showed literal asterisks here; extracted into a shared module
+  rather than duplicated so both call sites stay in sync)*.
 - **Auth** — no dedicated permission module. Like `/admin/logs`, `/admin/bookings`, and
   `/admin/messages`, access is gated only by the existing session check in
   `src/middleware.ts` (redirect to `/admin/login` when logged out) — any admin or manager

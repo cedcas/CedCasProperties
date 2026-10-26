@@ -23,6 +23,7 @@ import {
   collectBookingLinks,
   dedupeLinks,
   ensureHandoffLink,
+  ensureSocialLinkButtons,
   limitToOneProvisional,
   ensureBatanguenoMarker,
   enforceTermsOfAddress,
@@ -519,7 +520,8 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // never bookingLinks against itself.
   const bookingHrefs = new Set(bookingLinks.map((l) => l.href));
   const dedupedModelLinks = dedupeLinks(modelLinks).filter((l) => !bookingHrefs.has(l.href));
-  const handoffLinks = ensureHandoffLink(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const socialLinked = ensureSocialLinkButtons(termsChecked, [...dedupedModelLinks, ...bookingLinks]);
+  const handoffLinks = ensureHandoffLink(termsChecked, socialLinked);
   const forceHandoff =
     needsCapacityHandoff(latestMessage, toolExchangesThisTurn) || needsAmenityHandoff(toolExchangesThisTurn);
   const links = ensureAccessHandoffLink(ensureCapacityHandoffLink(handoffLinks, forceHandoff), accessLeakDetected);
