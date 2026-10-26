@@ -1,6 +1,7 @@
 import "server-only";
+import { SOCIAL_LINKS } from "@/lib/social-links";
 import { buildOwnerFactsPrompt } from "./owner-facts";
-import { PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
+import { MESSENGER_HREF, PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
 
 export type HavenLang = "en" | "tl" | "btg" | "auto";
 
@@ -209,6 +210,32 @@ const PLAIN_LANGUAGE_RULE =
   'restaurant, is fine and unrelated).';
 
 /**
+ * Owner incident (Cedric, 2026-10-26): asked "San ang mga social medias nyo", Haven only
+ * pointed to Messenger — she had no other official profile to offer, since the only
+ * channel this prompt told her about was the Messenger handoff. Sourced from
+ * `src/lib/social-links.ts` — the SAME config `Footer.tsx`, the homepage CTA, and the
+ * `LodgingBusiness`/Person `sameAs` schema all read from (DEC-030) — so this list can never
+ * drift from the footer's. Airbnb is deliberately absent from that config and therefore
+ * from this list too. Backed by `isOfficialSocialUrl`/`ensureSocialLinkButtons` in
+ * post-process.ts, which recognize exactly these URLs (plus Messenger) as safe to write out
+ * or turn into a button — every other bare URL in a reply is stripped.
+ */
+const SOCIAL_LINKS_LIST = SOCIAL_LINKS.map((s) => `${s.name}: ${s.url}`).join("\n  ");
+
+const SOCIAL_LINKS_RULE =
+  "- When a guest asks where to find us on social media, or names a specific platform " +
+  "(Facebook, Instagram, TikTok, YouTube, Messenger, or any other platform), list EVERY " +
+  "one of our official profiles below plainly, each with its exact URL, in the guest's own " +
+  "language (English/Tagalog/Batangueño) — never only Messenger, and never only some of " +
+  "them. These are the ONLY official profiles that exist — never invent, guess, or state a " +
+  "profile on a platform not listed here, and never state a different URL/handle for one " +
+  "that is:\n  " +
+  SOCIAL_LINKS_LIST +
+  `\n  Messenger: ${MESSENGER_HREF}` +
+  "\nMessenger is one of the channels above, never the only answer to a general \"where are " +
+  "your socials\" question.";
+
+/**
  * Fixed, server-side persona + rules for Haven's AI mode. Never sent to the client,
  * never built from guest input. See DEC-029.
  */
@@ -307,8 +334,10 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "our system, or unrecognized when such a note is present.",
     "- Never write a URL in your reply text — no http(s) link, no www./bare-domain mention, " +
       "and never a property's own booking link. A button for it is added automatically from " +
-      "the tool result; just refer to the property/option in prose. The one exception is the " +
-      "Messenger handoff rule right below, where writing the literal m.me text is required.",
+      "the tool result; just refer to the property/option in prose. The exceptions are the " +
+      "Messenger handoff rule and the official social links rule right below, where writing " +
+      "the literal URL text is required.",
+    SOCIAL_LINKS_RULE,
     "- If you don't know something, or a guest asks for something no tool can answer or that " +
       "is off-topic (general trivia, other businesses, writing code, etc.), say so politely, " +
       "redirect back to Haven in Lipa topics, and always offer the literal text " +

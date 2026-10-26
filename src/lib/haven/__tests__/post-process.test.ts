@@ -8,7 +8,9 @@ import {
   extractAllowedLinks,
   stripBareUrls,
   isAllowedHref,
+  isOfficialSocialUrl,
   normalizeHref,
+  ensureSocialLinkButtons,
   dedupeLinks,
   collectBookingLinks,
   ensureHandoffLink,
@@ -45,6 +47,7 @@ import {
   type ToolExchange,
 } from "../post-process";
 import { buildStayLabel } from "../dates";
+import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 
 describe("isAllowedHref", () => {
   it("allows a relative site path", () => {
@@ -67,6 +70,40 @@ describe("isAllowedHref", () => {
 
   it("rejects a malformed URL", () => {
     expect(isAllowedHref("not a url at all :: ??")).toBe(false);
+  });
+
+  it("allows every owner-approved social profile from the shared config (DEC-030) — same config the footer uses", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      expect(isAllowedHref(url)).toBe(true);
+    }
+  });
+
+  it("rejects Airbnb — deliberately excluded from the shared social-links config", () => {
+    expect(isAllowedHref("https://airbnb.com/h/haveninlipa")).toBe(false);
+    expect(SOCIAL_LINK_URLS.some((u) => u.includes("airbnb"))).toBe(false);
+  });
+});
+
+describe("isOfficialSocialUrl", () => {
+  it("matches every URL in the shared SOCIAL_LINK_URLS config exactly as written", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      expect(isOfficialSocialUrl(url)).toBe(true);
+    }
+  });
+
+  it("matches the same profile written without a scheme or 'www.'", () => {
+    expect(isOfficialSocialUrl("facebook.com/haveninlipa")).toBe(true);
+    expect(isOfficialSocialUrl("www.facebook.com/haveninlipa")).toBe(true);
+  });
+
+  it("matches with or without a trailing slash", () => {
+    expect(isOfficialSocialUrl("https://www.instagram.com/haven_inlipa")).toBe(true);
+    expect(isOfficialSocialUrl("https://www.instagram.com/haven_inlipa/")).toBe(true);
+  });
+
+  it("rejects an unrelated or invented social URL, including Airbnb", () => {
+    expect(isOfficialSocialUrl("https://www.facebook.com/someoneelse")).toBe(false);
+    expect(isOfficialSocialUrl("https://airbnb.com/h/haveninlipa")).toBe(false);
   });
 });
 
@@ -160,6 +197,18 @@ describe("stripBareUrls (live bug: a bare URL, including an invented domain, sli
   it("leaves a scheme-less bare m.me/haveninlipa mention in place", () => {
     const text = "Message us at m.me/haveninlipa, or use the contact page.";
     expect(stripBareUrls(text)).toBe(text);
+  });
+
+  it("leaves every owner-approved social URL in place — the reported bug (only Messenger survived)", () => {
+    for (const url of SOCIAL_LINK_URLS) {
+      const text = `You can find us there: ${url}.`;
+      expect(stripBareUrls(text)).toBe(text);
+    }
+  });
+
+  it("still removes an unrelated/invented social-looking URL that isn't in the owner-approved list", () => {
+    const text = "You can find us at https://www.facebook.com/not-the-real-page for more info.";
+    expect(stripBareUrls(text)).toBe("You can find us at for more info.");
   });
 });
 
@@ -633,6 +682,38 @@ describe("ensureHandoffLink", () => {
   it("leaves links untouched when the reply never mentions Messenger", () => {
     const links = [{ label: "Book Now", href: "/properties/a/book" }];
     expect(ensureHandoffLink("Your stay is all set!", links)).toBe(links);
+  });
+});
+
+describe("ensureSocialLinkButtons — socials rule backed by the shared footer config (DEC-030)", () => {
+  it("adds a button for every official profile named in the reply, using the exact shared-config URL", () => {
+    const text =
+      "You can find us on Facebook, Instagram, TikTok, and YouTube — here are the links.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links).toEqual(SOCIAL_LINKS.map((s) => ({ label: s.name, href: s.url })));
+  });
+
+  it("only adds a button for a platform actually named in the reply", () => {
+    const text = "You can find us on Facebook.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links).toEqual([{ label: "Facebook", href: "https://www.facebook.com/haveninlipa" }]);
+  });
+
+  it("never adds Airbnb — it's not in the shared social-links config", () => {
+    const text = "You can find us on Facebook or Airbnb.";
+    const links = ensureSocialLinkButtons(text, []);
+    expect(links.some((l) => l.href.includes("airbnb"))).toBe(false);
+  });
+
+  it("doesn't duplicate a button the model's own markdown link already produced", () => {
+    const existing = [{ label: "Facebook", href: "https://www.facebook.com/haveninlipa" }];
+    const text = "Find us on Facebook: [Facebook](https://www.facebook.com/haveninlipa).";
+    expect(ensureSocialLinkButtons(text, existing)).toEqual(existing);
+  });
+
+  it("leaves links untouched when the reply mentions no social platform", () => {
+    const links = [{ label: "Book Now", href: "/properties/a/book" }];
+    expect(ensureSocialLinkButtons("Your stay is all set!", links)).toBe(links);
   });
 });
 
