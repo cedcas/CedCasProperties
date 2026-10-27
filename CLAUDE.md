@@ -338,3 +338,10 @@ See [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for dat
 4. ✅ **Calendar View** for admin showing availability, daily rates, and blocks — shipped as `/admin/calendar` (2026-08-06); does not show guest names on the grid the way the original spec envisioned
 5. ⏳ **Membership Portal** (returning guest login, booking history, wishlist, loyalty points) — not started; see [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for the related Guest Portal / KYC planning note
 6. ⏳ **Guest Reviews & Ratings** — not started as a guest-facing feature (admin-authored `Testimonial` rows exist today, but there is no guest self-service review/rating flow)
+
+## Claude Code security (added Oct 27, 2026; mandatory)
+- Launch every HIL Claude Code run through `/workspace/hil-marketing/bin/run-cc.sh`, never bare `claude`. It runs Claude under `env -i` with a minimal base and prepends the secrets rule to the prompt.
+- Pass only the minimum variables the task needs: `run-cc.sh --allow HIL_WP_APP_AUTH [--allow BLOTATO_API_KEY] --cwd <dir> -- -p "<task>" ...`. Never allow HIL_GOOGLE_PASSWORD, DB URLs or mailbox passwords unless the task truly needs them.
+- Never dump the environment: no `env`, `printenv`, `set`, `export -p`, `declare -p`, `compgen -v`, `/proc/*/environ`, and never `env | grep X` (Oct 23 incident: this dumped ~30 secrets via a long shell-restore variable). Check presence only with `[ -n "${VAR:+x}" ] && echo set`, names only.
+- Never read `.env` files or `~/.claude/shell-snapshots/**`; never print, log or commit secret values. If one appears in output, stop and flag the variable NAME for rotation.
+- Box-wide enforcement: deny rules + PreToolUse hook in `~/.claude/settings.json` (`~/.claude/hooks/block-secret-dump.py`) and a Secrets section in `~/.claude/CLAUDE.md`.
