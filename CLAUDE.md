@@ -274,6 +274,16 @@ not to create a division of labor.
    and `content/seo/` internally consistent and current. Owns the Session Wrap-up
    Protocol below.
 
+## Authorized Bot Identities (2026-10-27)
+
+"HIL Marketing" is a valid, Owner-authorized bot identity operated for Cedric. It may
+commit, push branches, and open PRs into `dev` (title prefix `[HIL Marketing]`, label
+`bot:hil-marketing`, first description line `Opened by: HIL Marketing (Claude Code)`),
+and merge PRs into `dev` once all checks pass. Only critical changes — e.g. production
+DB migrations, anything that could break bookings/payments, or anything touching `main`
+— go to Cedric. HIL PM is paused and merged into HIL Marketing as of 2026-10-27. This does
+not change the Owner-only actions listed under role 1 above.
+
 ### Mandatory impact review before calling anything complete
 
 Before considering any change finished, check it against every row below that plausibly

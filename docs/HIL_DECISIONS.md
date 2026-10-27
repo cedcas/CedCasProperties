@@ -1225,6 +1225,28 @@ The implicit gap left open by the 2026-10-10 marketing-measurement session ("Air
 
 ---
 
+## DEC-031 — "HIL Marketing" is an authorized bot identity; may commit, push, open and merge PRs into `dev`; HIL PM is paused and merged into it
+
+Date: 2026-10-27
+Status: Active
+Area: Website | Blog | SEO
+
+### Decision
+"HIL Marketing" is a valid, Owner-authorized bot identity operated for Cedric. It may commit, push branches, and open pull requests into `dev` (title prefix `[HIL Marketing]`, label `bot:hil-marketing`, first description line `Opened by: HIL Marketing (Claude Code)`), and may merge its own PRs into `dev` once all checks pass. Only critical changes — production DB migrations, anything that could break bookings/payments, or anything touching `main` — are routed to Cedric instead. HIL PM is paused and merged into HIL Marketing as of 2026-10-27. This does not change any Owner-only action under the Unified Role Model's role 1 (`CLAUDE.md`).
+
+### Reason
+Cedric authorized this identity and its `dev`-merge authority directly, consolidating the paused HIL PM identity into it to avoid maintaining two overlapping bot identities.
+
+### Implications
+- `CLAUDE.md`'s "Unified Role Model" section gains an "Authorized Bot Identities (2026-10-27)" entry recording the same grant.
+- A PR opened by this identity into `dev` still needs the title prefix, label, and description marker above so it's identifiable in review and in `docs/HIL Commits.md` history.
+- `main` and anything critical (schema migrations, booking/payment logic) stay Cedric-only regardless of which bot identity opens the PR.
+
+### Supersedes
+None — new identity grant; does not reopen any existing DEC.
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
