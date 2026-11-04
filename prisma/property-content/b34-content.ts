@@ -71,7 +71,7 @@ export const TWO_BR: PropertySeoContent = {
   heroSummary:
     "A two-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — built for families, barkadas, and group trips. Sleeps up to 9 across two private bedrooms, a full kitchen for cooking real meals, fast WiFi, Netflix, and parking inside the village. From ₱2,800 per night. Twenty-one verified guest reviews and counting. One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This isn't a hotel suite and it isn't a generic Airbnb. It's a real two-bedroom unit in a quiet residential village — the kind of place a Manila family rents for a weekend, leaves with everyone in a better mood, and books again.\n\nTwo private bedrooms mean parents and kids (or two couples on a barkada trip) get real sleep. The full kitchen means breakfast happens on your schedule and you don't burn ₱2,000 every morning at a hotel restaurant. The fiber WiFi, up to 340 Mbps, means everyone streams Netflix on different devices without the buffering arguments. Parking is in a garage that fits a full-size SUV.\n\nLipa City sits at about 300 meters elevation — cool air, quiet streets, real food. SM City Lipa is about 20 minutes away by car and Casa Marikit about 30, depending on traffic. Most guests don't go back to Manila on Sunday wishing they had a third night. They just rebook for the next month.",
+    "This isn't a hotel suite and it isn't a generic Airbnb. It's a real two-bedroom unit in a quiet residential village — the kind of place a Manila family rents for a weekend, leaves with everyone in a better mood, and books again.\n\nTwo private bedrooms mean parents and kids (or two couples on a barkada trip) get real sleep. The full kitchen means breakfast happens on your schedule and you don't burn ₱2,000 every morning at a hotel restaurant. The fiber WiFi, 500+ Mbps, means everyone streams Netflix on different devices without the buffering arguments. Parking is in a garage that fits a full-size SUV.\n\nLipa City sits at about 300 meters elevation — cool air, quiet streets, real food. SM City Lipa is about 20 minutes away by car and Casa Marikit about 30, depending on traffic. Most guests don't go back to Manila on Sunday wishing they had a third night. They just rebook for the next month.",
   bestForSegments: [
     {
       title: "Families with kids",
@@ -129,7 +129,7 @@ export const TWO_BR: PropertySeoContent = {
       section: "Living + work area",
       items: [
         "Smart TV with Netflix Premium included",
-        "Fiber WiFi up to 340 Mbps (speed-tested by guests, real number)",
+        "Fiber WiFi at 500+ Mbps (speed-tested by guests, real number)",
         "Sofa, coffee table, floor space for kids or yoga",
         "Dining table doubles as a work desk if needed",
       ],
@@ -218,7 +218,7 @@ export const TWO_BR: PropertySeoContent = {
     {
       question: "How fast is the WiFi really?",
       answer:
-        "Speed-tested at up to 340 Mbps, with a backup internet connection available. Multiple Netflix streams, video calls, kids' tablets — all simultaneously, no buffering.",
+        "Speed-tested at 500+ Mbps, with a backup internet connection available. Multiple Netflix streams, video calls, kids' tablets — all simultaneously, no buffering.",
     },
     {
       question: "Can we cook in the unit?",
@@ -258,14 +258,14 @@ export const TWO_BR: PropertySeoContent = {
 export const ONE_BR: PropertySeoContent = {
   slug: "cozy-1-bedroom",
   seoTitle:
-    "Cozy 1BR Vacation Rental in Lipa City, Batangas — Fiber WiFi up to 340 Mbps | Haven in Lipa",
+    "Cozy 1BR Vacation Rental in Lipa City, Batangas — Fiber WiFi at 500+ Mbps | Haven in Lipa",
   seoDescription:
-    "Cozy 1-bedroom vacation rental in Lipa City. Sleeps 5, full kitchen, fiber WiFi up to 340 Mbps, Netflix, solar power. ₱1,800/night. Book direct, save 15–20%.",
+    "Cozy 1-bedroom vacation rental in Lipa City. Sleeps 5, full kitchen, fiber WiFi at 500+ Mbps, Netflix, solar power. ₱1,800/night. Book direct, save 15–20%.",
   tagline: "Solar Power • Netflix • Wi-Fi • 5 Pax",
   heroSummary:
-    "A one-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — designed for couples, solo digital nomads, and small group stays. Sleeps up to 5, full kitchen, fiber WiFi up to 340 Mbps (speed-tested), Netflix Premium, solar-powered backup, and parking inside the village. From ₱1,800 per night. Thirty-two verified guest reviews. One hour from Manila via SLEX/STAR Tollway.",
+    "A one-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — designed for couples, solo digital nomads, and small group stays. Sleeps up to 5, full kitchen, fiber WiFi at 500+ Mbps (speed-tested), Netflix Premium, solar-powered backup, and parking inside the village. From ₱1,800 per night. Thirty-two verified guest reviews. One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the unit guests rebook. Couples on weekend getaways, remote workers logging Manila hours from a quieter address, single travelers who want a real apartment instead of a hotel room. The 1BR has a way of getting under people's skin — they come for one weekend and start asking about monthly rates.\n\nThe bedroom is genuinely restful. The kitchen is fully equipped, not symbolic. The WiFi runs at up to 340 Mbps tested speeds, and during brownouts the solar backup keeps essentials running. The village is gated, quiet by 9 PM, and about 20 minutes by car from SM Lipa for groceries.\n\nIt's not a luxury suite. It's a comfortable, well-equipped private home. That turns out to be exactly what most people actually want.",
+    "This is the unit guests rebook. Couples on weekend getaways, remote workers logging Manila hours from a quieter address, single travelers who want a real apartment instead of a hotel room. The 1BR has a way of getting under people's skin — they come for one weekend and start asking about monthly rates.\n\nThe bedroom is genuinely restful. The kitchen is fully equipped, not symbolic. The WiFi runs at 500+ Mbps tested speeds, and during brownouts the solar backup keeps essentials running. The village is gated, quiet by 9 PM, and about 20 minutes by car from SM Lipa for groceries.\n\nIt's not a luxury suite. It's a comfortable, well-equipped private home. That turns out to be exactly what most people actually want.",
   bestForSegments: [
     {
       title: "Couples on a weekend getaway",
@@ -276,7 +276,7 @@ export const ONE_BR: PropertySeoContent = {
     },
     {
       title: "Remote workers and digital nomads",
-      body: "If you're tired of Manila WiFi, BGC office overhead, or just need a quiet place to grind for a week or a month — this is the unit built for it. Fiber WiFi up to 340 Mbps, dedicated workspace at the dining table, fast water heater for morning showers, no roommates, no co-working noise.",
+      body: "If you're tired of Manila WiFi, BGC office overhead, or just need a quiet place to grind for a week or a month — this is the unit built for it. Fiber WiFi at 500+ Mbps, dedicated workspace at the dining table, fast water heater for morning showers, no roommates, no co-working noise.",
       internalLinkLabel: "Remote work staycation guide",
       internalLinkUrl:
         "https://blog.haveninlipa.com/work-from-lipa-the-affordable-remote-work-staycation-near-manila/",
@@ -332,7 +332,7 @@ export const ONE_BR: PropertySeoContent = {
     {
       section: "Work + entertainment",
       items: [
-        "Fiber WiFi up to 340 Mbps (speed-tested, tested again, still 340)",
+        "Fiber WiFi at 500+ Mbps (speed-tested, tested again, still 500+)",
         "Netflix Premium (4K, multiple devices)",
         "Smart TV in the living area",
         "Solar power backup — essentials stay on during a brownout",
@@ -403,7 +403,7 @@ export const ONE_BR: PropertySeoContent = {
     {
       question: "Is the WiFi actually fast?",
       answer:
-        "Yes — fiber up to 340 Mbps, speed-tested by guests on multiple devices, with a backup internet connection available. Designed for remote work and multi-device streaming.",
+        "Yes — fiber at 500+ Mbps, speed-tested by guests on multiple devices, with a backup internet connection available. Designed for remote work and multi-device streaming.",
     },
     {
       question: "Is there a workspace?",

@@ -330,7 +330,7 @@ export default async function PropertiesIndexPage() {
                     {bySlug.has("cozy-1-bedroom") && (
                       <li>
                         <strong className="text-charcoal">Working remotely</strong> &rarr;{" "}
-                        {homeLink("cozy-1-bedroom")}. Fibre up to 340 Mbps, speed-tested, solar backup.
+                        {homeLink("cozy-1-bedroom")}. Fibre at 500+ Mbps, speed-tested, solar backup.
                       </li>
                     )}
                     {(bySlug.has("mickey-in-lipa--family-house--sleeps-11") || bySlug.has("mickey-in-lipa--full-family-house--sleeps-15")) && (

@@ -102,7 +102,7 @@ export const faqs: Faq[] = [
   // ── Amenities and House Rules ────────────────────────────────────────
   {
     q: "What amenities are included?",
-    a: "Every property includes a full kitchen, fast WiFi, air conditioning, and parking inside the gated village. B34 units add Netflix and dedicated fiber (up to 340 Mbps); B38 (\"Mickey in Lipa\") adds fiber up to 520 Mbps and garage parking. Full amenity lists are on each property page.",
+    a: "Every property includes a full kitchen, fast WiFi, air conditioning, and parking inside the gated village. B34 units add Netflix and dedicated fiber (500+ Mbps); B38 (\"Mickey in Lipa\") adds fiber up to 520 Mbps and garage parking. Full amenity lists are on each property page.",
     links: [{ phrase: "each property page", href: "/#properties" }],
   },
   {
@@ -111,7 +111,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "Is the WiFi fast enough for remote work?",
-    a: "B34 has fiber internet with speeds up to 340 Mbps, while B38 has fiber internet with speeds up to 520 Mbps. Both locations also have a backup internet connection. Multiple video calls, streaming, and devices at once are no problem at any of our properties.",
+    a: "B34 has fiber internet at 500+ Mbps, while B38 has fiber internet with speeds up to 520 Mbps. Both locations also have a backup internet connection. Multiple video calls, streaming, and devices at once are no problem at any of our properties.",
   },
   {
     q: "Are pets allowed?",
