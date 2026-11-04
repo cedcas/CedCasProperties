@@ -1245,6 +1245,28 @@ Cedric authorized this identity and its `dev`-merge authority directly, consolid
 ### Supersedes
 None — new identity grant; does not reopen any existing DEC.
 
+## DEC-032 — B34 fiber WiFi is now marketed at 500+ Mbps, superseding the 340 Mbps figure
+
+Date: 2026-11-04
+Status: Active
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+Block 34 (`cozy-1-bedroom` and `spacious-2-bedroom`) fiber internet is now marketed as "500+ Mbps" (natural phrasing, e.g. "Fiber WiFi at 500+ Mbps (speed-tested)"), replacing the "up to 340 Mbps" figure that the 2026-09-07 Maculot/Mbps/parking correction established (see [DEC-016](#dec-016--content-shared-between-a-seed-script-and-any-other-script-lives-in-a-prisma-free-data-module-seed-scripts-guard-their-own-main) extension and `SEO-DEC-028` below). Block 38 (Mickey in Lipa, "up to 520 Mbps") is unaffected.
+
+### Reason
+Owner-confirmed, 2026-11-04 (Cedric): B34's actual, speed-tested internet service increased to 500+ Mbps.
+
+### Implications
+- `prisma/property-content/b34-content.ts` (`ONE_BR`/`TWO_BR` — `seoTitle`, `seoDescription`, `heroSummary`, `description`, `amenityDetails`, `bestForSegments`, `propertyFaqs`) and `src/lib/faqs.ts` (the public "What amenities are included?" and "Is the WiFi fast enough for remote work?" answers) now say 500+ Mbps for B34. `prisma/property-content/mickey-content.ts`'s 520 Mbps text for B38/Mickey is untouched.
+- Static code-level copy on `/properties` and `/staycation` (`src/app/properties/page.tsx`, `src/app/staycation/page.tsx`) was updated to match — this renders immediately on the next deploy, unlike DB-seeded property fields.
+- **Production database property text for `cozy-1-bedroom` and `spacious-2-bedroom` is still seeded with the old "340 Mbps" wording and will keep rendering it live until an Owner-approved content-correction run writes the new value** — the same DEC-012/DEC-016 pattern as the original Maculot/Mbps/parking correction: a dry-run report, Owner review, then a write via a temporary admin-gated route or an operator machine. `scripts/fix-property-content.ts` already sources its target content from `b34-content.ts`, so it now targets 500+ Mbps automatically — but see the next point before reusing it as-is. No such run was performed as part of this decision.
+- **Gotcha found while making this change:** `src/lib/property-content-fixes.ts`'s `STALE_PATTERNS` entry `stale-mbps` (`/400 ?mbps|500\+? ?mbps/i`) was built for the original Maculot/Mbps/parking correction, where 400/500+ Mbps were the *old, wrong* figures being replaced *by* 340/520. That same regex now also matches the *new* correct "500+ Mbps" wording. If `scripts/fix-property-content.ts` is ever run again unmodified and finds genuinely stale content, its `assertFixedValueIsClean` safety gate will see "500+ Mbps" in the proposed replacement and refuse to write (a safe failure — it aborts rather than corrupts data — but it would block a correction run using this exact tool as-is). A future operator-run correction for the 340 → 500+ change should either (a) write a narrower, purpose-built substring-replacement table following the `src/lib/drive-time-fixes.ts` pattern, or (b) first narrow `stale-mbps` to specifically `340 ?mbps` (it has already done its job catching 400/500+, which is confirmed gone from production per the 2026-09-07 correction's verification). Not changed as part of this decision, since no production write happened here.
+- Blog content (`blog.haveninlipa.com`, outside this repo) may still cite the old B34 figure in older posts; `SEO-DEC-028` made blog copy on this topic number-free or matched to the then-current 340. Any surviving numeric B34 Mbps claim on the blog needs checking separately by the SEO/Blog workstream — not assumed fixed by this decision.
+
+### Supersedes
+The "up to 340 Mbps" B34 figure established by the 2026-09-07 Maculot/Mbps/parking correction (DEC-016 extension, `SEO-DEC-028`) — for B34 only; B38/Mickey's 520 Mbps is unchanged.
+
 ---
 
 ## Migrated SEO Decisions

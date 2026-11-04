@@ -4,7 +4,67 @@
 
 ---
 
-## 2026-10-23, latest — Haven AI "sikat sa inyo" ban (hil-pm/haven-sikat-102326)
+## 2026-11-04, latest — B34 internet speed updated to 500+ Mbps (content/b34-internet-500-110426)
+
+Area: Website | SEO
+
+Status: Built and tested on branch `content/b34-internet-500-110426` (based on `dev`); lint,
+`tsc --noEmit`, and the full `npx vitest run` suite clean (213 files / 4,458 tests across all
+three timezone projects). No `.env` file was read, no `npm run build`/Prisma db/migrate
+command was run. Committed, **not pushed, no PR** (explicit task constraint).
+
+### Outcome
+Owner-confirmed (Cedric, 2026-11-04): B34's (Spacious 2BR + Cozy 1BR) fiber internet is now
+500+ Mbps, up from the "up to 340 Mbps" figure the 2026-09-07 Maculot/Mbps/parking correction
+set. Every current, live code-level statement of the old figure now reads natural "500+ Mbps"
+phrasing, with the backup-internet-connection fact kept as-is. B38 (Mickey in Lipa, 520 Mbps)
+is untouched. See [DEC-032](HIL_DECISIONS.md).
+
+### Material Changes
+- **`prisma/property-content/b34-content.ts`** — `ONE_BR` and `TWO_BR`: `seoTitle`,
+  `seoDescription`, `heroSummary`, `description`, `amenityDetails`, `bestForSegments`, and
+  `propertyFaqs` entries for both B34 listings now read "500+ Mbps" / "Fiber WiFi at 500+
+  Mbps" in place of "up to 340 Mbps"; the "tested again, still 340" aside now reads "tested
+  again, still 500+". This module doubles as `scripts/fix-property-content.ts`'s target
+  content (DEC-016), so a future production correction run picks up the new figure
+  automatically from here.
+- **`src/lib/faqs.ts`** — the "What amenities are included?" and "Is the WiFi fast enough
+  for remote work?" public FAQ answers now say B34 is 500+ Mbps (B38 still 520 Mbps; the
+  backup-internet fact is unchanged).
+- **`src/app/properties/page.tsx`, `src/app/staycation/page.tsx`** — static "best fit" copy
+  (the "Working remotely" → Cozy 1BR line; the staycation page's WiFi call-out and remote-work
+  fit block) updated to 500+ Mbps.
+- Confirmed **untouched**, correctly: `prisma/property-content/mickey-content.ts` (B38, 520
+  Mbps); unrelated `340`-as-pixel-value/SVG-coordinate literals in
+  `src/app/properties/[slug]/page.tsx`, `src/components/sections/Hero.tsx`,
+  `src/components/sections/DiscoverLipa.tsx`; `src/lib/haven/system-prompt.ts` (Haven's
+  listing facts are DB-derived at runtime, never hardcoded, so nothing there referenced 340).
+- **`src/lib/__tests__/property-content-fixes.test.ts` — deliberately not modified.** Its
+  "340 Mbps" fixtures test the *different*, already-completed Maculot/Mbps/parking
+  correction tool's stale-pattern detector, where 340 was the *target* (clean) value at the
+  time, not a claim about today's current B34 speed. Changing those fixtures to "500+ Mbps"
+  would make them fail, because that detector's existing `stale-mbps` regex (`400 ?mbps|500\+?
+  ?mbps`) incorrectly also matches the new correct value — see the regex-collision gotcha
+  recorded in [DEC-032](HIL_DECISIONS.md).
+- Left untouched by task instruction (historical/out-of-scope): `content/seo/archive/SEO_DECISIONS.md`,
+  `content/seo/runs/090726/HIL_SEO_Implementation_Plan.md`, `docs/HIL Commits.md`, and this
+  file's/`HIL_DECISIONS.md`'s own prior entries (incl. `SEO-DEC-028`) — all describe past
+  states/decisions, not current claims.
+
+### Outstanding — production DB content correction not run
+Production's `Property` rows for `cozy-1-bedroom` and `spacious-2-bedroom` are still seeded
+with the old "up to 340 Mbps" wording in `description`/`seoTitle`/`seoDescription`/
+`amenityDetails`/`propertyFaqs` etc., and will keep rendering it live until an Owner-approved
+correction run. No DB script was run this session (explicit task constraint). What's needed:
+the same DEC-012/DEC-016 pattern as the original Maculot/Mbps/parking pass — a dry-run report
+(via `scripts/fix-property-content.ts`, which now targets the updated `b34-content.ts`, or a
+new narrower substring-table script) reviewed by the Owner, then applied via a temporary
+admin-gated route or an operator machine. Check the regex-collision gotcha in
+[DEC-032](HIL_DECISIONS.md) before reusing `scripts/fix-property-content.ts` as-is.
+
+---
+
+## 2026-10-23 — Haven AI "sikat sa inyo" ban (hil-pm/haven-sikat-102326)
 
 Area: Website
 
