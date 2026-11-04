@@ -1225,7 +1225,7 @@ The implicit gap left open by the 2026-10-10 marketing-measurement session ("Air
 
 ---
 
-## DEC-031 — B34 fiber WiFi is now marketed at 500+ Mbps, superseding the 340 Mbps figure
+## DEC-032 — B34 fiber WiFi is now marketed at 500+ Mbps, superseding the 340 Mbps figure
 
 Date: 2026-11-04
 Status: Active

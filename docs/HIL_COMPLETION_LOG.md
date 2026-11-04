@@ -18,7 +18,7 @@ Owner-confirmed (Cedric, 2026-11-04): B34's (Spacious 2BR + Cozy 1BR) fiber inte
 500+ Mbps, up from the "up to 340 Mbps" figure the 2026-09-07 Maculot/Mbps/parking correction
 set. Every current, live code-level statement of the old figure now reads natural "500+ Mbps"
 phrasing, with the backup-internet-connection fact kept as-is. B38 (Mickey in Lipa, 520 Mbps)
-is untouched. See [DEC-031](HIL_DECISIONS.md).
+is untouched. See [DEC-032](HIL_DECISIONS.md).
 
 ### Material Changes
 - **`prisma/property-content/b34-content.ts`** — `ONE_BR` and `TWO_BR`: `seoTitle`,
@@ -45,7 +45,7 @@ is untouched. See [DEC-031](HIL_DECISIONS.md).
   time, not a claim about today's current B34 speed. Changing those fixtures to "500+ Mbps"
   would make them fail, because that detector's existing `stale-mbps` regex (`400 ?mbps|500\+?
   ?mbps`) incorrectly also matches the new correct value — see the regex-collision gotcha
-  recorded in [DEC-031](HIL_DECISIONS.md).
+  recorded in [DEC-032](HIL_DECISIONS.md).
 - Left untouched by task instruction (historical/out-of-scope): `content/seo/archive/SEO_DECISIONS.md`,
   `content/seo/runs/090726/HIL_SEO_Implementation_Plan.md`, `docs/HIL Commits.md`, and this
   file's/`HIL_DECISIONS.md`'s own prior entries (incl. `SEO-DEC-028`) — all describe past
@@ -60,7 +60,7 @@ the same DEC-012/DEC-016 pattern as the original Maculot/Mbps/parking pass — a
 (via `scripts/fix-property-content.ts`, which now targets the updated `b34-content.ts`, or a
 new narrower substring-table script) reviewed by the Owner, then applied via a temporary
 admin-gated route or an operator machine. Check the regex-collision gotcha in
-[DEC-031](HIL_DECISIONS.md) before reusing `scripts/fix-property-content.ts` as-is.
+[DEC-032](HIL_DECISIONS.md) before reusing `scripts/fix-property-content.ts` as-is.
 
 ---
 
