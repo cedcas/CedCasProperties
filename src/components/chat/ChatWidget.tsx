@@ -1,14 +1,44 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback, type FormEvent } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { ChatNode } from "@/lib/chat/chat-tree";
 import { track } from "@/lib/analytics";
+import { shouldAutoOpenFromAsk, stripAskParam } from "@/lib/haven/ask-param";
+import { isGreetingSuppressedPath } from "@/lib/haven/greeting-gate";
+import { havenGreetingText } from "@/lib/haven/greeting-copy";
+import { playHavenDing, shouldPlayHavenDing } from "@/lib/haven/ding";
+import { resolveChatLink, type ChatSurface } from "@/lib/haven/chat-link";
 import ChatMessage from "./ChatMessage";
 import ChatOptions from "./ChatOptions";
 
 type HavenLang = "auto" | "en" | "tl" | "btg";
+
+/** Why the panel opened — carried on every `haven_ai_open` GA4 event. */
+type OpenSource = "launcher" | "greeting" | "ask_param" | "blog_embed";
+
+const GREETING_SHOWN_KEY = "haven-greeting-shown";
+const IMPRESSION_SENT_KEY = "haven-ai-impression-sent";
+/** Desktop: 4.5s. Mobile (`<640px`, matches Tailwind's `sm` breakpoint): a bit later. */
+const GREETING_DELAY_MS_DESKTOP = 4500;
+const GREETING_DELAY_MS_MOBILE = 6000;
+
+function prefersReducedMotion(): boolean {
+  try {
+    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  } catch {
+    return false;
+  }
+}
+
+function isNarrowViewport(): boolean {
+  try {
+    return window.matchMedia("(max-width: 639px)").matches;
+  } catch {
+    return false;
+  }
+}
 
 interface ChatLink {
   label: string;
@@ -29,6 +59,11 @@ interface ChatWidgetProps {
   tree: Record<string, ChatNode>;
   /** HAVEN_AI_ENABLED minus the HAVEN_AI_KILL kill switch — decided server-side. */
   aiEnabled: boolean;
+  /** `"blog"` only for the /embed/haven iframe route — every other mount is `"site"`. */
+  chatSurface?: ChatSurface;
+  /** True only on /embed/haven: no floating FAB/greeting — the panel fills the iframe,
+   * always open, and internal links go to the top window instead of client-side routing. */
+  embedded?: boolean;
 }
 
 const STORAGE_KEY = "haven-chat";
@@ -74,9 +109,15 @@ function slugFromBookingLink(href: string): string | null {
   return match ? match[1] : null;
 }
 
-export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
+export default function ChatWidget({
+  tree,
+  aiEnabled,
+  chatSurface = "site",
+  embedded = false,
+}: ChatWidgetProps) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const searchParams = useSearchParams();
+  const [open, setOpen] = useState(embedded);
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentNodeId, setCurrentNodeId] = useState("root");
   const [initialized, setInitialized] = useState(false);
@@ -87,8 +128,26 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
   /** Whether the most recent Haven message actually came from the AI, vs. the static tree. */
   const [lastMode, setLastMode] = useState<"tree" | "ai">("tree");
   const [topicsOpen, setTopicsOpen] = useState(false);
+  // ── Discovery: arrival greeting pop-up (site surface only) ──
+  const [greetingVisible, setGreetingVisible] = useState(false);
+  const [greetingBadge, setGreetingBadge] = useState(false);
+  const [bounce, setBounce] = useState(false);
+  const hasInteractedRef = useRef(false);
+  const askParamHandledRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const messageRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+
+  const openChat = useCallback(
+    (source: OpenSource) => {
+      setOpen((wasOpen) => {
+        if (!wasOpen) track("haven_ai_open", { source, chat_surface: chatSurface });
+        return true;
+      });
+      setGreetingVisible(false);
+      setGreetingBadge(false);
+    },
+    [chatSurface]
+  );
 
   const currentNode = tree[currentNodeId];
   const isAdmin = pathname.startsWith("/admin");
@@ -165,15 +224,106 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
     return () => cancelAnimationFrame(raf);
   }, [messages, open, aiLoading, aiModeActive]);
 
-  // ── Close on Escape ──
+  // ── Close on Escape (not in the embed — there's no FAB to fall back to) ──
   useEffect(() => {
-    if (!open) return;
+    if (!open || embedded) return;
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        track("haven_ai_close", { chat_surface: chatSurface });
+        setOpen(false);
+      }
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open]);
+  }, [open, embedded, chatSurface]);
+
+  // ── Launcher impression (once per session) — fires as soon as the FAB itself first
+  // renders, i.e. once past the admin/embed gate and ChatWidgetGate's idle-mount delay. ──
+  useEffect(() => {
+    if (isAdmin || embedded || !initialized) return;
+    try {
+      if (sessionStorage.getItem(IMPRESSION_SENT_KEY) === "1") return;
+      sessionStorage.setItem(IMPRESSION_SENT_KEY, "1");
+    } catch { /* ignore */ }
+    track("haven_ai_impression", { chat_surface: chatSurface });
+  }, [isAdmin, embedded, initialized, chatSurface]);
+
+  // ── Blog embed: the iframe itself only ever exists because the blog's own injected
+  // launcher (public/haven-embed.js, outside this React tree) was just clicked — there is
+  // no separate FAB inside the iframe to fire an open transition, so this mount IS the
+  // open event. ──
+  const blogEmbedOpenTrackedRef = useRef(false);
+  useEffect(() => {
+    if (!embedded || !initialized || blogEmbedOpenTrackedRef.current) return;
+    blogEmbedOpenTrackedRef.current = true;
+    track("haven_ai_open", { source: "blog_embed", chat_surface: chatSurface });
+  }, [embedded, initialized, chatSurface]);
+
+  // ── `?ask=1` auto-opens the chat once, then is stripped from the URL (utm_* kept). ──
+  useEffect(() => {
+    if (embedded || isAdmin || !initialized || askParamHandledRef.current) return;
+    if (!shouldAutoOpenFromAsk(searchParams.toString())) return;
+    askParamHandledRef.current = true;
+    openChat("ask_param");
+    try {
+      const cleaned = stripAskParam(window.location.pathname + window.location.search + window.location.hash);
+      window.history.replaceState(null, "", cleaned);
+    } catch { /* ignore */ }
+  }, [embedded, isAdmin, initialized, searchParams, openChat]);
+
+  // ── Arrival greeting pop-up (site surface, once per visit — session-scoped) ──
+  useEffect(() => {
+    if (embedded || isAdmin || !initialized) return;
+    if (isGreetingSuppressedPath(pathname)) return;
+    let shown = false;
+    try {
+      shown = sessionStorage.getItem(GREETING_SHOWN_KEY) === "1";
+    } catch { /* ignore */ }
+    if (shown) return;
+
+    const delay = isNarrowViewport() ? GREETING_DELAY_MS_MOBILE : GREETING_DELAY_MS_DESKTOP;
+    const timer = window.setTimeout(() => {
+      try {
+        sessionStorage.setItem(GREETING_SHOWN_KEY, "1");
+      } catch { /* ignore */ }
+      setOpen((isOpen) => {
+        if (!isOpen) {
+          setGreetingVisible(true);
+          setGreetingBadge(true);
+          setBounce(!prefersReducedMotion());
+        }
+        return isOpen;
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [embedded, isAdmin, initialized, pathname]);
+
+  const dismissGreeting = useCallback(() => {
+    setGreetingVisible(false);
+    setGreetingBadge(false);
+    setBounce(false);
+  }, []);
+
+  const openFromGreeting = useCallback(() => {
+    hasInteractedRef.current = true;
+    setBounce(false);
+    openChat("greeting");
+  }, [openChat]);
+
+  // ── Soft "ding" on a Haven reply — never on the greeting/root message, and only once
+  // the guest has actually tapped/engaged with Haven themselves (see src/lib/haven/ding.ts). ──
+  const lastMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialized) return;
+    const last = messages[messages.length - 1];
+    const previousId = lastMessageIdRef.current;
+    lastMessageIdRef.current = last?.id ?? null;
+    if (!last || previousId === null || last.id === previousId) return; // first run / no change
+    if (last.role !== "haven" || !hasInteractedRef.current) return;
+    if (shouldPlayHavenDing({ hasUserInteracted: true, prefersReducedMotion: prefersReducedMotion() })) {
+      playHavenDing();
+    }
+  }, [messages, initialized]);
 
   // ── Handle option selection (static tree — unchanged, works alongside AI mode) ──
   const handleSelect = useCallback(
@@ -181,6 +331,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       const nextNode = tree[nodeId];
       if (!nextNode) return;
 
+      track("haven_ai_option_select", { option_id: nodeId, chat_surface: chatSurface });
       setMessages((prev) => [
         ...prev,
         { id: `u-${Date.now()}`, role: "user", text: label },
@@ -190,7 +341,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       setLastMode("tree");
       setTopicsOpen(false);
     },
-    [tree]
+    [tree, chatSurface]
   );
 
   // ── Reset conversation ──
@@ -203,10 +354,13 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
     setTopicsOpen(false);
   }, [tree]);
 
-  const handleLangChange = useCallback((next: HavenLang) => {
-    setLang(next);
-    track("haven_ai_lang_select", { lang: next });
-  }, []);
+  const handleLangChange = useCallback(
+    (next: HavenLang) => {
+      setLang(next);
+      track("haven_ai_lang_select", { lang: next, chat_surface: chatSurface });
+    },
+    [chatSurface]
+  );
 
   // ── Free-text submit (AI mode) ──
   const handleFreeTextSubmit = useCallback(
@@ -221,7 +375,8 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       setMessages(historySource);
       setAiLoading(true);
       setTopicsOpen(false);
-      track("haven_ai_message", { lang });
+      hasInteractedRef.current = true;
+      track("haven_ai_message", { lang, chat_surface: chatSurface });
 
       // A static/cap/kill/error fallback mid-conversation must NOT inject the static tree's
       // English root greeting — that used to reset the guest's language and wipe the AI
@@ -231,7 +386,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
       // short apology in the active language with a Messenger link. The root tree is only
       // ever shown on first load or an explicit Reset (handleReset), never from here.
       const fallbackToTree = (reason: string) => {
-        track("haven_ai_fallback", { reason });
+        track("haven_ai_fallback", { reason, chat_surface: chatSurface });
         setMessages((prev) => [
           ...prev,
           {
@@ -268,7 +423,7 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
           setLastMode("ai");
           const bookingLinkCount = (links ?? []).filter((l) => slugFromBookingLink(l.href)).length;
           if (bookingLinkCount > 0) {
-            track("haven_ai_availability_checked", { available: bookingLinkCount });
+            track("haven_ai_availability_checked", { available: bookingLinkCount, chat_surface: chatSurface });
           }
         } else {
           fallbackToTree(typeof data.reason === "string" ? data.reason : "unknown");
@@ -279,44 +434,109 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
         setAiLoading(false);
       }
     },
-    [freeText, aiLoading, messages, lang, sessionId]
+    [freeText, aiLoading, messages, lang, sessionId, chatSurface]
   );
 
-  const handleLinkClick = useCallback((href: string) => {
-    const slug = slugFromBookingLink(href);
-    if (slug) track("haven_ai_booking_link_click", { slug });
-    if (href.startsWith("/")) setOpen(false);
-  }, []);
+  const handleLinkClick = useCallback(
+    (href: string) => {
+      const slug = slugFromBookingLink(href);
+      if (slug) track("haven_ai_booking_link_click", { slug, chat_surface: chatSurface });
+      if (href.startsWith("/") && !embedded) setOpen(false);
+    },
+    [chatSurface, embedded]
+  );
 
   // Don't render on admin pages or before hydration
   if (isAdmin || !initialized) return null;
 
+  const handleFabClick = () => {
+    hasInteractedRef.current = true;
+    if (open) {
+      track("haven_ai_close", { chat_surface: chatSurface });
+      setOpen(false);
+    } else {
+      openChat("launcher");
+    }
+  };
+
   return (
     <>
-      {/* ── Floating Bubble ── */}
-      <button
-        id="chat-fab"
-        onClick={() => setOpen((o) => !o)}
-        aria-label={open ? "Close chat" : "Chat with Haven"}
-        className={`fixed bottom-5 right-5 z-50 w-14 h-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 cursor-pointer ${
-          open
-            ? "bg-charcoal hover:bg-charcoal/90"
-            : "bg-forest hover:bg-forest/90 animate-[haven-pulse_3s_ease-in-out_infinite]"
-        }`}
-      >
-        {open ? (
-          <i className="fa-solid fa-xmark text-white text-[20px]" />
-        ) : (
-          <i className="fa-solid fa-comment-dots text-white text-[22px]" />
-        )}
-      </button>
+      {!embedded && (
+        <>
+          {/* ── Arrival greeting pop-up ── */}
+          {greetingVisible && (
+            <div
+              id="haven-greeting"
+              role="status"
+              className="fixed z-50 bottom-24 right-5 w-[260px] max-w-[calc(100vw-2.5rem)] bg-white rounded-[16px] shadow-[0_8px_30px_rgba(0,0,0,.18)] border border-black/[.06] p-3.5 pr-8"
+            >
+              <button
+                type="button"
+                onClick={dismissGreeting}
+                aria-label="Dismiss"
+                className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center text-charcoal/40 hover:text-charcoal/70 hover:bg-charcoal/[.06] cursor-pointer"
+              >
+                <i className="fa-solid fa-xmark text-[11px]" />
+              </button>
+              <button
+                type="button"
+                onClick={openFromGreeting}
+                className="block text-left text-[12.5px] leading-snug text-charcoal/80 cursor-pointer"
+              >
+                {havenGreetingText(lang)}
+              </button>
+            </div>
+          )}
+
+          {/* ── Floating Bubble ── */}
+          <button
+            id="chat-fab"
+            onClick={handleFabClick}
+            aria-label={open ? "Close chat" : "Ask Haven — chat with Haven"}
+            className={`fixed bottom-5 right-5 z-50 h-14 rounded-full shadow-lg flex items-center justify-center gap-2 transition-all duration-300 cursor-pointer ${
+              open
+                ? "w-14 bg-charcoal hover:bg-charcoal/90"
+                : `px-4 sm:pr-5 bg-forest hover:bg-forest/90 ${
+                    bounce ? "animate-[haven-bounce_1.6s_ease-in-out_infinite]" : "animate-[haven-pulse_3s_ease-in-out_infinite]"
+                  }`
+            }`}
+          >
+            {open ? (
+              <i className="fa-solid fa-xmark text-white text-[20px]" />
+            ) : (
+              <>
+                <i className="fa-solid fa-comment-dots text-white text-[22px]" />
+                {/* "Ask Haven" chip — attached to the FAB rather than a separate element, so
+                    the button's own accessible name already includes it. Compact (icon-only)
+                    below the `sm` breakpoint, per the discovery brief's "narrow screens" rule. */}
+                <span className="hidden sm:inline text-white text-[13px] font-semibold whitespace-nowrap">
+                  Ask Haven
+                </span>
+                {greetingBadge && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-[#FF5371] border-2 border-white"
+                  />
+                )}
+              </>
+            )}
+          </button>
+        </>
+      )}
 
       {/* ── Chat Panel ── */}
       {open && (
         <div
           role="dialog"
           aria-label="Haven Chat Assistant"
-          className="fixed z-50 bottom-22 right-5 w-[360px] max-w-[calc(100vw-2.5rem)] bg-offwhite rounded-[20px] shadow-[0_8px_40px_rgba(0,0,0,.15)] border border-black/[.06] flex flex-col overflow-hidden sm:h-[520px] h-[calc(100vh-8rem)] max-h-[520px]"
+          className={
+            // `fixed inset-0` rather than `w-full h-full`: this page is the entire
+            // document inside the embed iframe, so filling the iframe's own viewport
+            // doesn't depend on an ancestor (html/body) having an explicit height.
+            embedded
+              ? "fixed inset-0 bg-offwhite flex flex-col overflow-hidden"
+              : "fixed z-50 bottom-22 right-5 w-[360px] max-w-[calc(100vw-2.5rem)] bg-offwhite rounded-[20px] shadow-[0_8px_40px_rgba(0,0,0,.15)] border border-black/[.06] flex flex-col overflow-hidden sm:h-[520px] h-[calc(100vh-8rem)] max-h-[520px]"
+          }
         >
           {/* Header */}
           <div className="bg-forest px-5 py-4 flex items-center gap-3 flex-shrink-0">
@@ -375,31 +595,15 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
                 <ChatMessage role={msg.role} text={msg.text} mode={msg.mode} />
                 {msg.links && msg.links.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3 pl-9">
-                    {msg.links.map((link) =>
-                      link.href.startsWith("/") ? (
-                        <Link
-                          key={link.href + link.label}
-                          href={link.href}
-                          onClick={() => handleLinkClick(link.href)}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
-                        >
-                          {link.label}
-                          <i className="fa-solid fa-arrow-right text-[10px]" />
-                        </Link>
-                      ) : (
-                        <a
-                          key={link.href + link.label}
-                          href={link.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => handleLinkClick(link.href)}
-                          className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
-                        >
-                          {link.label}
-                          <i className="fa-solid fa-arrow-right text-[10px]" />
-                        </a>
-                      )
-                    )}
+                    {msg.links.map((link) => (
+                      <ChatLinkButton
+                        key={link.href + link.label}
+                        href={link.href}
+                        label={link.label}
+                        chatSurface={chatSurface}
+                        onClick={handleLinkClick}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -449,26 +653,14 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
             {/* CTA link for current node */}
             {currentNode?.link && (
               <div className="pl-9 mb-3">
-                {currentNode.link.external ? (
-                  <a
-                    href={currentNode.link.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
-                  >
-                    {currentNode.link.label}
-                    <i className="fa-solid fa-arrow-right text-[10px]" />
-                  </a>
-                ) : (
-                  <Link
-                    href={currentNode.link.href}
-                    onClick={() => setOpen(false)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]"
-                  >
-                    {currentNode.link.label}
-                    <i className="fa-solid fa-arrow-right text-[10px]" />
-                  </Link>
-                )}
+                <ChatLinkButton
+                  href={currentNode.link.href}
+                  label={currentNode.link.label}
+                  chatSurface={chatSurface}
+                  onClick={() => {
+                    if (!embedded) setOpen(false);
+                  }}
+                />
               </div>
             )}
           </div>
@@ -529,5 +721,53 @@ export default function ChatWidget({ tree, aiEnabled }: ChatWidgetProps) {
         </div>
       )}
     </>
+  );
+}
+
+/**
+ * One booking/CTA link button, shared by both the AI message-link row and the static
+ * tree's CTA — resolves to the right target/href for the surface it's rendered on
+ * (src/lib/haven/chat-link.ts): client-side `<Link>` on the site, a top-window `<a>` with
+ * attribution UTMs for any in-site href rendered inside the blog embed's iframe, and a
+ * plain new-tab `<a>` for anything already external (Messenger, etc.) on either surface.
+ */
+function ChatLinkButton({
+  href,
+  label,
+  chatSurface,
+  onClick,
+}: {
+  href: string;
+  label: string;
+  chatSurface: ChatSurface;
+  onClick: (originalHref: string) => void;
+}) {
+  const resolved = resolveChatLink(href, chatSurface);
+  const className =
+    "inline-flex items-center gap-2 px-4 py-2 rounded-full bg-coral text-white text-[12.5px] font-semibold hover:bg-coral-dark transition-colors shadow-coral active:scale-[.97]";
+  const content = (
+    <>
+      {label}
+      <i className="fa-solid fa-arrow-right text-[10px]" />
+    </>
+  );
+
+  if (resolved.useNextLink) {
+    return (
+      <Link href={resolved.href} onClick={() => onClick(href)} className={className}>
+        {content}
+      </Link>
+    );
+  }
+  return (
+    <a
+      href={resolved.href}
+      target={resolved.target}
+      rel={resolved.target === "_blank" ? "noopener noreferrer" : undefined}
+      onClick={() => onClick(href)}
+      className={className}
+    >
+      {content}
+    </a>
   );
 }

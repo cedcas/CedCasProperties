@@ -95,6 +95,19 @@ html.js-loaded .reveal:not(.visible) {
   50%      { transform: scale(1.07); }
 }
 
+/* Arrival greeting (haven-chat-usage-2026-11-09.md fix #2): a gentle bounce on the launcher
+   while the greeting pop-up is showing, until opened or dismissed. Transform-only, same
+   GPU-composited reasoning as haven-pulse above. Suppressed under prefers-reduced-motion by
+   ChatWidget.tsx itself (no class applied), not by a media query here, since the same JS
+   check also gates the "ding" sound and the greeting's own entrance. */
+@keyframes haven-bounce {
+  0%, 100% { transform: translateY(0); }
+  30%      { transform: translateY(-10px); }
+  50%      { transform: translateY(0); }
+  65%      { transform: translateY(-5px); }
+  80%      { transform: translateY(0); }
+}
+
 /* ── Sticky booking bar / chat FAB collision ──
    The FAB sits at `fixed bottom-5 right-5`, directly on top of the mobile
    sticky booking bar. StickyBookingBar stamps `data-sticky-cta` on <html>
@@ -105,7 +118,13 @@ html[data-sticky-cta] #chat-fab {
   transform: translateY(-4.75rem) !important;
   animation: none;
 }
+/* The arrival greeting bubble sits above the FAB — lift it the same amount so it never
+   covers the sticky booking bar either. */
+html[data-sticky-cta] #haven-greeting {
+  transform: translateY(-4.75rem) !important;
+}
 @media (min-width: 1024px) {
-  /* Bar is lg:hidden, so the FAB should never move on desktop. */
+  /* Bar is lg:hidden, so neither the FAB nor the greeting should ever move on desktop. */
   html[data-sticky-cta] #chat-fab { transform: none !important; }
+  html[data-sticky-cta] #haven-greeting { transform: none !important; }
 }
