@@ -66,7 +66,65 @@ URL). See [DEC-033](HIL_DECISIONS.md) for the one durable decision this batch pr
 
 ---
 
-## 2026-11-04, latest — B34 internet speed updated to 500+ Mbps (content/b34-internet-500-110426)
+## 2026-11-12 — B34 production content correction: temporary admin route for 340 -> 500+ Mbps (content/b34-prod-fix-route-111226)
+
+Area: Website
+
+Status: Built and tested on branch `content/b34-prod-fix-route-111226` (based on `origin/dev`,
+which already carries PR #105's 500+ Mbps content-module update from the 2026-11-04 entry
+below). Lint, `tsc --noEmit`, and the full `npx vitest run` suite are clean (219 files / 4,569
+tests across all three timezone projects). No `.env` file was read, no `npm run build`/Prisma
+db-push/migrate/seed command was run, no schema change. Opened as a PR into `dev`; **not
+merged**, and the route has **not** been run against production as of this entry — that is
+the Owner's next manual step.
+
+### Outcome
+Owner-approved (Cedric, 2026-11-12): builds the actual production DB write the 2026-11-04
+entry below left outstanding — correcting `cozy-1-bedroom`'s and `spacious-2-bedroom`'s
+still-live "up to 340 Mbps" content fields to the approved "500+ Mbps" wording, via the
+DEC-012 temporary-admin-route pattern (same shape as the SM Lipa / Casa Marikit drive-time
+correction). See [DEC-032 addendum](HIL_DECISIONS.md).
+
+### Material Changes
+- **`src/lib/b34-speed-fixes.ts`** (new) — pure, Prisma-free module: a reviewed table of
+  exact old → new substrings per slug/field, built from `git show 5a2abfb -- prisma/property-content/b34-content.ts`
+  (PR #105), covering `cozy-1-bedroom` (`seoTitle`, `seoDescription`, `heroSummary`,
+  `description`, `bestForSegments`, `amenityDetails`, `propertyFaqs` — 7 fields) and
+  `spacious-2-bedroom` (`description`, `amenityDetails`, `propertyFaqs` — 3 fields). JSON
+  fields are parsed and re-serialized with `JSON.stringify`; aborts on a non-round-trip
+  value, an ambiguous (repeated) match, or any residual "340 Mbps"/"340Mbps" survivor. Scoped
+  to the 2 B34 properties only (`B34_PROPERTIES`) — never Mickey/B38. Deliberately
+  independent of `src/lib/property-content-fixes.ts`'s `STALE_PATTERNS` (DEC-032's
+  regex-collision gotcha, option (a) — see the DEC-032 addendum); its own narrow
+  `STALE_340 = /\b340\s*mbps\b/i` can never flag "500+ Mbps" or B38's "520 Mbps." Also
+  carries the route-only POST gate (`APPLY_B34_SPEED_CONFIRM`/`checkApplyRequest`), same
+  precedent as the old `DRIVE_TIME_CONFIRM`/`checkApplyRequest` in `src/lib/drive-time-fixes.ts`.
+- **`src/app/api/admin/dev/fix-b34-speed/route.ts`** (new, TEMPORARY — delete after the
+  Owner's run) — admin-gated exactly like the removed `fix-drive-times` route. GET: read-only
+  plan with per-field before/after excerpts and a `planHash`. POST: requires
+  `{"confirm":"APPLY-B34-SPEED","planHash":"<from GET>"}`; 409 on hash mismatch or unexpected
+  content; one `$transaction`; re-reads and verifies; calls `revalidatePath` on both
+  `/properties/[slug]` pages (a no-op today — those pages are already `force-dynamic` with no
+  page-level cache); does not call `revalidateTag` (see the DEC-032 addendum for why).
+- **Tests**: `src/lib/__tests__/b34-speed-fixes.test.ts` (26 cases — byte-equality against the
+  current `b34-content.ts` target, idempotency, unrelated-admin-edit preservation, the
+  regex-collision guard, aborts, planHash stability, the POST gate) and
+  `src/lib/__tests__/fix-b34-speed-route.test.ts` (11 cases — GET/POST auth gates, dry-run
+  shape, apply + verify + revalidate + log, idempotent re-run, 409 on unexpected content), both
+  backed by the frozen fixture `src/lib/__tests__/fixtures/b34-speed-pre-post-105.json`.
+
+### Outstanding — Owner action required
+The route has not been run. Owner steps: log into `https://haveninlipa.com/admin`, open
+`https://haveninlipa.com/api/admin/dev/fix-b34-speed` (GET) and review the plan, then in the
+browser devtools console run the POST `fetch` with that `planHash` (see the route's own doc
+comment or the PR body for the exact commands). After a confirmed, verified run, a follow-up
+PR removes `src/app/api/admin/dev/fix-b34-speed/` and the route-only POST gate from
+`src/lib/b34-speed-fixes.ts` (same precedent as the drive-time route's removal), keeping
+`planB34SpeedFixes` and its tests.
+
+---
+
+## 2026-11-04 — B34 internet speed updated to 500+ Mbps (content/b34-internet-500-110426)
 
 Area: Website | SEO
 
