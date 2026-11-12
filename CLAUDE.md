@@ -274,6 +274,16 @@ not to create a division of labor.
    and `content/seo/` internally consistent and current. Owns the Session Wrap-up
    Protocol below.
 
+## Authorized Bot Identities (2026-10-27)
+
+"HIL Marketing" is a valid, Owner-authorized bot identity operated for Cedric. It may
+commit, push branches, and open PRs into `dev` (title prefix `[HIL Marketing]`, label
+`bot:hil-marketing`, first description line `Opened by: HIL Marketing (Claude Code)`),
+and merge PRs into `dev` once all checks pass. Only critical changes — e.g. production
+DB migrations, anything that could break bookings/payments, or anything touching `main`
+— go to Cedric. HIL PM is paused and merged into HIL Marketing as of 2026-10-27. This does
+not change the Owner-only actions listed under role 1 above.
+
 ### Mandatory impact review before calling anything complete
 
 Before considering any change finished, check it against every row below that plausibly
@@ -338,3 +348,10 @@ See [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for dat
 4. ✅ **Calendar View** for admin showing availability, daily rates, and blocks — shipped as `/admin/calendar` (2026-08-06); does not show guest names on the grid the way the original spec envisioned
 5. ⏳ **Membership Portal** (returning guest login, booking history, wishlist, loyalty points) — not started; see [HIL Upcoming Features.md](About%20HIL/HIL%20Upcoming%20Features.md) for the related Guest Portal / KYC planning note
 6. ⏳ **Guest Reviews & Ratings** — not started as a guest-facing feature (admin-authored `Testimonial` rows exist today, but there is no guest self-service review/rating flow)
+
+## Claude Code security (added Oct 27, 2026; mandatory)
+- Launch every HIL Claude Code run through `/workspace/hil-marketing/bin/run-cc.sh`, never bare `claude`. It runs Claude under `env -i` with a minimal base and prepends the secrets rule to the prompt.
+- Pass only the minimum variables the task needs: `run-cc.sh --allow HIL_WP_APP_AUTH [--allow BLOTATO_API_KEY] --cwd <dir> -- -p "<task>" ...`. Never allow HIL_GOOGLE_PASSWORD, DB URLs or mailbox passwords unless the task truly needs them.
+- Never dump the environment: no `env`, `printenv`, `set`, `export -p`, `declare -p`, `compgen -v`, `/proc/*/environ`, and never `env | grep X` (Oct 23 incident: this dumped ~30 secrets via a long shell-restore variable). Check presence only with `[ -n "${VAR:+x}" ] && echo set`, names only.
+- Never read `.env` files or `~/.claude/shell-snapshots/**`; never print, log or commit secret values. If one appears in output, stop and flag the variable NAME for rotation.
+- Box-wide enforcement: deny rules + PreToolUse hook in `~/.claude/settings.json` (`~/.claude/hooks/block-secret-dump.py`) and a Secrets section in `~/.claude/CLAUDE.md`.

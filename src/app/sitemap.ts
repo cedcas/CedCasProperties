@@ -27,7 +27,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     {
-      url: BASE_URL,
+      // Trailing slash matches Google's chosen canonical for the home page
+      // (`https://haveninlipa.com/`) — October SEO review §5.
+      url: `${BASE_URL}/`,
       lastModified: inventoryUpdated,
       changeFrequency: "daily",
       priority: 1.0,

@@ -37,7 +37,10 @@ export default function ChatWidgetGate({
     };
   }, []);
 
-  if (pathname.startsWith("/admin")) return null;
+  // /embed/haven is the blog-embed iframe's own chat-only page — it renders its own
+  // always-open ChatWidget directly (embedded=true), so the site's idle-mounted
+  // FAB widget must not also mount inside that iframe.
+  if (pathname.startsWith("/admin") || pathname.startsWith("/embed")) return null;
   if (!ready) return null;
   return <>{children}</>;
 }

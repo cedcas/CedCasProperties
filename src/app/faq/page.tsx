@@ -129,15 +129,18 @@ export default function FAQPage() {
               >
                 <i className="fa-solid fa-envelope" /> Contact us
               </Link>
+              {/* Direct link to the listings/booking page (October SEO review #11 — this
+                  page previously only linked back to the homepage's #properties anchor,
+                  never to an actual property or booking page). */}
               <Link
-                href="/#properties"
+                href="/properties"
                 className="inline-flex items-center gap-2 px-7 py-3 rounded-full text-[14px] font-semibold transition-all duration-300 hover:bg-black/5"
                 style={{
                   color: "#2C2C2C",
                   border: "2px solid rgba(44,44,44,0.22)",
                 }}
               >
-                <i className="fa-solid fa-house" /> Browse properties
+                <i className="fa-solid fa-house" /> Browse our listings
               </Link>
             </div>
           </div>

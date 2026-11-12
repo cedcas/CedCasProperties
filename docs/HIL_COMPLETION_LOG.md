@@ -4,7 +4,187 @@
 
 ---
 
-## 2026-10-23, latest — Haven AI "sikat sa inyo" ban (hil-pm/haven-sikat-102326)
+## 2026-11-12, latest — Haven chat discovery + tracking, blog embed, blog-slug redirects, property-page SEO (feature/haven-chat-batch-111226)
+
+Area: Website | SEO
+
+Status: Built and tested on branch `feature/haven-chat-batch-111226` (based on `dev`);
+lint, `tsc --noEmit`, and the full `npx vitest run` suite clean (240 files / 4,614 tests
+across all three timezone projects, 141 new). No `.env` file was read; no `npm run
+build`/Prisma `db push`/`migrate`/`seed` command was run; no `prisma/schema.prisma`
+change. Opened as a PR into `dev` (not merged) — Cedric pre-approved the whole batch
+2026-11-12.
+
+### Outcome
+Addresses the Nov 9 chat usage audit (`haven-chat-usage-2026-11-09.md`): Haven was live
+with AI mode on but had drawn effectively zero chats since the Oct 26 launch, because the
+discovery funnel itself (FAB seen → opened → messaged) was completely dark in GA4, the
+launcher was an unlabeled bubble, and the blog — most of the site's traffic — had no chat
+at all. Also ships the October SEO review's site-fix items #8–12 (blog-slug 404s,
+property-gallery alt text, property H1s, direct property/booking links, sitemap home
+URL). See [DEC-033](HIL_DECISIONS.md) for the one durable decision this batch produced
+(the blog-embed CSP framing exception).
+
+### Material Changes
+- **New GA4 events** (`haven_ai_impression`, `haven_ai_open` with a `source`, `haven_ai_close`,
+  `haven_ai_option_select`) — every Haven event (new and pre-existing) now also carries
+  `chat_surface` (`site`/`blog`). `src/components/chat/ChatWidget.tsx`.
+- **"Ask Haven" launcher label** — the FAB is a labeled pill when closed, compact
+  (icon-only) below the `sm` breakpoint; its `aria-label` always includes the visible text.
+- **Arrival greeting pop-up** — once per visit (`src/lib/haven/greeting-gate.ts`,
+  `greeting-copy.ts`), English/Tagalog by the guest's own prior chat-language choice, a
+  red-dot badge and bounce (skipped under `prefers-reduced-motion`) until opened/dismissed.
+- **Soft "ding"** (`src/lib/haven/ding.ts`) — gated to after the guest's own first
+  interaction with Haven and a real reply; never autoplays; silent if blocked.
+- **`?ask=1` auto-open** (`src/lib/haven/ask-param.ts`) — opens once, strips `ask` from the
+  URL via `history.replaceState`, keeps every other param.
+- **Blog embed, no second implementation** — `ChatWidget` gained `embedded`/`chatSurface`
+  props; `src/app/embed/haven/page.tsx` (new route) + `public/haven-embed.js` (new public
+  script, installed on the blog separately, not by this PR); `src/lib/haven/chat-link.ts`
+  routes in-chat links to the top window with UTMs when on the blog surface.
+- **Blog-slug redirects** — `src/lib/blog-redirect-slugs.ts` + `next.config.ts`: 301s for
+  all 37 `blog.haveninlipa.com` post slugs previously 404ing on the main site.
+- **Property-page SEO** — `src/lib/property-name.ts` (new); `PropertyGallery.tsx`'s alt
+  fallback (now covers the thumbnail/lightbox strips too); property H1s now name the home
+  + Lipa City (original title kept as a subtitle); `/faq`'s CTA now links `/properties`
+  directly; `src/app/sitemap.ts`'s home URL gained a trailing slash.
+- **Docs**: [HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md)
+  (Haven AI Chat section), [HIL_SEO_SPECIFICATION.md](HIL_SEO_SPECIFICATION.md) (§7, §8,
+  §11), [HIL_DECISIONS.md](HIL_DECISIONS.md) (DEC-033), this entry, and the
+  `HIL_PROJECT_STATUS.md` row.
+
+### Follow-up / not done here
+- The Next.js `headers()` "later rule wins for a shared key" assumption behind the
+  `/embed/haven` CSP override is documented but not yet verified against a live preview
+  deploy (DEC-033's Implications) — verify with `curl -I` on `dev.haveninlipa.com` before
+  relying on it in production.
+- No dev/staging blog domain was found anywhere in the repo, so the embed's
+  `frame-ancestors` lists only the production blog host.
+- `haven_ai_impression` for the blog's own injected launcher (outside the iframe, on the
+  blog page itself) isn't tracked — the blog page has no GA4 of its own, and adding one is
+  a WordPress-side decision outside this PR's scope.
+
+---
+
+## 2026-11-12 — B34 production content correction: temporary admin route for 340 -> 500+ Mbps (content/b34-prod-fix-route-111226)
+
+Area: Website
+
+Status: Built and tested on branch `content/b34-prod-fix-route-111226` (based on `origin/dev`,
+which already carries PR #105's 500+ Mbps content-module update from the 2026-11-04 entry
+below). Lint, `tsc --noEmit`, and the full `npx vitest run` suite are clean (219 files / 4,569
+tests across all three timezone projects). No `.env` file was read, no `npm run build`/Prisma
+db-push/migrate/seed command was run, no schema change. Opened as a PR into `dev`; **not
+merged**, and the route has **not** been run against production as of this entry — that is
+the Owner's next manual step.
+
+### Outcome
+Owner-approved (Cedric, 2026-11-12): builds the actual production DB write the 2026-11-04
+entry below left outstanding — correcting `cozy-1-bedroom`'s and `spacious-2-bedroom`'s
+still-live "up to 340 Mbps" content fields to the approved "500+ Mbps" wording, via the
+DEC-012 temporary-admin-route pattern (same shape as the SM Lipa / Casa Marikit drive-time
+correction). See [DEC-032 addendum](HIL_DECISIONS.md).
+
+### Material Changes
+- **`src/lib/b34-speed-fixes.ts`** (new) — pure, Prisma-free module: a reviewed table of
+  exact old → new substrings per slug/field, built from `git show 5a2abfb -- prisma/property-content/b34-content.ts`
+  (PR #105), covering `cozy-1-bedroom` (`seoTitle`, `seoDescription`, `heroSummary`,
+  `description`, `bestForSegments`, `amenityDetails`, `propertyFaqs` — 7 fields) and
+  `spacious-2-bedroom` (`description`, `amenityDetails`, `propertyFaqs` — 3 fields). JSON
+  fields are parsed and re-serialized with `JSON.stringify`; aborts on a non-round-trip
+  value, an ambiguous (repeated) match, or any residual "340 Mbps"/"340Mbps" survivor. Scoped
+  to the 2 B34 properties only (`B34_PROPERTIES`) — never Mickey/B38. Deliberately
+  independent of `src/lib/property-content-fixes.ts`'s `STALE_PATTERNS` (DEC-032's
+  regex-collision gotcha, option (a) — see the DEC-032 addendum); its own narrow
+  `STALE_340 = /\b340\s*mbps\b/i` can never flag "500+ Mbps" or B38's "520 Mbps." Also
+  carries the route-only POST gate (`APPLY_B34_SPEED_CONFIRM`/`checkApplyRequest`), same
+  precedent as the old `DRIVE_TIME_CONFIRM`/`checkApplyRequest` in `src/lib/drive-time-fixes.ts`.
+- **`src/app/api/admin/dev/fix-b34-speed/route.ts`** (new, TEMPORARY — delete after the
+  Owner's run) — admin-gated exactly like the removed `fix-drive-times` route. GET: read-only
+  plan with per-field before/after excerpts and a `planHash`. POST: requires
+  `{"confirm":"APPLY-B34-SPEED","planHash":"<from GET>"}`; 409 on hash mismatch or unexpected
+  content; one `$transaction`; re-reads and verifies; calls `revalidatePath` on both
+  `/properties/[slug]` pages (a no-op today — those pages are already `force-dynamic` with no
+  page-level cache); does not call `revalidateTag` (see the DEC-032 addendum for why).
+- **Tests**: `src/lib/__tests__/b34-speed-fixes.test.ts` (26 cases — byte-equality against the
+  current `b34-content.ts` target, idempotency, unrelated-admin-edit preservation, the
+  regex-collision guard, aborts, planHash stability, the POST gate) and
+  `src/lib/__tests__/fix-b34-speed-route.test.ts` (11 cases — GET/POST auth gates, dry-run
+  shape, apply + verify + revalidate + log, idempotent re-run, 409 on unexpected content), both
+  backed by the frozen fixture `src/lib/__tests__/fixtures/b34-speed-pre-post-105.json`.
+
+### Outstanding — Owner action required
+The route has not been run. Owner steps: log into `https://haveninlipa.com/admin`, open
+`https://haveninlipa.com/api/admin/dev/fix-b34-speed` (GET) and review the plan, then in the
+browser devtools console run the POST `fetch` with that `planHash` (see the route's own doc
+comment or the PR body for the exact commands). After a confirmed, verified run, a follow-up
+PR removes `src/app/api/admin/dev/fix-b34-speed/` and the route-only POST gate from
+`src/lib/b34-speed-fixes.ts` (same precedent as the drive-time route's removal), keeping
+`planB34SpeedFixes` and its tests.
+
+---
+
+## 2026-11-04 — B34 internet speed updated to 500+ Mbps (content/b34-internet-500-110426)
+
+Area: Website | SEO
+
+Status: Built and tested on branch `content/b34-internet-500-110426` (based on `dev`); lint,
+`tsc --noEmit`, and the full `npx vitest run` suite clean (213 files / 4,458 tests across all
+three timezone projects). No `.env` file was read, no `npm run build`/Prisma db/migrate
+command was run. Committed, **not pushed, no PR** (explicit task constraint).
+
+### Outcome
+Owner-confirmed (Cedric, 2026-11-04): B34's (Spacious 2BR + Cozy 1BR) fiber internet is now
+500+ Mbps, up from the "up to 340 Mbps" figure the 2026-09-07 Maculot/Mbps/parking correction
+set. Every current, live code-level statement of the old figure now reads natural "500+ Mbps"
+phrasing, with the backup-internet-connection fact kept as-is. B38 (Mickey in Lipa, 520 Mbps)
+is untouched. See [DEC-032](HIL_DECISIONS.md).
+
+### Material Changes
+- **`prisma/property-content/b34-content.ts`** — `ONE_BR` and `TWO_BR`: `seoTitle`,
+  `seoDescription`, `heroSummary`, `description`, `amenityDetails`, `bestForSegments`, and
+  `propertyFaqs` entries for both B34 listings now read "500+ Mbps" / "Fiber WiFi at 500+
+  Mbps" in place of "up to 340 Mbps"; the "tested again, still 340" aside now reads "tested
+  again, still 500+". This module doubles as `scripts/fix-property-content.ts`'s target
+  content (DEC-016), so a future production correction run picks up the new figure
+  automatically from here.
+- **`src/lib/faqs.ts`** — the "What amenities are included?" and "Is the WiFi fast enough
+  for remote work?" public FAQ answers now say B34 is 500+ Mbps (B38 still 520 Mbps; the
+  backup-internet fact is unchanged).
+- **`src/app/properties/page.tsx`, `src/app/staycation/page.tsx`** — static "best fit" copy
+  (the "Working remotely" → Cozy 1BR line; the staycation page's WiFi call-out and remote-work
+  fit block) updated to 500+ Mbps.
+- Confirmed **untouched**, correctly: `prisma/property-content/mickey-content.ts` (B38, 520
+  Mbps); unrelated `340`-as-pixel-value/SVG-coordinate literals in
+  `src/app/properties/[slug]/page.tsx`, `src/components/sections/Hero.tsx`,
+  `src/components/sections/DiscoverLipa.tsx`; `src/lib/haven/system-prompt.ts` (Haven's
+  listing facts are DB-derived at runtime, never hardcoded, so nothing there referenced 340).
+- **`src/lib/__tests__/property-content-fixes.test.ts` — deliberately not modified.** Its
+  "340 Mbps" fixtures test the *different*, already-completed Maculot/Mbps/parking
+  correction tool's stale-pattern detector, where 340 was the *target* (clean) value at the
+  time, not a claim about today's current B34 speed. Changing those fixtures to "500+ Mbps"
+  would make them fail, because that detector's existing `stale-mbps` regex (`400 ?mbps|500\+?
+  ?mbps`) incorrectly also matches the new correct value — see the regex-collision gotcha
+  recorded in [DEC-032](HIL_DECISIONS.md).
+- Left untouched by task instruction (historical/out-of-scope): `content/seo/archive/SEO_DECISIONS.md`,
+  `content/seo/runs/090726/HIL_SEO_Implementation_Plan.md`, `docs/HIL Commits.md`, and this
+  file's/`HIL_DECISIONS.md`'s own prior entries (incl. `SEO-DEC-028`) — all describe past
+  states/decisions, not current claims.
+
+### Outstanding — production DB content correction not run
+Production's `Property` rows for `cozy-1-bedroom` and `spacious-2-bedroom` are still seeded
+with the old "up to 340 Mbps" wording in `description`/`seoTitle`/`seoDescription`/
+`amenityDetails`/`propertyFaqs` etc., and will keep rendering it live until an Owner-approved
+correction run. No DB script was run this session (explicit task constraint). What's needed:
+the same DEC-012/DEC-016 pattern as the original Maculot/Mbps/parking pass — a dry-run report
+(via `scripts/fix-property-content.ts`, which now targets the updated `b34-content.ts`, or a
+new narrower substring-table script) reviewed by the Owner, then applied via a temporary
+admin-gated route or an operator machine. Check the regex-collision gotcha in
+[DEC-032](HIL_DECISIONS.md) before reusing `scripts/fix-property-content.ts` as-is.
+
+---
+
+## 2026-10-23 — Haven AI "sikat sa inyo" ban (hil-pm/haven-sikat-102326)
 
 Area: Website
 

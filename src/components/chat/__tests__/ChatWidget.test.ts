@@ -4,7 +4,10 @@ import { createElement, act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 const mockPath = "/";
-vi.mock("next/navigation", () => ({ usePathname: () => mockPath }));
+vi.mock("next/navigation", () => ({
+  usePathname: () => mockPath,
+  useSearchParams: () => new URLSearchParams(),
+}));
 vi.mock("next/link", () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) =>
     createElement("a", { href, ...rest }, children),

@@ -58,7 +58,7 @@ const FIT_BLOCKS: { heading: string; slugs: string[]; body: string }[] = [
   {
     heading: "Two of you, and one of you has to work",
     slugs: ["cozy-1-bedroom"],
-    body: "Fibre up to 340 Mbps, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
+    body: "Fibre at 500+ Mbps, speed-tested rather than advertised. A proper desk surface, Netflix Premium for the evening, and a solar backup that keeps things running through a brownout. If Monday morning has a standup in it, this is the one.",
   },
   {
     heading: "A family with kids",
@@ -612,7 +612,7 @@ export default async function StaycationPage() {
                 </p>
               )}
               <p>
-                {lead("The WiFi is real.")} Fibre up to 340 Mbps in the{" "}
+                {lead("The WiFi is real.")} Fibre at 500+ Mbps in the{" "}
                 {homeLink("cozy-1-bedroom") ?? "1BR"}, speed-tested. If you&rsquo;re taking calls, ask us
                 and we&rsquo;ll tell you honestly whether the home you&rsquo;re looking at will hold up.
               </p>

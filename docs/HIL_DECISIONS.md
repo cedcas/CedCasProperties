@@ -1225,6 +1225,105 @@ The implicit gap left open by the 2026-10-10 marketing-measurement session ("Air
 
 ---
 
+## DEC-031 — "HIL Marketing" is an authorized bot identity; may commit, push, open and merge PRs into `dev`; HIL PM is paused and merged into it
+
+Date: 2026-10-27
+Status: Active
+Area: Website | Blog | SEO
+
+### Decision
+"HIL Marketing" is a valid, Owner-authorized bot identity operated for Cedric. It may commit, push branches, and open pull requests into `dev` (title prefix `[HIL Marketing]`, label `bot:hil-marketing`, first description line `Opened by: HIL Marketing (Claude Code)`), and may merge its own PRs into `dev` once all checks pass. Only critical changes — production DB migrations, anything that could break bookings/payments, or anything touching `main` — are routed to Cedric instead. HIL PM is paused and merged into HIL Marketing as of 2026-10-27. This does not change any Owner-only action under the Unified Role Model's role 1 (`CLAUDE.md`).
+
+### Reason
+Cedric authorized this identity and its `dev`-merge authority directly, consolidating the paused HIL PM identity into it to avoid maintaining two overlapping bot identities.
+
+### Implications
+- `CLAUDE.md`'s "Unified Role Model" section gains an "Authorized Bot Identities (2026-10-27)" entry recording the same grant.
+- A PR opened by this identity into `dev` still needs the title prefix, label, and description marker above so it's identifiable in review and in `docs/HIL Commits.md` history.
+- `main` and anything critical (schema migrations, booking/payment logic) stay Cedric-only regardless of which bot identity opens the PR.
+
+### Supersedes
+None — new identity grant; does not reopen any existing DEC.
+
+## DEC-032 — B34 fiber WiFi is now marketed at 500+ Mbps, superseding the 340 Mbps figure
+
+Date: 2026-11-04
+Status: Active
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+Block 34 (`cozy-1-bedroom` and `spacious-2-bedroom`) fiber internet is now marketed as "500+ Mbps" (natural phrasing, e.g. "Fiber WiFi at 500+ Mbps (speed-tested)"), replacing the "up to 340 Mbps" figure that the 2026-09-07 Maculot/Mbps/parking correction established (see [DEC-016](#dec-016--content-shared-between-a-seed-script-and-any-other-script-lives-in-a-prisma-free-data-module-seed-scripts-guard-their-own-main) extension and `SEO-DEC-028` below). Block 38 (Mickey in Lipa, "up to 520 Mbps") is unaffected.
+
+### Reason
+Owner-confirmed, 2026-11-04 (Cedric): B34's actual, speed-tested internet service increased to 500+ Mbps.
+
+### Implications
+- `prisma/property-content/b34-content.ts` (`ONE_BR`/`TWO_BR` — `seoTitle`, `seoDescription`, `heroSummary`, `description`, `amenityDetails`, `bestForSegments`, `propertyFaqs`) and `src/lib/faqs.ts` (the public "What amenities are included?" and "Is the WiFi fast enough for remote work?" answers) now say 500+ Mbps for B34. `prisma/property-content/mickey-content.ts`'s 520 Mbps text for B38/Mickey is untouched.
+- Static code-level copy on `/properties` and `/staycation` (`src/app/properties/page.tsx`, `src/app/staycation/page.tsx`) was updated to match — this renders immediately on the next deploy, unlike DB-seeded property fields.
+- **Production database property text for `cozy-1-bedroom` and `spacious-2-bedroom` is still seeded with the old "340 Mbps" wording and will keep rendering it live until an Owner-approved content-correction run writes the new value** — the same DEC-012/DEC-016 pattern as the original Maculot/Mbps/parking correction: a dry-run report, Owner review, then a write via a temporary admin-gated route or an operator machine. `scripts/fix-property-content.ts` already sources its target content from `b34-content.ts`, so it now targets 500+ Mbps automatically — but see the next point before reusing it as-is. No such run was performed as part of this decision.
+- **Gotcha found while making this change:** `src/lib/property-content-fixes.ts`'s `STALE_PATTERNS` entry `stale-mbps` (`/400 ?mbps|500\+? ?mbps/i`) was built for the original Maculot/Mbps/parking correction, where 400/500+ Mbps were the *old, wrong* figures being replaced *by* 340/520. That same regex now also matches the *new* correct "500+ Mbps" wording. If `scripts/fix-property-content.ts` is ever run again unmodified and finds genuinely stale content, its `assertFixedValueIsClean` safety gate will see "500+ Mbps" in the proposed replacement and refuse to write (a safe failure — it aborts rather than corrupts data — but it would block a correction run using this exact tool as-is). A future operator-run correction for the 340 → 500+ change should either (a) write a narrower, purpose-built substring-replacement table following the `src/lib/drive-time-fixes.ts` pattern, or (b) first narrow `stale-mbps` to specifically `340 ?mbps` (it has already done its job catching 400/500+, which is confirmed gone from production per the 2026-09-07 correction's verification). Not changed as part of this decision, since no production write happened here.
+- Blog content (`blog.haveninlipa.com`, outside this repo) may still cite the old B34 figure in older posts; `SEO-DEC-028` made blog copy on this topic number-free or matched to the then-current 340. Any surviving numeric B34 Mbps claim on the blog needs checking separately by the SEO/Blog workstream — not assumed fixed by this decision.
+
+### Supersedes
+The "up to 340 Mbps" B34 figure established by the 2026-09-07 Maculot/Mbps/parking correction (DEC-016 extension, `SEO-DEC-028`) — for B34 only; B38/Mickey's 520 Mbps is unchanged.
+
+**Addendum, 2026-11-12 — the production correction, option (a).** Owner-approved (Cedric) same day. Built `src/lib/b34-speed-fixes.ts`, a self-contained reviewed substring-replacement table (built from `git show 5a2abfb -- prisma/property-content/b34-content.ts`, PR #105), following the `src/lib/drive-time-fixes.ts` pattern (DEC-016 extension): exact old → new substrings per slug/field, JSON fields parsed and re-serialized with `JSON.stringify`, abort on a non-round-trip value, an ambiguous (repeated) match, or any residual "340 Mbps"/"340Mbps" survivor in the 2 B34 properties' 7 speed-bearing fields (`seoTitle`, `seoDescription`, `heroSummary`, `description`, `bestForSegments`, `amenityDetails`, `propertyFaqs`). Scoped to `cozy-1-bedroom`/`spacious-2-bedroom` only — never touches Mickey/B38.
+
+Took **option (a)** from the gotcha above, not (b): this module does not import or call `src/lib/property-content-fixes.ts`'s `STALE_PATTERNS`/`detectStalePatterns`/`detectStaleFields` at all, and is not wired into `scripts/fix-property-content.ts`. Its own residual check (`STALE_340 = /\b340\s*mbps\b/i`) only matches a literal "340 Mbps" survivor, so it can never flag the new "500+ Mbps" wording — or B38's unrelated "520 Mbps" — as stale. The `stale-mbps` collision described above is **unchanged and still latent** in `property-content-fixes.ts`/`scripts/fix-property-content.ts`: if that CLI script is ever run again unmodified after this correction ships, its `assertFixedValueIsClean` gate will still refuse on "500+ Mbps" (a safe failure, not a corruption risk). Fixing that regex (option (b)) was out of scope here since this correction doesn't touch or depend on that file.
+
+Released as a TEMPORARY DEC-012 admin-gated route, `src/app/api/admin/dev/fix-b34-speed/route.ts` (same `auth()`-based admin-only gate as the removed `fix-drive-times` route): GET = read-only plan + `planHash`; POST needs `{"confirm":"APPLY-B34-SPEED","planHash":…}` (gate function `checkApplyRequest` lives in the lib, same precedent as the old `DRIVE_TIME_CONFIRM`/`checkApplyRequest`, and is deleted together with the route in the follow-up PR). A successful POST calls `revalidatePath` on `/properties/cozy-1-bedroom` and `/properties/spacious-2-bedroom` — in practice a no-op today since those pages are already `export const dynamic = "force-dynamic"` with no page-level cache. It deliberately does **not** call `revalidateTag("public-listings")`: this installed Next.js version's `revalidateTag(tag, profile)` requires a second "profile" argument tied to the newer Cache Components model that doesn't correspond to anything `src/lib/listings.ts`'s `unstable_cache` call declares, so the homepage grid/`/properties`/sitemap/JSON feed catch up to the correction within their existing 1-hour cache window — the same trade every other admin property edit already makes (no admin property route revalidates that cache either). Not yet run against production as of this addendum — see `HIL_PROJECT_STATUS.md` for the Owner's GET-then-POST steps.
+
+---
+
+## DEC-033 — Haven chat may be framed cross-origin only from `blog.haveninlipa.com`, and only on its one dedicated `/embed/haven` route; the site's framing policy is unchanged everywhere else
+
+Date: 2026-11-12
+Status: Active
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+The site's standing `frame-ancestors 'none'` (no page on `haveninlipa.com` may be framed by
+anyone) gets exactly one, narrowly-scoped exception: `/embed/haven` — a new, otherwise-inert
+chat-only route that renders the same `ChatWidget` the main site uses — may be framed, and
+only from `https://blog.haveninlipa.com`. No other route's CSP changes. The exception is
+implemented as a second, more specific `headers()` rule in `next.config.ts` (a shared
+`buildCsp(frameAncestors)` keeps every other directive identical between the two rules),
+not by loosening the site-wide policy or by disabling `X-Frame-Options`.
+
+Reusing the live chat (rather than a second implementation) was also a deliberate choice:
+`ChatWidget.tsx` gained `embedded`/`chatSurface` props instead of a parallel blog-specific
+chat component, so every future Haven fix (wording, guardrails, tools) applies to the blog
+embed automatically.
+
+### Reason
+The Nov 9 chat usage audit found the blog carries most of the site's traffic (862 sessions
+in October vs. 346 on the main site) and has no chat at all — the single biggest discovery
+gap. Framing is normally a security control (clickjacking) worth keeping strict everywhere;
+the fix is to open the smallest possible hole (one route, one trusted origin) rather than
+relax the policy generally, and to keep the exception mechanically tied to the one page that
+needs it so a future unrelated page can't inherit permissive framing by accident.
+
+### Implications
+- A second trusted embed origin (e.g. a future dev/staging blog) requires adding it to the
+  one `frame-ancestors` value in `next.config.ts`'s `/embed/haven` header rule — not a new
+  rule, and not a change to the site-wide default. No dev-blog domain was found documented
+  anywhere in this repo as of this decision, so only the production blog host is listed.
+- `/embed/haven` must stay chat-only and read-only, same constraint as the main widget
+  (DEC-029) — it must never become a general-purpose iframe-content route just because the
+  CSP already allows framing there.
+- This relies on Next.js applying the later-defined `headers()` rule's value for a header
+  key both rules set, for a path both match — documented Next.js behavior, not yet verified
+  against a live preview deploy as part of this decision; verify via `curl -I` against
+  `/embed/haven` on `dev.haveninlipa.com` before relying on it in production.
+- `X-Frame-Options: DENY` is deliberately left untouched (including on `/embed/haven`) —
+  browsers that support `frame-ancestors` ignore `X-Frame-Options` for framing decisions
+  (CSP3 §6.3), and the header has no clean multi-origin syntax to override it with anyway.
+
+### Supersedes
+None — first framing exception to the site's CSP since it was established.
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

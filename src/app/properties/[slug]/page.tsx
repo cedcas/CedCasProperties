@@ -12,6 +12,7 @@ import Testimonials from "@/components/sections/Testimonials";
 import { buildPropertyJsonLd } from "@/lib/property-schema";
 import { socialMetadata, stripBrandSuffix } from "@/lib/seo-metadata";
 import { buildOccupancyNote, normalizePricingProse, sanitizeChargeProse } from "@/lib/occupancy";
+import { buildPropertyPageH1 } from "@/lib/property-name";
 
 export const dynamic = "force-dynamic";
 
@@ -246,8 +247,13 @@ export default async function PropertyDetailPage({
                   )}
                 </div>
                 <h1 className="font-serif font-semibold text-white leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)" }}>
-                  {property.name}
+                  {buildPropertyPageH1(property.name, property.location)}
                 </h1>
+                {/* Original Airbnb-style listing title, kept visible (October SEO review:
+                    H1 should name the home + Lipa City, not the listing title — but the
+                    title itself is still useful context, so it moves here rather than
+                    disappearing from the page). */}
+                <p className="text-white/55 text-[12.5px] mt-1">{property.name}</p>
               </div>
               <div className="text-right">
                 {Number(property.pricePerNight) > 0 ? (
