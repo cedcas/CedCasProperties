@@ -4,6 +4,68 @@
 
 ---
 
+## 2026-11-12, latest — Haven chat discovery + tracking, blog embed, blog-slug redirects, property-page SEO (feature/haven-chat-batch-111226)
+
+Area: Website | SEO
+
+Status: Built and tested on branch `feature/haven-chat-batch-111226` (based on `dev`);
+lint, `tsc --noEmit`, and the full `npx vitest run` suite clean (240 files / 4,614 tests
+across all three timezone projects, 141 new). No `.env` file was read; no `npm run
+build`/Prisma `db push`/`migrate`/`seed` command was run; no `prisma/schema.prisma`
+change. Opened as a PR into `dev` (not merged) — Cedric pre-approved the whole batch
+2026-11-12.
+
+### Outcome
+Addresses the Nov 9 chat usage audit (`haven-chat-usage-2026-11-09.md`): Haven was live
+with AI mode on but had drawn effectively zero chats since the Oct 26 launch, because the
+discovery funnel itself (FAB seen → opened → messaged) was completely dark in GA4, the
+launcher was an unlabeled bubble, and the blog — most of the site's traffic — had no chat
+at all. Also ships the October SEO review's site-fix items #8–12 (blog-slug 404s,
+property-gallery alt text, property H1s, direct property/booking links, sitemap home
+URL). See [DEC-033](HIL_DECISIONS.md) for the one durable decision this batch produced
+(the blog-embed CSP framing exception).
+
+### Material Changes
+- **New GA4 events** (`haven_ai_impression`, `haven_ai_open` with a `source`, `haven_ai_close`,
+  `haven_ai_option_select`) — every Haven event (new and pre-existing) now also carries
+  `chat_surface` (`site`/`blog`). `src/components/chat/ChatWidget.tsx`.
+- **"Ask Haven" launcher label** — the FAB is a labeled pill when closed, compact
+  (icon-only) below the `sm` breakpoint; its `aria-label` always includes the visible text.
+- **Arrival greeting pop-up** — once per visit (`src/lib/haven/greeting-gate.ts`,
+  `greeting-copy.ts`), English/Tagalog by the guest's own prior chat-language choice, a
+  red-dot badge and bounce (skipped under `prefers-reduced-motion`) until opened/dismissed.
+- **Soft "ding"** (`src/lib/haven/ding.ts`) — gated to after the guest's own first
+  interaction with Haven and a real reply; never autoplays; silent if blocked.
+- **`?ask=1` auto-open** (`src/lib/haven/ask-param.ts`) — opens once, strips `ask` from the
+  URL via `history.replaceState`, keeps every other param.
+- **Blog embed, no second implementation** — `ChatWidget` gained `embedded`/`chatSurface`
+  props; `src/app/embed/haven/page.tsx` (new route) + `public/haven-embed.js` (new public
+  script, installed on the blog separately, not by this PR); `src/lib/haven/chat-link.ts`
+  routes in-chat links to the top window with UTMs when on the blog surface.
+- **Blog-slug redirects** — `src/lib/blog-redirect-slugs.ts` + `next.config.ts`: 301s for
+  all 37 `blog.haveninlipa.com` post slugs previously 404ing on the main site.
+- **Property-page SEO** — `src/lib/property-name.ts` (new); `PropertyGallery.tsx`'s alt
+  fallback (now covers the thumbnail/lightbox strips too); property H1s now name the home
+  + Lipa City (original title kept as a subtitle); `/faq`'s CTA now links `/properties`
+  directly; `src/app/sitemap.ts`'s home URL gained a trailing slash.
+- **Docs**: [HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md)
+  (Haven AI Chat section), [HIL_SEO_SPECIFICATION.md](HIL_SEO_SPECIFICATION.md) (§7, §8,
+  §11), [HIL_DECISIONS.md](HIL_DECISIONS.md) (DEC-033), this entry, and the
+  `HIL_PROJECT_STATUS.md` row.
+
+### Follow-up / not done here
+- The Next.js `headers()` "later rule wins for a shared key" assumption behind the
+  `/embed/haven` CSP override is documented but not yet verified against a live preview
+  deploy (DEC-033's Implications) — verify with `curl -I` on `dev.haveninlipa.com` before
+  relying on it in production.
+- No dev/staging blog domain was found anywhere in the repo, so the embed's
+  `frame-ancestors` lists only the production blog host.
+- `haven_ai_impression` for the blog's own injected launcher (outside the iframe, on the
+  blog page itself) isn't tracked — the blog page has no GA4 of its own, and adding one is
+  a WordPress-side decision outside this PR's scope.
+
+---
+
 ## 2026-11-04, latest — B34 internet speed updated to 500+ Mbps (content/b34-internet-500-110426)
 
 Area: Website | SEO

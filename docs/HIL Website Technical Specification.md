@@ -1,6 +1,22 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-10-26, latest (Haven AI: social links fix, branch
+> **Last updated:** 2026-11-12 (Haven chat discovery + tracking, blog embed, blog-slug
+> redirects, property-page SEO batch — branch `feature/haven-chat-batch-111226`, Cedric
+> pre-approved 2026-11-12, [DEC-033](HIL_DECISIONS.md)): built from the chat usage audit
+> (`haven-chat-usage-2026-11-09.md`: Haven live with AI on but effectively zero chats since
+> the Oct 26 launch — the open/impression/option-tap funnel was entirely dark, and the blog,
+> most of the site's traffic, had no chat at all) and the October SEO review's site-fix
+> items (#8–12). See [Haven AI Chat → Discovery & tracking batch](#haven-ai-chat),
+> [→ Blog-slug redirects](#haven-ai-chat), and [→ Property-page SEO batch](#haven-ai-chat)
+> below for full detail — in short: new `haven_ai_impression`/`_open`/`_close`/
+> `_option_select` GA4 events (every Haven event now also carries `chat_surface`), a
+> visible "Ask Haven" FAB label, a once-per-visit arrival greeting pop-up with a soft
+> interaction-gated "ding", `?ask=1` auto-open, a blog-embeddable `/embed/haven` +
+> `public/haven-embed.js` reusing the same `ChatWidget` (no second implementation), 301s
+> for every `blog.haveninlipa.com` post slug previously 404ing on the main site, and
+> property-page gallery alt text / H1 / direct-link / sitemap fixes. Lint/typecheck/
+> `vitest run` clean (240 files / 4,614 tests, 141 new); PR into `dev`, not merged.
+> Prior: 2026-10-26, latest (Haven AI: social links fix, branch
 > `hil-pm/haven-socials-102626`, DEC-029 addendum — Owner-reported: a guest asked "San ang
 > mga social medias nyo" and Haven only pointed to Messenger, and a reply reviewed in the
 > admin transcript viewer showed literal `**Messenger**` asterisks): [Haven AI Chat](#haven-ai-chat)
@@ -2993,6 +3009,148 @@ describing the 90-day masked retention and the no-payment-details rule.
 and a private, admin-only Haven mode (read-only bookings/revenue Q&A behind `/admin`). No
 write action — booking creation, payment, admin mutation — is exposed as a tool; H1 is
 read-only by design.
+
+### Discovery & tracking batch (added 2026-11-12, `feature/haven-chat-batch-111226`)
+
+The chat usage audit (`haven-chat-usage-2026-11-09.md`) found Haven live with AI mode on
+but **effectively zero chats since the Oct 26 launch** (0 `haven_ai_*` events across 155
+main-site sessions) — the funnel itself (FAB seen → opened → messaged) was entirely dark,
+and the blog (most of the site's traffic) had no chat at all. This batch adds the missing
+funnel instrumentation, makes the launcher discoverable, and brings the same chat to the
+blog via an embed.
+
+**New GA4 events** (`track()` only — never message text or PII). Every one of these,
+including the pre-existing events listed above, now also carries `chat_surface`
+(`"site"` on `haveninlipa.com`, `"blog"` inside the `/embed/haven` iframe) so blog chats
+are counted separately from the main site:
+
+| Event | Params | Fires |
+|---|---|---|
+| `haven_ai_impression` | `chat_surface` | Once per `sessionStorage` session, the first time the launcher itself renders (past `ChatWidgetGate`'s idle-mount delay). Never on `/embed/haven` (no FAB there). |
+| `haven_ai_open` | `source` (`launcher` \| `greeting` \| `ask_param` \| `blog_embed`), `chat_surface` | Every panel-open transition, tagged with what triggered it. `blog_embed` fires once when the embed page itself mounts (already "open" — there's no separate FAB inside the iframe). |
+| `haven_ai_close` | `chat_surface` | FAB click while open, or Escape (not in the embed — no FAB to fall back to). |
+| `haven_ai_option_select` | `option_id` (the static-tree node id, e.g. `"properties"` — never the button's label text), `chat_surface` | Every static-topic-chip tap. |
+
+Implementation: `src/components/chat/ChatWidget.tsx`'s new `openChat(source)` wraps
+`setOpen` and only tracks on a real closed→open transition (so re-entering an
+already-open panel from a second trigger doesn't double-fire). `handleSelect` and the FAB
+`onClick` call the matching helper directly.
+
+**"Ask Haven" launcher label.** The FAB (`#chat-fab`) is now a pill, not a bare circle,
+when closed: icon + a visible "Ask Haven" text chip, collapsing to icon-only below the
+`sm` (640px) breakpoint so it stays compact on mobile — it doesn't need to avoid the
+sticky booking bar by width, since the existing `html[data-sticky-cta] #chat-fab`
+vertical-lift rule (`globals.css`) already handles that. The button's own `aria-label`
+("Ask Haven — chat with Haven" / "Close chat") always includes the visible chip text
+(WCAG 2.5.3 Label in Name).
+
+**Arrival greeting pop-up** (`src/lib/haven/greeting-gate.ts`,
+`src/lib/haven/greeting-copy.ts`, rendered by `ChatWidget.tsx` as `#haven-greeting`).
+Shows once per visit — `sessionStorage` key `haven-greeting-shown`, set the moment the
+timer fires, not only on dismiss/open, so a guest who opens the chat themselves before the
+timer never sees it later in the same session either. Desktop delay 4.5s, mobile
+(`<640px`) 6s. English by default; Tagalog only when the guest's own previously-chosen
+Haven language (the `haven-chat` `sessionStorage` blob's `lang`) is already `tl`/`btg` —
+there is no site-wide language toggle outside the chat widget itself, so that's the only
+"chosen language" signal that exists. A small red dot badge sits on the FAB until the
+greeting is opened or dismissed; a gentle bounce (`@keyframes haven-bounce`, `globals.css`)
+replaces the launcher's normal idle pulse while it's showing, skipped entirely under
+`prefers-reduced-motion`. `isGreetingSuppressedPath()` keeps it off `/admin`, the
+`/properties/<slug>/book` checkout flow, and any `/pay/*` or `confirmation` path (no
+dedicated booking-confirmation route exists today — matched defensively). Dismiss (×) and
+tap-to-open (`source: "greeting"`) both clear the badge/bounce.
+
+**Soft "ding"** (`src/lib/haven/ding.ts`, two-tone Web Audio chime, no asset to fetch).
+Gated by `shouldPlayHavenDing()`: only after the guest's own first tap/interaction with
+Haven (`hasInteractedRef`, set on an FAB click, a greeting tap, or a free-text send — never
+by `?ask=1`, which isn't a gesture on Haven itself) **and** only when Haven actually
+replies (not the restored initial history, not the first render) **and** never under
+`prefers-reduced-motion`. `playHavenDing()` itself is wrapped in a bare `try/catch` — a
+blocked/unavailable `AudioContext` just stays silent, never throws.
+
+**`?ask=1` auto-open** (`src/lib/haven/ask-param.ts`). Any page load with `?ask=1` opens
+the chat once (`source: "ask_param"`), then `history.replaceState`s the URL with `ask`
+stripped and every other param (`utm_*`, etc.) kept in place and in order — guarded by a
+`askParamHandledRef` so a later re-render of the same mount can't re-trigger it.
+
+**Haven on the blog — `/embed/haven` + `public/haven-embed.js`.** No second chat
+implementation: `ChatWidget` gained an `embedded` prop (always open, fills the iframe via
+`fixed inset-0` rather than the floating FAB+panel, no FAB/greeting of its own) and a
+`chatSurface` prop (`"site"` default, `"blog"` here). `src/app/embed/haven/page.tsx`
+renders exactly that — same `getChatTree()`/`havenAiActive()` server-side setup as
+`ChatWidgetServer.tsx`, `noindex, nofollow`. `ChatWidgetGate.tsx` also now hides the
+site's own FAB-mounted widget on any `/embed/*` path, so the two never double-mount in the
+same document. `src/lib/haven/chat-link.ts`'s `resolveChatLink(href, chatSurface)` is the
+one place link-rendering branches by surface: on `"site"` a relative href stays a
+client-side `<Link>`, exactly as before; on `"blog"` any relative href (a booking/property
+link, or the static tree's `/#properties`-style CTA) becomes an absolute
+`https://haveninlipa.com/...` `target="_top"` anchor with
+`utm_source=blog&utm_medium=haven_chat&utm_campaign=ask-haven` appended
+(`resolveBlogEmbedHref`) — so a tap inside the iframe navigates the *top* window to the
+real site, never the iframe itself. An already-external link (Messenger) is unaffected on
+either surface. `/api/haven/chat` needs no change — the embed page is served from
+`haveninlipa.com` itself, so the fetch from inside the iframe is same-origin regardless of
+the parent page's origin.
+
+CSP: `next.config.ts`'s `headers()` CSP is now built by a shared `buildCsp(frameAncestors)`
+so the long directive list isn't duplicated. The site-wide rule (`source: "/(.*)"`) keeps
+`frame-ancestors 'none'`; a second, more specific rule for `source: "/embed/haven"` sets
+`frame-ancestors https://blog.haveninlipa.com` only for that one route (Next.js applies the
+later-defined header value when two rules match the same path and header key). No dev-blog
+domain was found documented anywhere in the repo, so only the production blog host is
+allowed — add a second host to that one directive if a staging blog domain is ever stood
+up. `X-Frame-Options: DENY` is left site-wide and unchanged on this route too: browsers
+that support `frame-ancestors` ignore `X-Frame-Options` for framing decisions (CSP3 §6.3),
+so it doesn't need (and can't cleanly get, since the header has no multi-origin syntax) a
+per-route override.
+
+**Blog snippet** (installed on `blog.haveninlipa.com` separately — WordPress-side, not by
+this PR):
+```html
+<script src="https://haveninlipa.com/haven-embed.js" async></script>
+```
+`public/haven-embed.js` is plain, dependency-free vanilla JS (the host page's own
+stylesheet is unknown, so it injects its own scoped `<style>`): it renders a floating "Ask
+Haven" launcher and lazily creates the `/embed/haven` iframe on first click.
+
+### Blog-slug redirects (added 2026-11-12, October SEO review #8)
+
+`haveninlipa.com/<blog-slug>` 301 (308, `permanent: true`) redirects to
+`https://blog.haveninlipa.com/<slug>/` — real visitors and old blog-internal links were
+hitting a 404 on the main site instead of the post (`seo-review-2026-10.md` §2/§5: 4
+organic sessions in October alone landed on one such 404). `src/lib/blog-redirect-slugs.ts`
+holds the slug list (copied from `/workspace/hil-prompts/111226/blog-slugs.txt`, 37 posts)
+and `buildBlogSlugRedirects()`, consumed by `next.config.ts`'s `redirects()`. Two entries
+per slug (with and without a trailing slash — `source` matching is exact). Checked against
+the app's real top-level routes in `blog-redirect-slugs.test.ts` so a future post slug that
+happens to collide with a real route can't silently shadow it. Adding a new post later
+means adding its slug to this one list.
+
+### Property-page SEO batch (added 2026-11-12, October SEO review #9–12)
+
+- **Gallery alt text** (`PropertyGallery.tsx`): the thumbnail strip and lightbox thumbnail
+  strip previously hard-coded `alt=""` on every image (the bulk of the review's "62/75",
+  "80/93" missing-alt counts) — every image now gets a real alt via `altFor()`, built from
+  `basePropertyName(name)` (new `src/lib/property-name.ts` — strips the Airbnb-style `|`/`•`
+  suffix and any dev-DB bracket tag) + the city (`cityFromLocation(location)`) + a photo
+  position, never the raw Airbnb-style `Property.name`. An explicit `imageAlts[i]` entry
+  still always wins.
+- **Property H1s** (`src/app/properties/[slug]/page.tsx`): the `<h1>` is now
+  `buildPropertyPageH1(property.name, property.location)` — e.g. "Spacious 2BR Haven in
+  Lipa City" — instead of the raw Airbnb-style listing title. The original title is kept
+  directly underneath as a small subtitle rather than dropped from the page.
+- **Direct property/booking link audit**: home (`Properties.tsx`'s `PropertyCard`s),
+  `/staycation`, `/weddings-accommodation`, and `/about` already render a real
+  `/properties/<slug>` (or `/properties` fallback) link in their body HTML — confirmed by
+  reading the current code, not just the crawl, since the Nov 1 crawl's "no direct link"
+  finding predates this session and may have been a snapshot where the homepage's live-DB
+  property list was briefly empty. `/faq` genuinely had none (only a `/#properties`
+  same-page anchor) — its "Browse properties" CTA now points at `/properties` directly.
+- **Sitemap home URL** (`src/app/sitemap.ts`): the home entry is now `${BASE_URL}/` (was
+  the bare origin with no trailing slash), matching Google's chosen canonical for the page.
+- Wording check: no "5 properties"/"five properties" instance was found anywhere in
+  guest-facing site copy (`src/app/`, `src/components/`) — already consistently "5
+  listings" before this session.
 
 ---
 

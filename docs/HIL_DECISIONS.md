@@ -1269,6 +1269,55 @@ The "up to 340 Mbps" B34 figure established by the 2026-09-07 Maculot/Mbps/parki
 
 ---
 
+## DEC-033 — Haven chat may be framed cross-origin only from `blog.haveninlipa.com`, and only on its one dedicated `/embed/haven` route; the site's framing policy is unchanged everywhere else
+
+Date: 2026-11-12
+Status: Active
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+The site's standing `frame-ancestors 'none'` (no page on `haveninlipa.com` may be framed by
+anyone) gets exactly one, narrowly-scoped exception: `/embed/haven` — a new, otherwise-inert
+chat-only route that renders the same `ChatWidget` the main site uses — may be framed, and
+only from `https://blog.haveninlipa.com`. No other route's CSP changes. The exception is
+implemented as a second, more specific `headers()` rule in `next.config.ts` (a shared
+`buildCsp(frameAncestors)` keeps every other directive identical between the two rules),
+not by loosening the site-wide policy or by disabling `X-Frame-Options`.
+
+Reusing the live chat (rather than a second implementation) was also a deliberate choice:
+`ChatWidget.tsx` gained `embedded`/`chatSurface` props instead of a parallel blog-specific
+chat component, so every future Haven fix (wording, guardrails, tools) applies to the blog
+embed automatically.
+
+### Reason
+The Nov 9 chat usage audit found the blog carries most of the site's traffic (862 sessions
+in October vs. 346 on the main site) and has no chat at all — the single biggest discovery
+gap. Framing is normally a security control (clickjacking) worth keeping strict everywhere;
+the fix is to open the smallest possible hole (one route, one trusted origin) rather than
+relax the policy generally, and to keep the exception mechanically tied to the one page that
+needs it so a future unrelated page can't inherit permissive framing by accident.
+
+### Implications
+- A second trusted embed origin (e.g. a future dev/staging blog) requires adding it to the
+  one `frame-ancestors` value in `next.config.ts`'s `/embed/haven` header rule — not a new
+  rule, and not a change to the site-wide default. No dev-blog domain was found documented
+  anywhere in this repo as of this decision, so only the production blog host is listed.
+- `/embed/haven` must stay chat-only and read-only, same constraint as the main widget
+  (DEC-029) — it must never become a general-purpose iframe-content route just because the
+  CSP already allows framing there.
+- This relies on Next.js applying the later-defined `headers()` rule's value for a header
+  key both rules set, for a path both match — documented Next.js behavior, not yet verified
+  against a live preview deploy as part of this decision; verify via `curl -I` against
+  `/embed/haven` on `dev.haveninlipa.com` before relying on it in production.
+- `X-Frame-Options: DENY` is deliberately left untouched (including on `/embed/haven`) —
+  browsers that support `frame-ancestors` ignore `X-Frame-Options` for framing decisions
+  (CSP3 §6.3), and the header has no clean multi-origin syntax to override it with anyway.
+
+### Supersedes
+None — first framing exception to the site's CSP since it was established.
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`

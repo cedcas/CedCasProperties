@@ -1,6 +1,17 @@
 # Haven in Lipa — SEO Specification
 
-> **Last updated:** 2026-10-16 (§9 — `hil-seo` v1.1.9 artifact built: Organization `sameAs`
+> **Last updated:** 2026-11-12 (§8, §11 — the October SEO review's site-fix items #8–12,
+> `feature/haven-chat-batch-111226`, Cedric pre-approved, [DEC-033](HIL_DECISIONS.md)):
+> §8 — 301 redirects shipped for every `blog.haveninlipa.com` post slug previously 404ing
+> on the main site (`src/lib/blog-redirect-slugs.ts`). §11 — `PropertyGallery`'s fallback
+> alt pattern now built from the listing's base name (Airbnb-style `|`/`•` suffix
+> stripped) rather than the raw `Property.name`, and now also covers the thumbnail/
+> lightbox-strip images that previously hard-coded `alt=""` — those made up most of the
+> review's missing-alt counts. Property H1s also changed (now "<home> in Lipa City"
+> instead of the Airbnb-style listing title) and the sitemap's home URL gained a trailing
+> slash — see [HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md)
+> for full implementation detail; this entry only reconciles the SEO-governance facts.
+> Prior: 2026-10-16 (§9 — `hil-seo` v1.1.9 artifact built: Organization `sameAs`
 > gains YouTube and corrects the TikTok handle; new front-end `social-links` module fixes
 > the blog theme's hardcoded social hrefs; artifact in `content/seo/runs/101626/`, pending
 > Owner upload). Prior: 2026-10-04 (GA4 Internal Traffic and Developer-Traffic data filters confirmed Active by the Owner — open question closed). Prior: 2026-09-27, later still (§12 — drive-time consistency fix on the same branch: SM Lipa ~20 min / ~7 km, Casa Marikit ~30 min / ~10 km, owner-confirmed). Before that, 2026-09-27, later (§10, §12, §15 — `/weddings-accommodation` SEO rework on branch
@@ -212,7 +223,10 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
   previously trailing-slash forms left the bare `/admin` path crawlable).
 - Main site sitemap (`src/app/sitemap.ts`) covers homepage, `/properties`, `/staycation`,
   active properties, `/weddings-accommodation`, `/faq`, `/about`, `/privacy`, `/terms`.
-  Blog articles live on the blog's own sitemap, not this one.
+  Blog articles live on the blog's own sitemap, not this one. **2026-11-12:** the home
+  entry now has a trailing slash (`https://haveninlipa.com/`), matching Google's chosen
+  canonical for the page (the October SEO review flagged the mismatch as harmless but
+  worth aligning).
 - Blog: `hil-seo`'s sitemap module uses **WordPress core's own sitemap**
   (`/wp-sitemap.xml`), not a plugin-generated one — Yoast's sitemap is retired with a
   redirect once cutover completes (`SEO-DEC-020`). The sitemap module's noindex-exclusion
@@ -243,6 +257,14 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 ### Deferred / not authorized by this migration
 - Adding, changing, or verifying any redirect. The article #6 301 and the Yoast-sitemap
   redirect remain **open, Owner/Analyst-executed** items (§2, §3).
+
+### Shipped 2026-11-12 (`feature/haven-chat-batch-111226`, Cedric pre-approved)
+- `haveninlipa.com/<blog-slug>` (every post slug in `blog-slugs.txt` as of 2026-11-12, 37
+  posts, with or without a trailing slash) now 301s to `https://blog.haveninlipa.com/<slug>/`
+  — October SEO review item #8: real visitors and old blog-internal links were landing on
+  a main-site 404 (§20 below also recorded this as a known gap). `src/lib/blog-redirect-slugs.ts`
+  holds the slug list; a new post requires adding its slug there. Checked against the
+  app's real top-level routes so a future slug can't shadow one.
 
 ---
 
@@ -309,12 +331,23 @@ The original order (upload v1.1.1 → robots → 301 → GSC → verify → purg
 
 ### Verified facts
 - Main site: `PropertyGallery` accepts optional `imageAlts[]`, falling back to a
-  descriptive pattern (`"{name} vacation rental in {location}, Batangas — image {i+1}"`)
-  when not seeded.
+  descriptive pattern when not seeded.
 - Migrated `content/seo/drafts/Featured Images/` holds pending featured images for
   draft/queued blog articles — **not yet placed** in any WordPress post as of migration.
   Placeholder removal and final image placement remain Owner actions per this project's
   standing rule (analysts draft, Owner adds images and publishes).
+
+### Shipped 2026-11-12 (`feature/haven-chat-batch-111226`, October SEO review items #9–10)
+- The fallback alt pattern is now `"{basePropertyName} vacation rental in {city} — photo
+  {i+1} of {n}"` (`src/lib/property-name.ts`'s `basePropertyName()`/`cityFromLocation()`)
+  — built from the listing's base name with the Airbnb-style `|`/`•` suffix stripped,
+  never the raw `Property.name`. The thumbnail strip and lightbox thumbnail strip (the
+  bulk of the review's "62/75"/"80/93 missing alt" counts — they previously hard-coded
+  `alt=""`) now get this same generated alt rather than none. An explicit `imageAlts[i]`
+  entry still always wins.
+- Property page `<h1>`s changed from the raw Airbnb-style listing title to
+  `"{basePropertyName} in {city}"` (e.g. "Spacious 2BR Haven in Lipa City") — the original
+  title is kept as a subtitle directly under the H1, not dropped from the page.
 
 ---
 

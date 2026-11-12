@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import Image from "next/image";
+import { basePropertyName, cityFromLocation } from "@/lib/property-name";
 
 // Served through next/image (Vercel image optimization) rather than raw <img>:
 // the Blob originals are 1–4.6 MB phone JPEGs, and the page renders this
@@ -34,8 +35,8 @@ export default function PropertyGallery({ images, name, imageAlts, location }: P
   const altFor = (index: number) => {
     const explicit = imageAlts?.[index]?.trim();
     if (explicit) return explicit;
-    const place = location ? `${location}, Batangas` : "Lipa City, Batangas";
-    return `${name} vacation rental in ${place} — image ${index + 1}`;
+    const city = location ? cityFromLocation(location) : "Lipa City";
+    return `${basePropertyName(name)} vacation rental in ${city} — photo ${index + 1} of ${images.length}`;
   };
 
   const prev = (e: React.MouseEvent) => { e.stopPropagation(); setLightbox((l) => Math.max(0, (l ?? 0) - 1)); };
@@ -106,7 +107,7 @@ export default function PropertyGallery({ images, name, imageAlts, location }: P
           {images.map((url, i) => (
             <button key={url} onClick={() => setLightbox(i)} aria-label={`Open photo ${i + 1} of ${images.length}`}
               className={`flex-shrink-0 w-16 h-12 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${lightbox === i ? "border-coral" : "border-transparent hover:border-coral/50"}`}>
-              <Image src={url} alt="" width={64} height={48} sizes="64px" className="w-full h-full object-cover" />
+              <Image src={url} alt={altFor(i)} width={64} height={48} sizes="64px" className="w-full h-full object-cover" />
             </button>
           ))}
         </div>
@@ -172,7 +173,7 @@ export default function PropertyGallery({ images, name, imageAlts, location }: P
             {images.map((url, i) => (
               <button key={url} onClick={() => setLightbox(i)} aria-label={`Show photo ${i + 1} of ${images.length}`}
                 className={`flex-shrink-0 w-14 h-10 rounded-[6px] overflow-hidden border-2 transition-all duration-150 ${i === lightbox ? "border-[#FF5371] opacity-100" : "border-transparent opacity-50 hover:opacity-80"}`}>
-                <Image src={url} alt="" width={56} height={40} sizes="56px" className="w-full h-full object-cover" />
+                <Image src={url} alt={altFor(i)} width={56} height={40} sizes="56px" className="w-full h-full object-cover" />
               </button>
             ))}
           </div>
