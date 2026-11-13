@@ -45,6 +45,9 @@ import {
   fixLibreAvailabilityWording,
   ensureCapacityStated,
   dropStayLengthQuestionWhenSingleDate,
+  fixGuestCountFillerPhrasing,
+  fixInformalDatingMo,
+  ensureDateAcknowledgedBeforeGuestCount,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
@@ -1373,6 +1376,74 @@ describe("dropStayLengthQuestionWhenSingleDate (Owner incident, 2026-11-13)", ()
   });
 });
 
+describe("fixGuestCountFillerPhrasing (Owner incident, 2026-11-13)", () => {
+  it('replaces the roundabout filler with a direct guest-count ask', () => {
+    const input =
+      "Tinitingnan ko muna kung ilan tao kayo, para mahanap ang tamang property para sa inyo.";
+    const result = fixGuestCountFillerPhrasing(input, "tl");
+    expect(result).not.toMatch(/tinitingnan ko muna kung ilan tao kayo/i);
+    expect(result).toBe("Ilan po kayong bisita?");
+  });
+
+  it("uses the Batangueño-only ask for lang 'btg'", () => {
+    const input = "Tinitingnan ko muna kung ilan tao kayo.";
+    expect(fixGuestCountFillerPhrasing(input, "btg")).toBe("Ilan ga kayo?");
+  });
+
+  it("is a no-op when the filler phrase isn't present", () => {
+    const input = "Ilan po kayong bisita?";
+    expect(fixGuestCountFillerPhrasing(input, "tl")).toBe(input);
+  });
+});
+
+describe("fixInformalDatingMo (Owner incident, 2026-11-13)", () => {
+  it('replaces "dating mo" with the respectful "dating ninyo"', () => {
+    const input = "Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi ang dating mo, tama ba?";
+    const result = fixInformalDatingMo(input);
+    expect(result).not.toMatch(/dating mo\b/i);
+    expect(result).toContain("ang dating ninyo, tama ba?");
+  });
+
+  it("is a no-op when the phrase isn't present", () => {
+    const input = "Ilan po kayong bisita?";
+    expect(fixInformalDatingMo(input)).toBe(input);
+  });
+});
+
+describe("ensureDateAcknowledgedBeforeGuestCount (Owner incident, 2026-11-13)", () => {
+  const stayLabel = buildStayLabel("2026-11-28", "2026-11-29")!;
+
+  it("replaces an overview-style reply that drops the resolved date with a date-aware guest-count ask (Tagalog)", () => {
+    const input = "Tinitingnan ko muna kung aling property ang gusto ninyo! Mayroon kaming 5 listings.";
+    const result = ensureDateAcknowledgedBeforeGuestCount(input, true, stayLabel, "tl", false);
+    expect(result).not.toMatch(/aling property ang gusto ninyo/i);
+    expect(result).toContain(stayLabel.tl);
+    expect(result).toMatch(/ilan po kayong bisita\?/i);
+  });
+
+  it("replaces an overview-style reply in English too", () => {
+    const input = "Let me first figure out which property you want! We have 5 listings.";
+    const result = ensureDateAcknowledgedBeforeGuestCount(input, true, stayLabel, "en", true);
+    expect(result).toContain(stayLabel.en);
+    expect(result).toContain("How many guests?");
+  });
+
+  it("is a no-op when applies is false", () => {
+    const input = "Tinitingnan ko muna kung aling property ang gusto ninyo!";
+    expect(ensureDateAcknowledgedBeforeGuestCount(input, false, stayLabel, "tl", false)).toBe(input);
+  });
+
+  it("is a no-op when the reply already states the resolved stayLabel (wording-only bug, not a dropped date)", () => {
+    const input = `Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi ang dating mo, tama ba?`;
+    expect(ensureDateAcknowledgedBeforeGuestCount(input, true, stayLabel, "tl", false)).toBe(input);
+  });
+
+  it("is a no-op when there's no stayLabel", () => {
+    const input = "Tinitingnan ko muna kung aling property ang gusto ninyo!";
+    expect(ensureDateAcknowledgedBeforeGuestCount(input, true, null, "tl", false)).toBe(input);
+  });
+});
+
 describe("isEnglishContext", () => {
   it("is always true for explicit lang 'en'", () => {
     expect(isEnglishContext("en", "may bakante ba kayo")).toBe(true);
@@ -1408,6 +1479,18 @@ describe("stripTagalogWordsInEnglish", () => {
   it("leaves an all-English reply untouched", () => {
     const input = "We have a 2BR available for those dates.";
     expect(stripTagalogWordsInEnglish(input)).toBe(input);
+  });
+
+  it('replaces a leaked "bakante" with "available" (Owner incident, 2026-11-13)', () => {
+    const result = stripTagalogWordsInEnglish("Here's what's bakante for Sat, Nov 28.");
+    expect(result).not.toMatch(/\bbakante\b/i);
+    expect(result).toBe("Here's what's available for Sat, Nov 28.");
+  });
+
+  it('replaces the Tagalog provisional caveat with the English one (Owner incident, 2026-11-13)', () => {
+    const result = stripTagalogWordsInEnglish("The total is ₱1,875. Provisional lang ito, kukumpirmahin sa checkout.");
+    expect(result).not.toContain("Provisional lang ito");
+    expect(result).toContain(PROVISIONAL_CAVEAT_EN);
   });
 });
 

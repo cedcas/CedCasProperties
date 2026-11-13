@@ -11,6 +11,7 @@ import {
   buildCapacityQuestionContextNote,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
+  isAvailabilityQuestion,
   isCapacityQuestion,
   resolveGuestPropertyMentionAcrossTurns,
 } from "./property-resolver";
@@ -45,6 +46,9 @@ import {
   fixLibreAvailabilityWording,
   ensureCapacityStated,
   dropStayLengthQuestionWhenSingleDate,
+  ensureDateAcknowledgedBeforeGuestCount,
+  fixGuestCountFillerPhrasing,
+  fixInformalDatingMo,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -464,6 +468,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
       ? (Array.isArray(publicListings) ? publicListings : []).find((l) => l.slug === propertyResolution.slug)
       : undefined;
   const capacityQuestionLabel = propertyResolution.status === "unique" ? propertyResolution.label : "";
+  // Deterministic date-acknowledgement guarantee (Nov 13 2026 incident — see
+  // ensureDateAcknowledgedBeforeGuestCount in post-process.ts): a date-only availability
+  // question ("May bakante po ba sa 28 ng Nobyembre?") must never get the generic "which
+  // property do you want?" overview answer that drops the resolved date entirely. Only
+  // fires when a date resolved pre-call, no guest count is known yet, and no single
+  // property is already uniquely identified — same shape of condition as
+  // `shouldForceFindStay` above, but without requiring a guest count.
+  const needsDateAckBeforeGuestCount =
+    !isOverviewQuestion &&
+    propertyResolution.status !== "unique" &&
+    resolvedDates !== null &&
+    !(guestCount !== null && guestCount > 0) &&
+    isAvailabilityQuestion(latestMessage);
 
   const system =
     buildHavenSystemPrompt(lang) +
@@ -547,11 +564,16 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  // Owner incident (2026-11-13): swap the roundabout "Tinitingnan ko muna kung ilan tao
+  // kayo" filler for a direct guest-count ask, and the informal "mo" pronoun ("ang dating
+  // mo") for the respectful "ninyo" register Haven otherwise keeps throughout.
+  const guestCountFillerFixed = fixGuestCountFillerPhrasing(dadalawFixed, lang);
+  const informalMoFixed = fixInformalDatingMo(guestCountFillerFixed);
   // Owner incident (2026-11-13): never mix the bare English word "guests" into an
   // otherwise-Tagalog guest-count question, or other stray English filler ("ang meaning
   // nito", "Pero first,") into an otherwise-Tagalog/Batangueño reply — independent backstop
   // for GUEST_COUNT_RULE in system-prompt.ts.
-  const guestCountWordingFixed = fixGuestCountEnglishMixing(dadalawFixed, englishMode);
+  const guestCountWordingFixed = fixGuestCountEnglishMixing(informalMoFixed, englishMode);
   const englishFillerFixed = stripEnglishFillerWordsInTagalog(guestCountWordingFixed, englishMode);
   // Owner incident (2026-10-16): ban deep/literary Tagalog ("tutuklasin ng tama sa
   // checkout") in favor of Haven's plain, conversational voice — independent backstop for
@@ -577,8 +599,10 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // "kasya hanggang N tao" — see MAX_GUESTS_PHRASING_RULE in system-prompt.ts.
   const umabotFixed = fixUmabotGuestsPhrasing(titigenanFixed);
   // Owner incident (2026-11-13): "libre" ("free of charge") must never stand in for
-  // "available"/"bakante" in an availability-sounding sentence.
-  const libreFixed = fixLibreAvailabilityWording(umabotFixed);
+  // "available"/"bakante" in an availability-sounding sentence. Tagalog/Batangueño only —
+  // "libre" never legitimately appears in an English reply, so this never runs in English
+  // mode (same language-gating every other wording backstop in this chain follows).
+  const libreFixed = englishMode ? umabotFixed : fixLibreAvailabilityWording(umabotFixed);
   // Owner incident (2026-11-13): guarantee the capacity sentence is present whenever the
   // guest asked about capacity for an already-resolved listing, regardless of whether the
   // model's own text included it (see capacityQuestionListing/capacityQuestionLabel above).
@@ -594,7 +618,18 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // the pre-scrub text so the Messenger button can still be forced on below.
   const accessLeakDetected = containsAccessLeak(capacityStated);
   const accessScrubbed = scrubAccessLeak(capacityStated, lang, guestMessages);
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
+  // Owner incident (2026-11-13): guarantee the resolved date is stated (not dropped for a
+  // generic "which property do you want?" overview) whenever the guest asked about
+  // availability for an already-resolved date with no guest count yet (see
+  // needsDateAckBeforeGuestCount above).
+  const dateAcknowledged = ensureDateAcknowledgedBeforeGuestCount(
+    accessScrubbed,
+    needsDateAckBeforeGuestCount,
+    resolvedDates?.stayLabel ?? null,
+    lang,
+    englishMode
+  );
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(dateAcknowledged, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);

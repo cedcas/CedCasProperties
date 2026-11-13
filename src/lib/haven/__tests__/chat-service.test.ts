@@ -1673,3 +1673,101 @@ describe("handleHavenChat — capacity always answered, 'Libre' banned, single-d
     expect(result.reply).toContain("Want to add more nights? Just tell me.");
   });
 });
+
+// Owner incident (2026-11-13, remaining bug after fix/haven-tl-capacity-111326): an explicit
+// lang: "en" reply still leaked Tagalog ("bakante", the Tagalog provisional caveat), and a
+// Tagalog date-only availability question ("May bakante po ba sa 28 ng Nobyembre?", no
+// guest count) got the generic "which property do you want?" overview answer instead of
+// using the already-resolved date.
+describe("handleHavenChat — English stays English, Tagalog date-only questions use the date (fix/haven-lang-leak-111326)", () => {
+  it('strips a leaked "bakante" from an explicit English reply', async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's bakante for Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toMatch(/\bbakante\b/i);
+    expect(result.reply).toContain("Here's what's available");
+  });
+
+  it('replaces the Tagalog provisional caveat with the English one in an explicit English reply', async () => {
+    providerChat.mockResolvedValue({
+      text: "It's available! Provisional lang ito, kukumpirmahin sa checkout.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toContain("Provisional lang ito");
+    expect(result.reply).toContain("This is provisional — confirmed at checkout.");
+  });
+
+  it('never leaks Tagalog into an explicit English reply when the model mixes both issues at once', async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's bakante for Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night. Provisional lang ito, kukumpirmahin sa checkout.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toMatch(/\bbakante\b/i);
+    expect(result.reply).not.toContain("Provisional lang ito");
+    expect(result.reply).toContain("This is provisional — confirmed at checkout.");
+  });
+
+  it('states the resolved date and asks guest count for a Tagalog date-only availability question, instead of the generic overview', async () => {
+    providerChat.mockResolvedValue({
+      text: "Tinitingnan ko muna kung aling property ang gusto ninyo! Mayroon kaming 5 listings dito sa Bella Vita subdivision.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-11-13T12:00:00Z");
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May bakante po ba sa 28 ng Nobyembre?" }] }),
+      "1.2.3.4",
+      now
+    );
+
+    expect(result.reply).not.toMatch(/aling property ang gusto ninyo/i);
+    expect(result.reply).toContain("Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi");
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+  });
+
+  it("leaves a reply that already states the resolved date untouched (Dec 12 case — wording-only bug)", async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Tinitingnan ko muna kung ilan tao kayo, para mahanap ang tamang property para sa inyo. " +
+        "Pero before that — Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi ang dating mo, tama ba?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-11-13T12:00:00Z");
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available po ba sa Dec 12?" }] }),
+      "1.2.3.4",
+      now
+    );
+
+    expect(result.reply).toContain("Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi");
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+    expect(result.reply).not.toMatch(/tinitingnan ko muna kung ilan tao kayo/i);
+    expect(result.reply).not.toMatch(/dating mo\b/i);
+  });
+});

@@ -75,13 +75,16 @@ const LANGUAGE_RULES: Record<HavenLang, string> = {
  */
 const GUEST_COUNT_RULE =
   'Never ask "ilang guests/tao ang dadalaw" or "...dadalo" (both mean "to visit"/"to ' +
-  'attend", not "to stay") when asking how many guests are staying. Ask plainly: in ' +
-  'English, "How many guests?"; in Tagalog, "Ilan po kayong bisita?" or "Ilang tao po ' +
-  'kayo?" — never mix the English word "guests" into a Tagalog sentence; in Batangueño, ' +
-  '"Ilan ga kayo?". Keep a Tagalog/Batangueño reply free of unnecessary bare English words ' +
-  'like "guests", "meaning", or "first" — say "ibig sabihin" instead of "meaning", "una" ' +
-  'instead of "first", and restructure the sentence in plain Tagalog rather than reaching ' +
-  "for an English word.";
+  'attend", not "to stay") when asking how many guests are staying. Ask plainly and ' +
+  'directly — never a roundabout filler like "Tinitingnan ko muna kung ilan tao kayo" ' +
+  '("let me first see how many of you there are"): in English, "How many guests?"; in ' +
+  'Tagalog, "Ilan po kayong bisita?" or "Ilang tao po kayo?" — never mix the English word ' +
+  '"guests" into a Tagalog sentence; in Batangueño, "Ilan ga kayo?". Always address the ' +
+  'guest with the respectful "po"/"ninyo" register — never the informal "mo" (say "ang ' +
+  'dating ninyo", never "ang dating mo"). Keep a Tagalog/Batangueño reply free of ' +
+  'unnecessary bare English words like "guests", "meaning", or "first" — say "ibig sabihin" ' +
+  'instead of "meaning", "una" instead of "first", and restructure the sentence in plain ' +
+  "Tagalog rather than reaching for an English word.";
 
 /**
  * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
@@ -128,6 +131,24 @@ const CAPACITY_QUESTION_RULE =
   '"how many guests can it fit"), ALWAYS state that listing\'s exact capacity in your reply, ' +
   'even if the same message also asks about availability or anything else — never answer only ' +
   "the other part and skip the capacity question.";
+
+/**
+ * Owner incident (Cedric, 2026-11-13 — DEC-029 addendum): "May bakante po ba sa 28 ng
+ * Nobyembre?" (a date, no guest count yet) got a reply that dropped the already-resolved
+ * date entirely and switched to "which property do you want?" plus the full listings
+ * overview — exactly the generic overview answer, not an answer to the date the guest
+ * actually asked about. Backed by `ensureDateAcknowledgedBeforeGuestCount` in
+ * post-process.ts, since a prompt instruction alone proved unreliable for the near-
+ * identical capacity case above.
+ */
+const AVAILABILITY_QUESTION_NO_GUEST_COUNT_RULE =
+  "When the guest asks about availability for a date you've already resolved (a tool " +
+  'result, or the pre-resolved date context note) but hasn\'t said how many guests yet, ' +
+  "never switch to a generic \"which property do you want?\" framing or a full listings " +
+  "overview — that drops the date the guest actually asked about. Instead, state the " +
+  "resolved date (copy stayLabel verbatim) and ask how many guests, e.g. \"Ilan po kayong " +
+  'bisita?" — or, if you already know enough to check, call find_stay for that date before ' +
+  "asking.";
 
 /**
  * Owner incident (Cedric, 2026-11-13 — DEC-029 addendum): a bare single date already
@@ -340,12 +361,15 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
     NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE,
     NEXT_WEEKEND_RULE,
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
-      "\"kabayan\") — English replies stay English-only.",
+      "\"kabayan\", \"bakante\") — English replies stay English-only. The provisional " +
+      `caveat in English is always "${PROVISIONAL_CAVEAT_EN}" — never the Tagalog ` +
+      `"${PROVISIONAL_CAVEAT_TL}" phrasing.`,
     GUEST_COUNT_RULE,
     TITINGNAN_SPELLING_RULE,
     MAX_GUESTS_PHRASING_RULE,
     AVAILABILITY_WORDING_RULE,
     CAPACITY_QUESTION_RULE,
+    AVAILABILITY_QUESTION_NO_GUEST_COUNT_RULE,
     "- When a guest's single message asks more than one question (e.g. a listing's " +
       "capacity AND its availability for a date), answer EVERY question asked — never " +
       "skip one to answer only the other.",

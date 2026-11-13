@@ -336,6 +336,25 @@ export function isCapacityQuestion(message: string): boolean {
 }
 
 /**
+ * Detects an availability/vacancy question ("is anything available", "any space open",
+ * "may bakante ba") in English and Tagalog/Batangueño. Owner incident (2026-11-13): "May
+ * bakante po ba sa 28 ng Nobyembre?" (a date-only availability question, no guest count
+ * yet) got an overview-style reply that dropped the resolved date entirely and listed every
+ * listing with its base rate — the same wrong shape `isPropertyOverviewMessage` exists to
+ * prevent for a genuine overview question. `chat-service.ts` uses this (combined with a
+ * resolved date and no guest count yet) to guarantee the resolved date is acknowledged — see
+ * `ensureDateAcknowledgedBeforeGuestCount` in post-process.ts. Deliberately narrow — a date
+ * mentioned alongside an unrelated question (e.g. a check-out-time question) must not fire
+ * this.
+ */
+const AVAILABILITY_QUESTION_RE =
+  /\bavailable\b|\bavailability\b|\bvacant\b|\bopen\b|\bbakante\b|\blibre\s+(?:pa\s+)?ba\b/i;
+
+export function isAvailabilityQuestion(message: string): boolean {
+  return AVAILABILITY_QUESTION_RE.test(message);
+}
+
+/**
  * Server-resolved context note (same pattern as `buildPropertyContextNote`/
  * `dateContextNote`): when the guest's latest message asks about capacity AND a single
  * property is already uniquely resolved, state that property's exact `maxGuests` directly —
