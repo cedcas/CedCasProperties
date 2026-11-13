@@ -876,18 +876,85 @@ export function enforceTermsOfAddress(text: string, guestMessages: string, lang:
   return result;
 }
 
-// ── "Dadalaw" phrasing guard (Tagalog/Batangueño) ───────────────────────────
+// ── "Dadalaw"/"dadalo" phrasing guard (Tagalog/Batangueño) ──────────────────
 
 /**
- * "Dadalaw" means to visit — asking "ilang guests ang dadalaw" reads as "how many guests
- * will visit", which is confusing for a STAYING guest count. The correct ask is "Ilang tao
- * kayo?" / "Ilang guests kayo?" (btg: "Ilan ga kayo?").
+ * "Dadalaw" means to visit and "dadalo" means to attend — asking "ilang guests ang
+ * dadalaw/dadalo" reads as "how many guests will visit/attend", which is confusing for a
+ * STAYING guest count. The correct ask is "Ilan po kayong bisita?" / "Ilang tao po kayo?"
+ * (btg: "Ilan ga kayo?") — never mixing in the English word "guests" (Owner incident,
+ * 2026-11-13 — the prior replacement text here, "Ilang guests kayo?", was itself the
+ * English-mixing bug; see GUEST_COUNT_RULE in system-prompt.ts).
  */
-const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?dadalaw)[^?]*\?/gi;
+const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?(?:dadalaw|dadalo))[^?]*\?/gi;
 
 export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
-  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang guests kayo?";
+  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang tao po kayo?";
   return text.replace(DADALAW_RE, replacement);
+}
+
+// ── Guest-count roundabout-filler guard (Tagalog/Batangueño) ────────────────
+
+/**
+ * Owner incident (2026-11-13): instead of just asking "Ilan po kayong bisita?", Haven said
+ * "Tinitingnan ko muna kung ilan tao kayo, para mahanap ang tamang property para sa inyo" —
+ * a roundabout filler sentence ("let me first see how many people you are, so I can find
+ * the right property for you") where a direct question would do. Whole-sentence swap for
+ * the plain ask, same pattern as `replaceTuklasinFamily`.
+ */
+const GUEST_COUNT_FILLER_RE = /\btinitingnan\s+ko\s+muna\s+kung\s+ilan\s+(?:na\s+)?tao\s+kayo\b/i;
+
+export function fixGuestCountFillerPhrasing(text: string, lang: HavenLang): string {
+  if (!GUEST_COUNT_FILLER_RE.test(text)) return text;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : GUEST_COUNT_ONLY_ASK.tl;
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, GUEST_COUNT_FILLER_RE, ask));
+}
+
+// ── Informal "mo" pronoun guard (Tagalog/Batangueño) ─────────────────────────
+
+/**
+ * Owner incident (2026-11-13): "... ang dating mo, tama ba?" used the informal second-
+ * person "mo" ("your") instead of the respectful "po"/"ninyo" register Haven otherwise
+ * keeps throughout (e.g. "Ilan po kayong bisita?"). Narrow, exact-phrase swap for the
+ * reported wording, same style as `fixUmabotGuestsPhrasing`/`fixTitiginganTypo`.
+ */
+const INFORMAL_DATING_MO_RE = /\bdating\s+mo\b/gi;
+
+export function fixInformalDatingMo(text: string): string {
+  return text.replace(INFORMAL_DATING_MO_RE, (match) => capitalizeLike(match, "dating ninyo"));
+}
+
+// ── Guest-count English-mixing guard (Tagalog/Batangueño) ───────────────────
+
+/**
+ * Owner incident (2026-11-13): asking the guest count in Tagalog, Haven mixed in the bare
+ * English word "guests" ("Ilang guests kayo?") instead of staying in plain Tagalog. Only
+ * runs outside English mode — see GUEST_COUNT_RULE in system-prompt.ts.
+ */
+const GUEST_COUNT_ENGLISH_MIX_RE = /\bilang\s+guests?\s+kayo\b\??/gi;
+
+export function fixGuestCountEnglishMixing(text: string, englishMode: boolean): string {
+  if (englishMode) return text;
+  return text.replace(GUEST_COUNT_ENGLISH_MIX_RE, "Ilang tao po kayo?");
+}
+
+/**
+ * Owner incident (2026-11-13): a Tagalog reply mixed in bare English filler words —
+ * "ang meaning nito" (restating a stay range) and "Pero first," (before asking the guest
+ * count) — instead of plain Tagalog. Only runs outside English mode. Narrow, pattern-
+ * specific fixes for exactly the reported phrasing, same style as the other wording
+ * backstops in this file.
+ */
+const MEANING_NITO_RE = /\s*ang\s+meaning\s+nito\b/gi;
+const PERO_FIRST_RE = /\bpero\s+first\b/gi;
+const FIRST_COMMA_RE = /\bfirst,/gi;
+
+export function stripEnglishFillerWordsInTagalog(text: string, englishMode: boolean): string {
+  if (englishMode) return text;
+  return text
+    .replace(MEANING_NITO_RE, "")
+    .replace(PERO_FIRST_RE, "Pero una")
+    .replace(FIRST_COMMA_RE, "una,");
 }
 
 // ── "The system" mention guard ───────────────────────────────────────────────
@@ -988,6 +1055,137 @@ export function fixUmabotGuestsPhrasing(text: string): string {
   return text.replace(UMABOT_GUESTS_RE, (match, num: string) => capitalizeLike(match, `kasya hanggang ${num} tao`));
 }
 
+// ── "Libre" availability-wording guard ──────────────────────────────────────
+
+/**
+ * Owner incident (2026-11-13): Haven said "Libre ang Cozy 1BR Haven para sa Sabado..." when
+ * stating a listing IS available for the requested dates — "libre" means "free of charge",
+ * not "available"/"vacant", so it reads as a pricing claim rather than an availability one.
+ * The correct word is "bakante" (Tagalog/Batangueño) — see the few-shot block in
+ * system-prompt.ts, which already always uses "bakante" for this. Scoped to a sentence that
+ * already sounds like an availability statement (near "para sa", a check-in/check-out/date
+ * word, or "available"/"bakante"/"vacant" itself) so an unrelated, legitimate "libre" (e.g.
+ * "libre ang parking") is left untouched.
+ */
+const LIBRE_AVAILABILITY_RE =
+  /\blibre\b(?=[^.!?\n]{0,80}\b(?:para\s+sa|check-?in|check-?out|gabi|petsa|available|bakante|vacant)\b)/gi;
+
+export function fixLibreAvailabilityWording(text: string): string {
+  return text.replace(LIBRE_AVAILABILITY_RE, (match) => capitalizeLike(match, "bakante"));
+}
+
+// ── Guaranteed capacity sentence (deterministic backstop) ───────────────────
+
+/**
+ * Owner incident (2026-11-13): even with `buildCapacityQuestionContextNote`
+ * (property-resolver.ts) handing the model the exact `maxGuests` for a uniquely-resolved
+ * listing and instructing it not to skip the capacity half of a compound question, the model
+ * still sometimes answered only the availability half and dropped the capacity question
+ * entirely — a prompt instruction alone wasn't reliable enough. This deterministic backstop
+ * guarantees the sentence is present regardless of what the model wrote: `applies` is
+ * computed in chat-service.ts from the same `isCapacityQuestion`/unique-resolution check the
+ * context note uses, so this only ever fires when a capacity question was actually asked
+ * about an already-resolved listing.
+ */
+function capacityAlreadyStated(text: string, maxGuests: number): boolean {
+  const n = String(maxGuests);
+  const re = new RegExp(
+    `kasya\\s+hanggang\\s+${n}\\b|hanggang\\s+${n}\\s+tao\\b|sleeps?\\s+up\\s+to\\s+${n}\\b|` +
+      `fits?\\s+up\\s+to\\s+${n}\\b|max(?:imum)?\\D{0,12}${n}\\b|\\b${n}\\s+(?:guests?|tao|katao|pax)\\s+max\\b`,
+    "i"
+  );
+  return re.test(text);
+}
+
+export function ensureCapacityStated(
+  text: string,
+  applies: boolean,
+  listingLabel: string,
+  maxGuests: number,
+  isEnglish: boolean
+): string {
+  if (!applies || !maxGuests) return text;
+  if (capacityAlreadyStated(text, maxGuests)) return text;
+  const sentence = isEnglish
+    ? `${listingLabel} sleeps up to ${maxGuests}.`
+    : `Kasya hanggang ${maxGuests} tao ang ${listingLabel}.`;
+  return `${sentence}\n\n${text}`;
+}
+
+// ── Single-date default: ask guest count only, never stay length too ───────
+
+/**
+ * Owner incident (2026-11-13): asked "Tinitingnan ko muna kung available kami sa Disyembre
+ * 12! Pero kailangan ko munang malaman: ilan po kayo, at gaano katagal ng stay ninyo?" — a
+ * bare single date ("Disyembre 12") already defaults to exactly 1 night
+ * (`resolveDates`'s `singleDateDefault`, see dates.ts and `SINGLE_DATE_NIGHT_RULE` in
+ * system-prompt.ts), so asking how long the stay is contradicts the resolver's own default
+ * and must never be asked in the same turn — only the still-unknown guest count should be
+ * asked. `ensureSingleNightNudge` already states the 1-night default and invites more
+ * nights; this backstop only ever fires when `applies` (the same `singleDateDefault` flag)
+ * is true, and re-adds a bare guest-count question if dropping the compound question
+ * happened to remove it too.
+ */
+const STAY_LENGTH_QUESTION_RE =
+  /\bgaano\s+katagal\b[^?!.\n]*\b(?:stay|titigil|titira)\b[^?!.\n]*|\bhow\s+long\s+(?:will\s+you\s+stay|are\s+you\s+staying|is\s+your\s+stay)\b[^?!.\n]*/i;
+
+const GUEST_COUNT_ASK_RE =
+  /\bilan\s+(?:po\s+)?(?:ga\s+)?kayo(?:ng)?\b|\bilang\s+(?:tao|bisita|katao|guests?)\b|\bhow\s+many\s+guests?\b/i;
+
+const GUEST_COUNT_ONLY_ASK = {
+  en: "How many guests?",
+  tl: "Ilan po kayong bisita?",
+  btg: "Ilan ga kayo?",
+} as const;
+
+export function dropStayLengthQuestionWhenSingleDate(
+  text: string,
+  applies: boolean,
+  lang: HavenLang,
+  isEnglish: boolean
+): string {
+  if (!applies) return text;
+  if (!STAY_LENGTH_QUESTION_RE.test(text)) return text;
+  const dropped = tidyAfterSentenceDrop(replaceMatchingSentences(text, STAY_LENGTH_QUESTION_RE, ""));
+  if (GUEST_COUNT_ASK_RE.test(dropped)) return dropped;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : isEnglish ? GUEST_COUNT_ONLY_ASK.en : GUEST_COUNT_ONLY_ASK.tl;
+  return dropped.length > 0 ? `${dropped}\n\n${ask}` : ask;
+}
+
+// ── Guaranteed date acknowledgement for a date-only availability question ──
+
+/**
+ * Owner incident (2026-11-13): "May bakante po ba sa 28 ng Nobyembre?" — a date-only
+ * availability question with no guest count yet — got a reply that dropped the already-
+ * resolved date entirely: "Tinitingnan ko muna kung aling property ang gusto ninyo!"
+ * followed by the full listings overview (every property, base rate). The pre-resolved
+ * date context note (`dateContextNote`, chat-service.ts) already handed the model the
+ * exact range; a near-identical case the model got right ("2 adults, 28 Nov") always had a
+ * guest count attached, so a prompt instruction alone isn't reliable enough here either
+ * (same "prompt alone isn't trustworthy" precedent as `ensureCapacityStated`). `applies` is
+ * true only when a date WAS resolved pre-call, no guest count is known yet, no single
+ * property is already uniquely identified, and the message reads as an availability
+ * question (`isAvailabilityQuestion`, property-resolver.ts) — see chat-service.ts. A no-op
+ * when the reply already states the resolved stayLabel verbatim (as the Dec-12 case did —
+ * that reply's bug was wording, not a dropped date; see `fixGuestCountFillerPhrasing`/
+ * `fixInformalDatingMo` for that one).
+ */
+export function ensureDateAcknowledgedBeforeGuestCount(
+  text: string,
+  applies: boolean,
+  stayLabel: StayLabel | null,
+  lang: HavenLang,
+  isEnglish: boolean
+): string {
+  if (!applies || !stayLabel) return text;
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+  if (text.includes(label)) return text;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : isEnglish ? GUEST_COUNT_ONLY_ASK.en : GUEST_COUNT_ONLY_ASK.tl;
+  return isEnglish
+    ? `Let me check ${label} — ${ask}`
+    : `Tingnan ko ang bakante para sa ${label} — ${ask}`;
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the
@@ -1008,16 +1206,27 @@ const TAGALOG_WORDS_IN_ENGLISH: Record<string, string> = {
   grupo: "group",
   kabayan: "friend",
   kaibigan: "friend",
+  bakante: "available",
   po: "",
 };
 
 /**
+ * Owner incident (2026-11-13): an explicit `lang: "en"` reply still said "Provisional lang
+ * ito, kukumpirmahin sa checkout." — the Tagalog standard caveat (`PROVISIONAL_CAVEAT_TL`)
+ * verbatim — instead of the English one. The model is told which caveat goes with which
+ * language (system-prompt.ts), but mixed them up live; this is the independent backstop,
+ * a literal swap for the exact Tagalog caveat text whenever the reply is in English.
+ */
+const PROVISIONAL_CAVEAT_TL_RE = /provisional\s+lang\s+ito,?\s*kukumpirmahin\s+sa\s+checkout\.?/gi;
+
+/**
  * Backstop for English mode: strips a small set of Tagalog words the model sometimes
  * leaks into an otherwise-English reply (see `isEnglishContext`), independent of the
- * system prompt's own "reply in English" instruction.
+ * system prompt's own "reply in English" instruction. Same incident as above: "bakante"
+ * (availability) leaked into an English reply ("Here's what's bakante for...").
  */
 export function stripTagalogWordsInEnglish(text: string): string {
-  let out = text;
+  let out = text.replace(PROVISIONAL_CAVEAT_TL_RE, PROVISIONAL_CAVEAT_EN);
   for (const [word, replacement] of Object.entries(TAGALOG_WORDS_IN_ENGLISH)) {
     out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => (replacement ? capitalizeLike(match, replacement) : ""));
   }

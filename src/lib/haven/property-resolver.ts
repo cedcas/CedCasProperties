@@ -94,8 +94,23 @@ function buildMatchTokens(listing: ResolvableListing): Set<string> {
 function scoreListing(queryTokens: string[], listing: ResolvableListing): number {
   const matchTokens = buildMatchTokens(listing);
   let score = 0;
-  for (const t of queryTokens) if (matchTokens.has(t)) score++;
-  if (queryTokens.some((t) => /^\d+$/.test(t) && Number(t) === listing.maxGuests)) score += CAPACITY_BONUS;
+  // A bare digit token (e.g. "11") is excluded from the plain overlap count — only the
+  // guarded capacity bonus below may ever credit a number, and only once real name/alias
+  // overlap already exists. Without this, a listing's own numeric slug suffix (e.g.
+  // "...sleeps-11") makes "11" a literal match token, so ANY unrelated number the guest's
+  // query happens to contain — a date ("11/28"), a price, a phone number — would count as
+  // a real token match on its own (Owner incident, 2026-11-13: "which listing fits 2
+  // adults on 11/28?" wrongly resolved to the 11-guest Mickey Family House this way).
+  for (const t of queryTokens) {
+    if (/^\d+$/.test(t)) continue;
+    if (matchTokens.has(t)) score++;
+  }
+  // The capacity bonus only ever DISAMBIGUATES among listings that already share a real
+  // name/alias token (e.g. "mickey 15" picking the 15-pax configuration over its 7/11-pax
+  // siblings) — it must never be the SOLE reason a listing matches.
+  if (score > 0 && queryTokens.some((t) => /^\d+$/.test(t) && Number(t) === listing.maxGuests)) {
+    score += CAPACITY_BONUS;
+  }
   return score;
 }
 
@@ -300,4 +315,66 @@ export function dropUnknownPropertyClaims(
   const replacement = unknownPropertyReplacement(resolution, lang, guestMessages);
   if (!replacement) return text;
   return replaceMatchingSentences(text, UNKNOWN_PROPERTY_CLAIM_RE, replacement);
+}
+
+// ── Capacity-question context note ──────────────────────────────────────────
+
+/**
+ * Detects a capacity question ("how many guests fit", "max guests", "ilang tao ang kasya",
+ * "kasya ba ilang tao") in English and Tagalog/Batangueño. Owner incident (2026-11-13): a
+ * guest asked a two-part question — "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa
+ * 12/5?" — and Haven answered only the availability half, skipping the capacity question
+ * entirely even though the property's maxGuests was already sitting in the listings
+ * context note. Deliberately narrow — a plain availability or booking question with no
+ * capacity wording must not fire this.
+ */
+const CAPACITY_QUESTION_RE =
+  /\bhow\s+many\s+(?:guests?|people|persons?|pax)\b|\bmax(?:imum)?\s+(?:guests?|capacity|occupancy)\b|\bcapacity\b|\bsleeps?\s+how\s+many\b|\bilang\s+(?:tao|guests?|katao|bisita)\s+(?:ang\s+)?kasya\b|\bkasya\s+(?:ba\s+)?(?:ang\s+)?ilang\b/i;
+
+export function isCapacityQuestion(message: string): boolean {
+  return CAPACITY_QUESTION_RE.test(message);
+}
+
+/**
+ * Detects an availability/vacancy question ("is anything available", "any space open",
+ * "may bakante ba") in English and Tagalog/Batangueño. Owner incident (2026-11-13): "May
+ * bakante po ba sa 28 ng Nobyembre?" (a date-only availability question, no guest count
+ * yet) got an overview-style reply that dropped the resolved date entirely and listed every
+ * listing with its base rate — the same wrong shape `isPropertyOverviewMessage` exists to
+ * prevent for a genuine overview question. `chat-service.ts` uses this (combined with a
+ * resolved date and no guest count yet) to guarantee the resolved date is acknowledged — see
+ * `ensureDateAcknowledgedBeforeGuestCount` in post-process.ts. Deliberately narrow — a date
+ * mentioned alongside an unrelated question (e.g. a check-out-time question) must not fire
+ * this.
+ */
+const AVAILABILITY_QUESTION_RE =
+  /\bavailable\b|\bavailability\b|\bvacant\b|\bopen\b|\bbakante\b|\blibre\s+(?:pa\s+)?ba\b/i;
+
+export function isAvailabilityQuestion(message: string): boolean {
+  return AVAILABILITY_QUESTION_RE.test(message);
+}
+
+/**
+ * Server-resolved context note (same pattern as `buildPropertyContextNote`/
+ * `dateContextNote`): when the guest's latest message asks about capacity AND a single
+ * property is already uniquely resolved, state that property's exact `maxGuests` directly —
+ * so the model never has to guess it, and is reminded not to drop this question just
+ * because the same message also asks about something else (e.g. availability).
+ */
+export function buildCapacityQuestionContextNote(
+  message: string,
+  resolution: PropertyMentionResolution,
+  listings: ResolvableListing[]
+): string {
+  if (!isCapacityQuestion(message) || resolution.status !== "unique") return "";
+  const listing = listings.find((l) => l.slug === resolution.slug);
+  if (!listing) return "";
+  return (
+    "\n\nContext (already detected here, not a guest claim): the guest is also asking " +
+    `about capacity for "${resolution.label}" — its maxGuests is ${listing.maxGuests}. If the ` +
+    "guest's message asks more than one thing in the same turn (e.g. capacity AND " +
+    "availability), answer EVERY part — never skip the capacity question. State capacity as " +
+    `"kasya hanggang ${listing.maxGuests} tao" (Tagalog/Batangueño) or "fits up to ` +
+    `${listing.maxGuests} guests" (English).`
+  );
 }

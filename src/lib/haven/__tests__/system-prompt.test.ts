@@ -356,6 +356,28 @@ describe("buildHavenSystemPrompt", () => {
     });
   });
 
+  describe("guest-count wording (Cedric, 2026-11-13 incident)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it('bans "dadalaw" AND "dadalo" when asking how many guests are staying', () => {
+      expect(prompt).toMatch(/dadalaw.*dadalo|dadalo.*dadalaw/i);
+    });
+
+    it('asks the guest count in natural Tagalog ("Ilan po kayong bisita?"/"Ilang tao po kayo?"), never mixing in the English word "guests"', () => {
+      expect(prompt).toMatch(/Ilan po kayong bisita/);
+      expect(prompt).toMatch(/Ilang tao po kayo/);
+      expect(prompt).toMatch(/never mix the English word "guests" into a Tagalog sentence/i);
+    });
+
+    it('bans stray English filler words ("guests", "meaning", "first") in a Tagalog\\/Batangueño reply', () => {
+      expect(prompt).toMatch(/"guests", "meaning", or "first"/);
+    });
+
+    it("answers every part of a compound question (capacity AND availability) — never skips one", () => {
+      expect(prompt).toMatch(/asks more than one question.*answer EVERY question asked/i);
+    });
+  });
+
   // Owner incident (Cedric, 2026-10-26): asked "San ang mga social medias nyo", Haven only
   // pointed to Messenger. The fix sources the social-profile list directly from
   // src/lib/social-links.ts — the SAME config Footer.tsx/the homepage CTA/the sameAs schema
@@ -388,6 +410,27 @@ describe("buildHavenSystemPrompt", () => {
 
     it("the URL-in-reply-text ban now names the social links rule as a second exception, alongside Messenger", () => {
       expect(prompt).toMatch(/exceptions are the Messenger handoff rule and the official social links rule/i);
+    });
+  });
+
+  // Owner incident (Cedric, 2026-11-13): a capacity question's answer was still being
+  // skipped despite the capacity-question context note, "Libre" ("free of charge") was used
+  // to mean "available", and a single-date default got an extra, contradictory "how long is
+  // your stay" question.
+  describe("capacity/availability/single-date wording (Cedric, 2026-11-13 follow-up)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it('bans "libre" for availability, naming "available"/"bakante" as correct', () => {
+      expect(prompt).toMatch(/never "libre," which means "free of charge"/i);
+      expect(prompt).toMatch(/say "available" \(English\) or "bakante" \(Tagalog\/Batangueño\)/i);
+    });
+
+    it("requires a capacity question to always be answered, even in a compound question", () => {
+      expect(prompt).toMatch(/ALWAYS state that listing's exact capacity in your reply/i);
+    });
+
+    it("bans asking how long the stay is when only a single date was given", () => {
+      expect(prompt).toMatch(/never ALSO ask how long they're staying/i);
     });
   });
 });

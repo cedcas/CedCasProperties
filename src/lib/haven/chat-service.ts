@@ -8,8 +8,11 @@ import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
 import { resolveDates, buildStayLabel, todayContextNote, manilaYear, type ResolvedDates } from "./dates";
 import {
+  buildCapacityQuestionContextNote,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
+  isAvailabilityQuestion,
+  isCapacityQuestion,
   resolveGuestPropertyMentionAcrossTurns,
 } from "./property-resolver";
 import {
@@ -30,6 +33,8 @@ import {
   shortenPropertyNamesInText,
   shortPropertyLabels,
   fixDadalawPhrasing,
+  fixGuestCountEnglishMixing,
+  stripEnglishFillerWordsInTagalog,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
   replaceSikatSaInyo,
@@ -38,6 +43,12 @@ import {
   fixFivePropertiesWording,
   fixTitiginganTypo,
   fixUmabotGuestsPhrasing,
+  fixLibreAvailabilityWording,
+  ensureCapacityStated,
+  dropStayLengthQuestionWhenSingleDate,
+  ensureDateAcknowledgedBeforeGuestCount,
+  fixGuestCountFillerPhrasing,
+  fixInformalDatingMo,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -174,6 +185,61 @@ export interface HavenChatResponse {
 
 const NO_ANSWER_FALLBACK =
   "Let me get you to a real person for this one — message us at https://m.me/haveninlipa, or use the contact page.";
+
+interface FindStayToolResultOption {
+  properties: Array<{ slug: string; name: string; guests: number; quote: { total: number } | null; bookingLink: string }>;
+  combinedTotal: number;
+}
+
+interface FindStayToolResult {
+  options?: FindStayToolResultOption[];
+  stayLabel?: { en: string; tl: string; btg: string } | null;
+  message?: string;
+}
+
+/**
+ * Deterministic last-resort reply built directly from THIS turn's own `find_stay` tool
+ * result — used only when the model's own final text came back empty (see the
+ * `NO_ANSWER_FALLBACK` fallback below). Root-cause fix for the Nov 13 2026 incident: a
+ * dated availability question ("which listing fits 2 adults on 11/28?") got the generic
+ * "let me get you to a real person" handoff through the blog embed (lang: "auto"), while
+ * the identical text via a direct API call with lang: "en" got a quote — nothing forced the
+ * model to settle on an answer, so it was free to exhaust MAX_TOOL_ROUNDS without producing
+ * final text even after find_stay already returned real availability data. This guarantees
+ * a genuinely answerable dated question is never handed off just because the model itself
+ * went quiet; booking links are still collected normally downstream (`collectBookingLinks`),
+ * and `shortenPropertyNamesInText` (called on `text` right after this) still shortens the
+ * raw property names embedded here, since they're the exact strings the tool returned.
+ */
+function buildDeterministicFindStayReply(
+  lang: HavenLang,
+  guestMessages: string,
+  toolExchangesThisTurn: ToolExchange[]
+): string | null {
+  const exchange = [...toolExchangesThisTurn].reverse().find((t) => t.name === "find_stay");
+  if (!exchange) return null;
+  const result = exchange.result as FindStayToolResult;
+  const english = isEnglishContext(lang, guestMessages);
+
+  if (!Array.isArray(result.options) || result.options.length === 0) {
+    return english
+      ? "Sorry, nothing fits that on those dates right now — want to try different dates?"
+      : "Paumanhin, walang bakante para diyan sa petsang iyon — gusto n'yo bang subukan ng ibang petsa?";
+  }
+
+  const stay = result.stayLabel ? (english ? result.stayLabel.en : result.stayLabel.tl) : "";
+  const intro = english
+    ? `Here's what's open${stay ? ` for ${stay}` : ""}:`
+    : `Narito ang bakante${stay ? ` para sa ${stay}` : ""}:`;
+  const lines = result.options.slice(0, 5).map((opt) => {
+    const names = opt.properties.map((p) => p.name).join(" + ");
+    const total = Number(opt.combinedTotal);
+    const totalText = Number.isFinite(total) ? ` — ₱${total.toLocaleString("en-US")} total` : "";
+    return `**${names}**${totalText}`;
+  });
+  const nudge = english ? "Want me to help you book one?" : "Gusto n'yo na bang i-book?";
+  return [intro, ...lines, nudge].join("\n");
+}
 
 function lastUserMessage(messages: ChatRequestBody["messages"]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -378,6 +444,43 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // question — see overview-intent.ts — so this specific question can never be answered
   // from memory, in addition to the listingsContextNote below and the system-prompt rule.
   const isOverviewQuestion = isPropertyOverviewMessage(latestMessage);
+  // Root-cause fix (Nov 13 2026 incident, see buildDeterministicFindStayReply above): a
+  // dated availability/fit question ("which listing fits 2 adults on 11/28?", "is anything
+  // open 28/11 for 2 adults?") must never be left to the model's own judgment on whether to
+  // call find_stay — force it on round 0 whenever a date AND a guest count are already
+  // resolved this turn and no single property is already uniquely identified (a uniquely
+  // resolved property already gets its own "call get_quote now" instruction from
+  // buildPropertyContextNote above, which this must not contradict).
+  const shouldForceFindStay =
+    !isOverviewQuestion &&
+    propertyResolution.status !== "unique" &&
+    resolvedDates !== null &&
+    guestCount !== null &&
+    guestCount > 0;
+  // Deterministic capacity-sentence guarantee (Nov 13 2026 incident — see
+  // ensureCapacityStated in post-process.ts): the prompt-level context note below is advisory
+  // only, and the model still sometimes dropped the capacity half of a compound question.
+  // Resolved here, once, from the same isCapacityQuestion/unique-resolution check the context
+  // note uses, so the post-process step after the model runs can guarantee the sentence is
+  // present regardless of what the model actually wrote.
+  const capacityQuestionListing =
+    propertyResolution.status === "unique" && isCapacityQuestion(latestMessage)
+      ? (Array.isArray(publicListings) ? publicListings : []).find((l) => l.slug === propertyResolution.slug)
+      : undefined;
+  const capacityQuestionLabel = propertyResolution.status === "unique" ? propertyResolution.label : "";
+  // Deterministic date-acknowledgement guarantee (Nov 13 2026 incident — see
+  // ensureDateAcknowledgedBeforeGuestCount in post-process.ts): a date-only availability
+  // question ("May bakante po ba sa 28 ng Nobyembre?") must never get the generic "which
+  // property do you want?" overview answer that drops the resolved date entirely. Only
+  // fires when a date resolved pre-call, no guest count is known yet, and no single
+  // property is already uniquely identified — same shape of condition as
+  // `shouldForceFindStay` above, but without requiring a guest count.
+  const needsDateAckBeforeGuestCount =
+    !isOverviewQuestion &&
+    propertyResolution.status !== "unique" &&
+    resolvedDates !== null &&
+    !(guestCount !== null && guestCount > 0) &&
+    isAvailabilityQuestion(latestMessage);
 
   const system =
     buildHavenSystemPrompt(lang) +
@@ -390,7 +493,12 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
       checkIn: resolvedDates?.checkIn,
       checkOut: resolvedDates?.checkOut,
       guests: guestCount,
-    });
+    }) +
+    buildCapacityQuestionContextNote(
+      latestMessage,
+      propertyResolution,
+      Array.isArray(publicListings) ? publicListings : []
+    );
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -403,7 +511,12 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   let text = "";
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const forceToolName = round === 0 && isOverviewQuestion ? "list_properties" : undefined;
+    const forceToolName =
+      round === 0 && isOverviewQuestion
+        ? "list_properties"
+        : round === 0 && shouldForceFindStay
+          ? "find_stay"
+          : undefined;
     const result = await provider.chat({ system, messages, tools, maxTokens: MAX_OUTPUT_TOKENS, forceToolName });
     inputTokens += result.usage.inputTokens;
     outputTokens += result.usage.outputTokens;
@@ -428,7 +541,9 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     }
   }
 
-  if (!text.trim()) text = NO_ANSWER_FALLBACK;
+  if (!text.trim()) {
+    text = buildDeterministicFindStayReply(lang, guestMessages, toolExchangesThisTurn) ?? NO_ANSWER_FALLBACK;
+  }
 
   const englishMode = isEnglishContext(lang, guestMessages);
 
@@ -449,10 +564,21 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  // Owner incident (2026-11-13): swap the roundabout "Tinitingnan ko muna kung ilan tao
+  // kayo" filler for a direct guest-count ask, and the informal "mo" pronoun ("ang dating
+  // mo") for the respectful "ninyo" register Haven otherwise keeps throughout.
+  const guestCountFillerFixed = fixGuestCountFillerPhrasing(dadalawFixed, lang);
+  const informalMoFixed = fixInformalDatingMo(guestCountFillerFixed);
+  // Owner incident (2026-11-13): never mix the bare English word "guests" into an
+  // otherwise-Tagalog guest-count question, or other stray English filler ("ang meaning
+  // nito", "Pero first,") into an otherwise-Tagalog/Batangueño reply — independent backstop
+  // for GUEST_COUNT_RULE in system-prompt.ts.
+  const guestCountWordingFixed = fixGuestCountEnglishMixing(informalMoFixed, englishMode);
+  const englishFillerFixed = stripEnglishFillerWordsInTagalog(guestCountWordingFixed, englishMode);
   // Owner incident (2026-10-16): ban deep/literary Tagalog ("tutuklasin ng tama sa
   // checkout") in favor of Haven's plain, conversational voice — independent backstop for
   // system-prompt.ts's PLAIN_LANGUAGE_RULE.
-  const tuklasinFixed = replaceTuklasinFamily(dadalawFixed, englishMode);
+  const tuklasinFixed = replaceTuklasinFamily(englishFillerFixed, englishMode);
   // Owner incident (2026-10-23): ban "sikat sa inyo/iyo/'yo" ("what appeals to you") — not a
   // real Tagalog/Batangueño idiom — independent backstop for system-prompt.ts's
   // PLAIN_LANGUAGE_RULE, same wiring as replaceTuklasinFamily above.
@@ -472,12 +598,38 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // DEC-029 addendum (2026-10-23): "umabot sa/ng N guests/tao" (max capacity) always reads
   // "kasya hanggang N tao" — see MAX_GUESTS_PHRASING_RULE in system-prompt.ts.
   const umabotFixed = fixUmabotGuestsPhrasing(titigenanFixed);
+  // Owner incident (2026-11-13): "libre" ("free of charge") must never stand in for
+  // "available"/"bakante" in an availability-sounding sentence. Tagalog/Batangueño only —
+  // "libre" never legitimately appears in an English reply, so this never runs in English
+  // mode (same language-gating every other wording backstop in this chain follows).
+  const libreFixed = englishMode ? umabotFixed : fixLibreAvailabilityWording(umabotFixed);
+  // Owner incident (2026-11-13): guarantee the capacity sentence is present whenever the
+  // guest asked about capacity for an already-resolved listing, regardless of whether the
+  // model's own text included it (see capacityQuestionListing/capacityQuestionLabel above).
+  const capacityStated = ensureCapacityStated(
+    libreFixed,
+    Boolean(capacityQuestionListing),
+    capacityQuestionLabel,
+    capacityQuestionListing?.maxGuests ?? 0,
+    englishMode
+  );
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
-  const accessLeakDetected = containsAccessLeak(umabotFixed);
-  const accessScrubbed = scrubAccessLeak(umabotFixed, lang, guestMessages);
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
+  const accessLeakDetected = containsAccessLeak(capacityStated);
+  const accessScrubbed = scrubAccessLeak(capacityStated, lang, guestMessages);
+  // Owner incident (2026-11-13): guarantee the resolved date is stated (not dropped for a
+  // generic "which property do you want?" overview) whenever the guest asked about
+  // availability for an already-resolved date with no guest count yet (see
+  // needsDateAckBeforeGuestCount above).
+  const dateAcknowledged = ensureDateAcknowledgedBeforeGuestCount(
+    accessScrubbed,
+    needsDateAckBeforeGuestCount,
+    resolvedDates?.stayLabel ?? null,
+    lang,
+    englishMode
+  );
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(dateAcknowledged, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);
@@ -502,11 +654,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const bareUrlsStripped = stripBareUrls(strippedReply);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(bareUrlsStripped) : bareUrlsStripped;
   const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
+  // Owner incident (2026-11-13): a single bare date already defaults to exactly 1 night —
+  // never ask how long the stay is in the same turn, only the still-unknown guest count.
+  const stayLengthDropped = dropStayLengthQuestionWhenSingleDate(
+    datesStated,
+    Boolean(resolvedDates?.singleDateDefault),
+    lang,
+    englishMode
+  );
   // Owner rule (2026-10-16 / 2026-10-19): once dates are resolved this turn, never let a
   // single-date default (e.g. "10/24") get re-questioned as "1 night lang ba?" — and always
   // invite the guest to add nights instead.
   const singleNightNudged = ensureSingleNightNudge(
-    datesStated,
+    stayLengthDropped,
     Boolean(resolvedDates?.singleDateDefault),
     lang,
     englishMode

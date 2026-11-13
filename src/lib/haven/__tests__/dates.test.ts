@@ -308,6 +308,65 @@ describe("numeric month-first dates (Owner convention, 2026-10-19)", () => {
   });
 });
 
+describe("day-first and day-month dates, EN/TL (fix/haven-dates-tagalog-111326)", () => {
+  it("resolves 'M/D' month-first when the first number could be a month ('11/28')", () => {
+    const result = resolveDates("11/28", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-29");
+    expect(result!.singleDateDefault).toBe(true);
+  });
+
+  it("falls back to day-first when the first number can't be a month ('28/11')", () => {
+    const result = resolveDates("28/11", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-29");
+  });
+
+  it("resolves 'Nov 28' (month before day)", () => {
+    const result = resolveDates("Nov 28", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+  });
+
+  it("resolves '28 Nov' (day before month)", () => {
+    const result = resolveDates("28 Nov", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-29");
+  });
+
+  it("resolves 'Nov 28-30' as a 2-night range", () => {
+    const result = resolveDates("Nov 28-30", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-30");
+  });
+
+  it("resolves '11/28-11/30' as a 2-night range", () => {
+    const result = resolveDates("11/28-11/30", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-30");
+  });
+
+  it("resolves the day-first range '28/11-30/11'", () => {
+    const result = resolveDates("28/11-30/11", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-30");
+  });
+
+  it("resolves the Tagalog month abbreviation 'Nob 28'", () => {
+    const result = resolveDates("Nob 28", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+  });
+
+  it("resolves 'sa 28 ng Nobyembre'", () => {
+    const result = resolveDates("sa 28 ng Nobyembre", NOW);
+    expect(result!.checkIn).toBe("2026-11-28");
+    expect(result!.checkOut).toBe("2026-11-29");
+  });
+
+  it("returns null when neither number in a pair could be a month ('31/25')", () => {
+    expect(resolveDates("31/25", NOW)).toBeNull();
+  });
+});
+
 describe("relative weekday phrasing (Owner rule, 2026-10-19)", () => {
   it("resolves 'this coming Saturday' to the nearest Saturday, defaulting to 1 night", () => {
     const result = resolveDates("this coming Saturday", OCT_19);

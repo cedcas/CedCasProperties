@@ -926,7 +926,7 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     const result = await handleHavenChat(validBody({ lang: "tl" }), "1.2.3.4");
 
     expect(result.reply).not.toMatch(/dadalaw/i);
-    expect(result.reply).toContain("Ilang guests kayo?");
+    expect(result.reply).toContain("Ilang tao po kayo?");
   });
 
   it("shortens a raw DB property name in the reply text, not just link labels", async () => {
@@ -1412,5 +1412,362 @@ describe("handleHavenChat — Wi-Fi/access guard (Cedric, 2026-10-15)", () => {
         data: expect.objectContaining({ outcome: "handoff", inputTokens: 0, outputTokens: 0, toolCalls: 0 }),
       })
     );
+  });
+});
+
+// Nov 13 2026 incident: a headless test inside the blog embed (lang: "auto", the
+// ChatWidget default), "Hi Haven, which listing fits 2 adults on 11/28?" got the generic
+// "let me get you to a real person" handoff with no AI answer, while the exact same text
+// via a direct API call with lang: "en" got a quote — nothing forced the model to actually
+// settle on an answer for a dated+guest-count question, so it was free to exhaust
+// MAX_TOOL_ROUNDS without ever producing final text. These tests cover the fix: forcing
+// find_stay on round 0 whenever a date and a guest count are already resolved (and no
+// single property is already uniquely named), plus a deterministic fallback reply built
+// straight from that tool result if the model still comes back with no text at all.
+describe("handleHavenChat — dated availability questions never hand off (fix/haven-dates-tagalog-111326)", () => {
+  it.each([
+    ["auto", "Hi Haven, which listing fits 2 adults on 11/28?"],
+    ["en", "Is anything open 28/11 for 2 adults?"],
+    ["en", "Nov 28-30 for 4 people"],
+    ["tl", "2 tao po sa 11/28, may bakante?"],
+  ])("forces a find_stay tool call on round 0 for a dated+guest-count question (lang %s): %s", async (lang, message) => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's open!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ lang, messages: [{ role: "user", content: message }] }), "1.2.3.4");
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBe("find_stay");
+  });
+
+  it("does not force find_stay when the message has a date but no guest count", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ilang tao po kayo?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available po ba sa Dec 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBeUndefined();
+  });
+
+  it("does not force find_stay when a single property is already uniquely named", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sige, checking that for you.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "2 adults for Cozy 1BR on 11/28" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBeUndefined();
+  });
+
+  it("falls back to a deterministic find_stay-based reply, never the generic handoff, when the model's text comes back empty", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [{ id: "1", name: "find_stay", input: { checkIn: "2026-11-28", checkOut: "2026-11-29", guests: 2 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 0 },
+        stopReason: "max_tokens",
+      });
+    runHavenToolMock.mockResolvedValue({
+      options: [
+        {
+          properties: [
+            {
+              slug: "spacious-2-bedroom",
+              name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax",
+              guests: 2,
+              quote: { total: 3500 },
+              bookingLink: "/properties/spacious-2-bedroom/book?checkIn=2026-11-28&checkOut=2026-11-29&guests=2",
+            },
+          ],
+          combinedTotal: 3500,
+        },
+      ],
+      stayLabel: {
+        en: "Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night",
+        tl: "Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi",
+        btg: "Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi",
+      },
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "auto", messages: [{ role: "user", content: "Hi Haven, which listing fits 2 adults on 11/28?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).not.toMatch(/real person/i);
+    expect(result.reply).toContain("Spacious 2BR Haven");
+    expect(result.reply).toContain("3,500");
+    expect(result.links).toEqual(
+      expect.arrayContaining([expect.objectContaining({ href: expect.stringContaining("spacious-2-bedroom/book") })])
+    );
+  });
+
+  it("the deterministic fallback replies in Tagalog when find_stay comes back with no options", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [{ id: "1", name: "find_stay", input: { checkIn: "2026-12-05", checkOut: "2026-12-06", guests: 20 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 0 },
+        stopReason: "max_tokens",
+      });
+    runHavenToolMock.mockResolvedValue({ options: [], stayLabel: null, message: "Nothing fits." });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May bakante ba para sa 20 tao sa Dis 5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).not.toMatch(/real person/i);
+    expect(result.reply).toMatch(/walang bakante/i);
+  });
+});
+
+// Owner incident (2026-11-13, remaining bug after fix/haven-dates-tagalog-111326): a
+// compound "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" question still
+// skipped the capacity half, "Libre" ("free of charge") was used to mean "available", and a
+// single-date default got an extra, contradictory "how long is your stay" question.
+describe("handleHavenChat — capacity always answered, 'Libre' banned, single-date asks only guest count (2026-11-13)", () => {
+  it.each([
+    ["tl", "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?"],
+    ["tl", "Hello po, ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?"],
+  ])("guarantees the capacity sentence even when the model's own text omits it (lang %s): %s", async (lang, message) => {
+    providerChat.mockResolvedValue({
+      text:
+        "Oo, may bakante! Bakante ang Cozy 1BR Haven para sa Sabado, Dis 5 → Linggo, Dis 6, " +
+        "2026 (check-out) · 1 gabi.\nIlan po kayong bisita? Para malaman ko ang presyo para sa inyo.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang, messages: [{ role: "user", content: message }] }), "1.2.3.4");
+
+    expect(result.reply).toMatch(/kasya hanggang 5 tao/i);
+    expect(result.reply).toContain("Cozy 1BR Haven");
+  });
+
+  it("guarantees the English capacity sentence too", async () => {
+    providerChat.mockResolvedValue({
+      text: "Yes, it's available for Dec 5 → Dec 6, 2026 (check-out) · 1 night.\nHow many guests?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "How many people fit in Cozy 1BR? Is it open on 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toMatch(/Cozy 1BR Haven sleeps up to 5/i);
+  });
+
+  it("does not duplicate the capacity sentence when the model already stated it correctly", async () => {
+    providerChat.mockResolvedValue({
+      text: "Kasya hanggang 5 tao ang Cozy 1BR Haven. Oo, may bakante! Ilan po kayong bisita?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply?.match(/kasya hanggang 5 tao/gi)?.length).toBe(1);
+  });
+
+  it('bans "Libre" to mean "available" and rewrites it to "Bakante"', async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Oo, may bakante! Libre ang Cozy 1BR Haven para sa Sabado, Dis 5 → Linggo, Dis 6, " +
+        "2026 (check-out) · 1 gabi.\nIlan po kayong bisita? Para malaman ko ang presyo para sa inyo.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/\blibre\b/i);
+    expect(result.reply).toMatch(/bakante ang cozy 1br haven/i);
+  });
+
+  it("asks only the guest count, never the stay length too, when only a single date was given (Tagalog)", async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Tinitingnan ko muna kung available kami sa Disyembre 12! Pero kailangan ko munang " +
+        "malaman: ilan po kayo, at gaano katagal ng stay ninyo?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available ba kayo sa Disyembre 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/gaano katagal/i);
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+    expect(result.reply).toContain("Pwede pong dagdagan ang gabi — sabihin n'yo lang.");
+  });
+
+  it("asks only the guest count, never the stay length too, when only a single date was given (English)", async () => {
+    providerChat.mockResolvedValue({
+      text: "Got it, Dec 12! How many guests, and how long will you stay?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "Are you available on December 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/how long/i);
+    expect(result.reply).toContain("How many guests?");
+    expect(result.reply).toContain("Want to add more nights? Just tell me.");
+  });
+});
+
+// Owner incident (2026-11-13, remaining bug after fix/haven-tl-capacity-111326): an explicit
+// lang: "en" reply still leaked Tagalog ("bakante", the Tagalog provisional caveat), and a
+// Tagalog date-only availability question ("May bakante po ba sa 28 ng Nobyembre?", no
+// guest count) got the generic "which property do you want?" overview answer instead of
+// using the already-resolved date.
+describe("handleHavenChat — English stays English, Tagalog date-only questions use the date (fix/haven-lang-leak-111326)", () => {
+  it('strips a leaked "bakante" from an explicit English reply', async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's bakante for Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toMatch(/\bbakante\b/i);
+    expect(result.reply).toContain("Here's what's available");
+  });
+
+  it('replaces the Tagalog provisional caveat with the English one in an explicit English reply', async () => {
+    providerChat.mockResolvedValue({
+      text: "It's available! Provisional lang ito, kukumpirmahin sa checkout.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toContain("Provisional lang ito");
+    expect(result.reply).toContain("This is provisional — confirmed at checkout.");
+  });
+
+  it('never leaks Tagalog into an explicit English reply when the model mixes both issues at once', async () => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's bakante for Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night. Provisional lang ito, kukumpirmahin sa checkout.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody(), "1.2.3.4"); // lang: "en" from validBody
+
+    expect(result.reply).not.toMatch(/\bbakante\b/i);
+    expect(result.reply).not.toContain("Provisional lang ito");
+    expect(result.reply).toContain("This is provisional — confirmed at checkout.");
+  });
+
+  it('states the resolved date and asks guest count for a Tagalog date-only availability question, instead of the generic overview', async () => {
+    providerChat.mockResolvedValue({
+      text: "Tinitingnan ko muna kung aling property ang gusto ninyo! Mayroon kaming 5 listings dito sa Bella Vita subdivision.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-11-13T12:00:00Z");
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May bakante po ba sa 28 ng Nobyembre?" }] }),
+      "1.2.3.4",
+      now
+    );
+
+    expect(result.reply).not.toMatch(/aling property ang gusto ninyo/i);
+    expect(result.reply).toContain("Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi");
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+  });
+
+  it("leaves a reply that already states the resolved date untouched (Dec 12 case — wording-only bug)", async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Tinitingnan ko muna kung ilan tao kayo, para mahanap ang tamang property para sa inyo. " +
+        "Pero before that — Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi ang dating mo, tama ba?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const now = new Date("2026-11-13T12:00:00Z");
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available po ba sa Dec 12?" }] }),
+      "1.2.3.4",
+      now
+    );
+
+    expect(result.reply).toContain("Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi");
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+    expect(result.reply).not.toMatch(/tinitingnan ko muna kung ilan tao kayo/i);
+    expect(result.reply).not.toMatch(/dating mo\b/i);
   });
 });
