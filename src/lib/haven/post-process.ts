@@ -876,18 +876,54 @@ export function enforceTermsOfAddress(text: string, guestMessages: string, lang:
   return result;
 }
 
-// ── "Dadalaw" phrasing guard (Tagalog/Batangueño) ───────────────────────────
+// ── "Dadalaw"/"dadalo" phrasing guard (Tagalog/Batangueño) ──────────────────
 
 /**
- * "Dadalaw" means to visit — asking "ilang guests ang dadalaw" reads as "how many guests
- * will visit", which is confusing for a STAYING guest count. The correct ask is "Ilang tao
- * kayo?" / "Ilang guests kayo?" (btg: "Ilan ga kayo?").
+ * "Dadalaw" means to visit and "dadalo" means to attend — asking "ilang guests ang
+ * dadalaw/dadalo" reads as "how many guests will visit/attend", which is confusing for a
+ * STAYING guest count. The correct ask is "Ilan po kayong bisita?" / "Ilang tao po kayo?"
+ * (btg: "Ilan ga kayo?") — never mixing in the English word "guests" (Owner incident,
+ * 2026-11-13 — the prior replacement text here, "Ilang guests kayo?", was itself the
+ * English-mixing bug; see GUEST_COUNT_RULE in system-prompt.ts).
  */
-const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?dadalaw)[^?]*\?/gi;
+const DADALAW_RE = /ilang\s+(?:guests?|tao)\s+(?:ang\s+)?(?:(?:ay\s+)?(?:dadalaw|dadalo))[^?]*\?/gi;
 
 export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
-  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang guests kayo?";
+  const replacement = lang === "btg" ? "Ilan ga kayo?" : "Ilang tao po kayo?";
   return text.replace(DADALAW_RE, replacement);
+}
+
+// ── Guest-count English-mixing guard (Tagalog/Batangueño) ───────────────────
+
+/**
+ * Owner incident (2026-11-13): asking the guest count in Tagalog, Haven mixed in the bare
+ * English word "guests" ("Ilang guests kayo?") instead of staying in plain Tagalog. Only
+ * runs outside English mode — see GUEST_COUNT_RULE in system-prompt.ts.
+ */
+const GUEST_COUNT_ENGLISH_MIX_RE = /\bilang\s+guests?\s+kayo\b\??/gi;
+
+export function fixGuestCountEnglishMixing(text: string, englishMode: boolean): string {
+  if (englishMode) return text;
+  return text.replace(GUEST_COUNT_ENGLISH_MIX_RE, "Ilang tao po kayo?");
+}
+
+/**
+ * Owner incident (2026-11-13): a Tagalog reply mixed in bare English filler words —
+ * "ang meaning nito" (restating a stay range) and "Pero first," (before asking the guest
+ * count) — instead of plain Tagalog. Only runs outside English mode. Narrow, pattern-
+ * specific fixes for exactly the reported phrasing, same style as the other wording
+ * backstops in this file.
+ */
+const MEANING_NITO_RE = /\s*ang\s+meaning\s+nito\b/gi;
+const PERO_FIRST_RE = /\bpero\s+first\b/gi;
+const FIRST_COMMA_RE = /\bfirst,/gi;
+
+export function stripEnglishFillerWordsInTagalog(text: string, englishMode: boolean): string {
+  if (englishMode) return text;
+  return text
+    .replace(MEANING_NITO_RE, "")
+    .replace(PERO_FIRST_RE, "Pero una")
+    .replace(FIRST_COMMA_RE, "una,");
 }
 
 // ── "The system" mention guard ───────────────────────────────────────────────

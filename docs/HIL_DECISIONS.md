@@ -806,8 +806,91 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, 2026-10-23 on `hil-pm/haven-wording-102326`, and 2026-10-26 on `hil-pm/haven-socials-102626` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, 2026-10-23 on `hil-pm/haven-wording-102326`, 2026-10-26 on `hil-pm/haven-socials-102626`, and 2026-11-13 on `fix/haven-dates-tagalog-111326` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-11-13 dated-question handoff + Tagalog guest-count wording — addendum)
+Production/live-API incident (Nov 13, 2026): a headless test inside the blog embed
+(`/embed/haven`, `lang: "auto"` — the `ChatWidget` default), "Hi Haven, which listing fits
+2 adults on 11/28?", got the generic `NO_ANSWER_FALLBACK` handoff ("Let me get you to a real
+person for this one…") with no AI answer, while the identical text via a direct
+`/api/haven/chat` call with `lang: "en"` got a real quote. A second live-API case, "Is
+anything open 28/11 for 2 adults?", wasn't understood at all (asked the guest to clarify),
+and a separate reply pushed the 11-guest "Mickey in Lipa — Family House" as the fit for a
+2-adult group. Two independent root causes, both fixed without changing the decision itself:
+
+1. **`property-resolver.ts`'s `scoreListing` had a bare-digit false-positive.** A listing's
+   slug carries its capacity as a literal numeric token (e.g.
+   `mickey-in-lipa--family-house--sleeps-11` contributes the token `"11"`), and the token-
+   overlap scorer counted ANY matching bare number from the guest's query — including a
+   digit that was actually part of a date ("11/28") — as a real match, with zero regard for
+   whether it came from an actual guest-count phrase. This alone made "which listing fits 2
+   adults on 11/28?" resolve uniquely to the 11-guest Family House (explains the second
+   symptom above) and, on the embed path, injected a `buildPropertyContextNote` instruction
+   locking the model onto that one wrong property instead of letting `find_stay` naturally
+   survey every listing. Fixed by excluding bare-digit tokens from the plain overlap count
+   entirely — a number may now ONLY ever contribute via the existing, already-guarded
+   `CAPACITY_BONUS` path, which itself now also requires some other real name/alias token to
+   already have matched (`score > 0`) before it can apply, so a number can disambiguate
+   among already-matching listings (e.g. "mickey 15") but can never be the sole reason a
+   listing matches a date, price, or any other unrelated digit string.
+2. **Nothing forced the model to settle on an answer for a dated+guest-count question.**
+   `chat-service.ts` already pre-resolved the date (`resolveDates`) and the guest count
+   (`parseGuestCount`) before calling the model, but — unlike the property-overview fix
+   (2026-10-22, below) — nothing forced an actual `find_stay` tool call, so the model was
+   free to exhaust `MAX_TOOL_ROUNDS` without ever producing final text (a Haiku tool-use
+   turn commonly carries no accompanying text), landing on the generic
+   `NO_ANSWER_FALLBACK` even after real availability data had already been fetched. Fixed
+   with two layers, mirroring the existing `isOverviewQuestion`/`forceToolName` pattern:
+   `shouldForceFindStay` forces `find_stay` on round 0 whenever a date AND a guest count are
+   already resolved this turn and no single property is already uniquely named (a uniquely
+   named property keeps its own existing "call `get_quote` now" instruction instead); and a
+   new `buildDeterministicFindStayReply()` builds a plain reply straight from this turn's own
+   `find_stay` tool result — reusing the real booking-link/short-name/price-guard pipeline
+   that already runs on every reply — used ONLY as the last-resort replacement for
+   `NO_ANSWER_FALLBACK` when the model's own final text still comes back empty. A genuinely
+   answerable dated question can now never be handed off just because the model went quiet;
+   a real handoff (24+ guests, a kids question, a genuine tool/provider error) is unaffected.
+3. **Numeric/named date formats widened (`dates.ts`).** Guests write dates day-first
+   ("28/11"), day-before-month ("28 Nov", "sa 28 ng Nobyembre"), and with Tagalog month
+   abbreviations ("Nob 28") — none of which the existing always-month-first numeric parser
+   or month-name table understood. A numeric pair now resolves day-first ONLY when the first
+   number can't be a month (> 12) — otherwise the existing month-first default is unchanged,
+   so "11/28" and "28/11" both resolve to November 28, but an ambiguous pair like "5/6"
+   still defaults month-first exactly as before (`interpretNumericPair`, applied to both the
+   single-date and range patterns). A new day-before-month pattern ("28 Nov"/"28 ng
+   Nobyembre", a leading "sa" needs no special handling) complements the existing
+   month-before-day pattern, and `MONTHS` gained the Tagalog short forms (`ene`, `peb`,
+   `abr`, `hun`, `hul`, `ago`, `set`, `okt`, `nob`, `dis`) alongside the existing full/long
+   forms. Never asks the year (unchanged — see the 2026-10-19 numeric-dates note below); a
+   single date still defaults to 1 night.
+4. **Tagalog guest-count wording.** Three related fixes, all Owner-reported from the same
+   incident: (a) `dadalo` (to attend) joins `dadalaw` (to visit) as a banned word when
+   asking how many guests are staying — both read as asking who will "visit"/"attend"
+   rather than "stay" (`fixDadalawPhrasing`'s regex and `system-prompt.ts`'s rule, renamed
+   `DADALAW_RULE` → `GUEST_COUNT_RULE`, both widened); (b) the replacement/suggested
+   phrasing for that same rule was ITSELF the bug — "Ilang guests kayo?" mixes the bare
+   English word "guests" into a Tagalog sentence — corrected to "Ilan po kayong bisita?" /
+   "Ilang tao po kayo?" (Batangueño unchanged: "Ilan ga kayo?"), backed by a new independent
+   `fixGuestCountEnglishMixing()` backstop; (c) a live reply also leaked stray English
+   filler ("ang meaning nito", "Pero first,") into Tagalog prose — narrow, pattern-specific
+   fixes via a new `stripEnglishFillerWordsInTagalog()`, same style as this file's other
+   wording backstops, plus a `GUEST_COUNT_RULE` instruction naming "guests"/"meaning"/
+   "first" directly. A fourth, separate bug in the same incident — "Ilang tao ang kasya sa
+   Cozy 1BR? May bakante ba sa 12/5?" skipped the capacity half of the question entirely —
+   is fixed with a new `property-resolver.ts` context note,
+   `buildCapacityQuestionContextNote()` (same pre-resolved-context pattern as
+   `dateContextNote`/`buildPropertyContextNote`): when the guest's message asks about
+   capacity AND a single property is already uniquely resolved, the model is handed that
+   property's exact `maxGuests` directly and told not to skip the question — plus a new
+   general system-prompt rule that a compound question (capacity AND availability in one
+   message) must always get every part answered, not just one.
+- **Tests:** suite 4755 → 4791 (36 new): date-parsing (day-first, day-month, Tagalog
+  abbreviations), the `find_stay`-forcing decision and its deterministic fallback, the
+  `scoreListing` false-positive regression, the capacity-question context note, and the
+  Tagalog wording fixes (`fixDadalawPhrasing`'s `dadalo` case, `fixGuestCountEnglishMixing`,
+  `stripEnglishFillerWordsInTagalog`). `npm run lint`, `tsc --noEmit`, and `vitest run` all
+  clean.
 
 ### Implementation note (2026-10-26 "social links" fix — addendum)
 Production incident, same day: asked "San ang mga social medias nyo", Haven only pointed to
@@ -1140,9 +1223,11 @@ for the single server-side source of these facts, sourced and dated "Cedric, 202
   copy (e.g. "a karaoke-and-lechon dinner" in `bestForSegments`, which `get_property_details`
   never exposes to the model) must never be read as a confirmed-equipment claim.
 - Two Tagalog/Batangueño language fixes: never ask "ilang guests ang dadalaw" (dadalaw =
-  "to visit", confusing for a staying headcount) — `fixDadalawPhrasing()` rewrites it to
-  "Ilang guests kayo?"/"Ilan ga kayo?" — and an English reply must never mix in a stray
-  Tagalog word (`isEnglishContext()`/`stripTagalogWordsInEnglish()`).
+  "to visit", confusing for a staying headcount) — `fixDadalawPhrasing()` rewrote it to
+  "Ilang guests kayo?"/"Ilan ga kayo?" (that English-language-mixed replacement was itself
+  later found to be the same class of bug and corrected to "Ilang tao po kayo?" — see the
+  2026-11-13 addendum above) — and an English reply must never mix in a stray Tagalog word
+  (`isEnglishContext()`/`stripTagalogWordsInEnglish()`).
 - Two reply-quality fixes carried over from the same review: `shortenPropertyNamesInText()`
   applies the existing link-label name shortener to reply **text**, not just link labels;
   `firstResolvedDateRange()`/`ensureDatesStated()` make an English reply state its resolved

@@ -65,14 +65,23 @@ const LANGUAGE_RULES: Record<HavenLang, string> = {
 };
 
 /**
- * Tagalog/Batangueño word for "visit" — asking "ilang guests ang dadalaw" reads as "how
- * many guests will visit", which is confusing when asking how many guests are STAYING.
- * Prompt-level instruction backed by `fixDadalawPhrasing` in post-process.ts.
+ * Tagalog/Batangueño words for "visit"/"attend" — asking "ilang guests ang dadalaw/dadalo"
+ * reads as "how many guests will visit/attend", which is confusing when asking how many
+ * guests are STAYING. Owner incident (2026-11-13): Haven also mixed the English word
+ * "guests" into an otherwise-Tagalog question ("Ilang guests kayo?") — ask the guest count
+ * the same natural way the English flow does, without borrowing English words into a
+ * Tagalog/Batangueño sentence. Prompt-level instruction backed by `fixDadalawPhrasing` and
+ * `fixGuestCountEnglishMixing` in post-process.ts.
  */
-const DADALAW_RULE =
-  'Never ask "ilang guests ang dadalaw" or any other phrasing using "dadalaw" (it means ' +
-  '"to visit", not "to stay") when asking how many guests are staying. Ask "Ilang tao ' +
-  'kayo?" or "Ilang guests kayo?" (Batangueño: "Ilan ga kayo?").';
+const GUEST_COUNT_RULE =
+  'Never ask "ilang guests/tao ang dadalaw" or "...dadalo" (both mean "to visit"/"to ' +
+  'attend", not "to stay") when asking how many guests are staying. Ask plainly: in ' +
+  'English, "How many guests?"; in Tagalog, "Ilan po kayong bisita?" or "Ilang tao po ' +
+  'kayo?" — never mix the English word "guests" into a Tagalog sentence; in Batangueño, ' +
+  '"Ilan ga kayo?". Keep a Tagalog/Batangueño reply free of unnecessary bare English words ' +
+  'like "guests", "meaning", or "first" — say "ibig sabihin" instead of "meaning", "una" ' +
+  'instead of "first", and restructure the sentence in plain Tagalog rather than reaching ' +
+  "for an English word.";
 
 /**
  * Owner incident (Cedric, 2026-10-23 — DEC-029 addendum): Haven said "titigingan" — a typo
@@ -294,9 +303,12 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
     NEXT_WEEKEND_RULE,
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
-    DADALAW_RULE,
+    GUEST_COUNT_RULE,
     TITINGNAN_SPELLING_RULE,
     MAX_GUESTS_PHRASING_RULE,
+    "- When a guest's single message asks more than one question (e.g. a listing's " +
+      "capacity AND its availability for a date), answer EVERY question asked — never " +
+      "skip one to answer only the other.",
     "- When a house rule or policy is the same across every listing (quiet hours 10:00 PM " +
       "– 8:00 AM, no pets, no smoking inside, no parties/events without host approval), " +
       "give the general answer directly instead of asking which house. Only ask which " +

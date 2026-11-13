@@ -103,18 +103,18 @@ const WEEKDAYS: Record<string, number> = {
 };
 
 const MONTHS: Record<string, number> = {
-  jan: 0, january: 0, enero: 0,
-  feb: 1, february: 1, pebrero: 1,
+  jan: 0, january: 0, enero: 0, ene: 0,
+  feb: 1, february: 1, pebrero: 1, peb: 1,
   mar: 2, march: 2, marso: 2,
-  apr: 3, april: 3, abril: 3,
+  apr: 3, april: 3, abril: 3, abr: 3,
   may: 4, mayo: 4,
-  jun: 5, june: 5, hunyo: 5,
-  jul: 6, july: 6, hulyo: 6,
-  aug: 7, august: 7, agosto: 7,
-  sep: 8, sept: 8, september: 8, setyembre: 8,
-  oct: 9, october: 9, oktubre: 9,
-  nov: 10, november: 10, nobyembre: 10, nobiembre: 10,
-  dec: 11, december: 11, disyembre: 11,
+  jun: 5, june: 5, hunyo: 5, hun: 5,
+  jul: 6, july: 6, hulyo: 6, hul: 6,
+  aug: 7, august: 7, agosto: 7, ago: 7,
+  sep: 8, sept: 8, september: 8, setyembre: 8, set: 8,
+  oct: 9, october: 9, oktubre: 9, okt: 9,
+  nov: 10, november: 10, nobyembre: 10, nobiembre: 10, nob: 10,
+  dec: 11, december: 11, disyembre: 11, dis: 11,
 };
 
 const ORDINALS: Record<string, number> = {
@@ -311,6 +311,24 @@ function parseNumericYear(yearStr: string): number {
   return yearStr.length <= 2 ? 2000 + Number(yearStr) : Number(yearStr);
 }
 
+/**
+ * Owner convention (2026-10-19): a numeric date is month-first by default — "11/28" is
+ * always November 28. But "28/11" has no month-first reading at all (there's no 28th
+ * month), and guests do write day-first dates, especially in Tagalog/Batangueño — so
+ * (2026-11-13 fix) when the FIRST number can't be a month (> 12), it's read as the day and
+ * the second number as the month instead. When both numbers are <= 12 the ambiguous case
+ * still defaults to month-first, unchanged. Returns `null` when neither reading is valid
+ * (both numbers > 12, or either is out of the 1-31 day range).
+ */
+function interpretNumericPair(a: number, b: number): { month: number; day: number } | null {
+  if (a < 1 || a > 31 || b < 1 || b > 31) return null;
+  if (a > 12) {
+    if (b > 12) return null; // neither can be a month
+    return { month: b, day: a }; // day-first
+  }
+  return { month: a, day: b }; // month-first (default, including the ambiguous a<=12 case)
+}
+
 const NUMERIC_DATE_RANGE_RE = new RegExp(
   `\\b(\\d{1,2})/(\\d{1,2})(?:/(\\d{2,4}))?\\s*${RANGE_SEP}\\s*(?:(\\d{1,2})/)?(\\d{1,2})(?:/(\\d{2,4}))?\\b${PEOPLE_NOUN_AFTER_RE}`
 );
@@ -382,33 +400,46 @@ export function resolveDates(
     if (!isNaN(checkIn.getTime())) return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 
-  // Numeric month-first date range: "10/24-10/26", "10/24 - 10/26", "10/24 to 10/26",
-  // "10/24 hanggang 10/26", "10/24-26" (shorthand — same month as the start date). Tried
-  // before the single-date form below so a full range is never truncated to just its start
-  // date. Owner convention (2026-10-19): numeric dates are always US month-first, never
-  // day-first — "10/24" is always October 24, never the 10th of a 24th month. Guarded
-  // against a guest-count phrase like "4/5 guests" via PEOPLE_NOUN_AFTER_RE, the same guard
-  // the bare day-range fallback below uses.
+  // Numeric date range: "10/24-10/26", "10/24 - 10/26", "10/24 to 10/26",
+  // "10/24 hanggang 10/26", "10/24-26" (shorthand — same month as the start date), and the
+  // day-first form "28/11-30/11". Tried before the single-date form below so a full range
+  // is never truncated to just its start date. Owner convention (2026-10-19): a numeric
+  // date defaults to US month-first — "10/24" is always October 24 — but (2026-11-13 fix)
+  // when a number can't be a month (> 12) it's read as the day instead (see
+  // `interpretNumericPair`). Guarded against a guest-count phrase like "4/5 guests" via
+  // PEOPLE_NOUN_AFTER_RE, the same guard the bare day-range fallback below uses.
   m = expr.match(NUMERIC_DATE_RANGE_RE);
   if (m) {
-    const range = resolveNumericRange(
-      today,
-      parseInt(m[1], 10),
-      parseInt(m[2], 10),
-      m[3],
-      m[4] ? parseInt(m[4], 10) : null,
-      parseInt(m[5], 10),
-      m[6]
-    );
-    if (range) return toResult(range.checkIn, range.checkOut);
+    const startPair = interpretNumericPair(parseInt(m[1], 10), parseInt(m[2], 10));
+    if (startPair) {
+      let endMonth: number | null = null;
+      let endDay: number | undefined;
+      if (m[4]) {
+        const endPair = interpretNumericPair(parseInt(m[4], 10), parseInt(m[5], 10));
+        if (endPair) {
+          endMonth = endPair.month;
+          endDay = endPair.day;
+        }
+      } else {
+        endDay = parseInt(m[5], 10); // shorthand "10/24-26" — bare day, same month as start
+      }
+      if (endDay !== undefined) {
+        const range = resolveNumericRange(today, startPair.month, startPair.day, m[3], endMonth, endDay, m[6]);
+        if (range) return toResult(range.checkIn, range.checkOut);
+      }
+    }
   }
 
-  // Numeric month-first single date: "10/24", "1/5", "12/31/26". Same US month-first
-  // convention and guest-count guard as the range pattern above.
+  // Numeric single date: "10/24", "1/5", "12/31/26", and the day-first form "28/11" (first
+  // number > 12 — see `interpretNumericPair`). Same guest-count guard as the range pattern
+  // above.
   m = expr.match(NUMERIC_DATE_SINGLE_RE);
   if (m) {
-    const checkIn = resolveNumericSingle(today, parseInt(m[1], 10), parseInt(m[2], 10), m[3]);
-    if (checkIn) return toResult(checkIn, addUtcDays(checkIn, 1), true);
+    const pair = interpretNumericPair(parseInt(m[1], 10), parseInt(m[2], 10));
+    if (pair) {
+      const checkIn = resolveNumericSingle(today, pair.month, pair.day, m[3]);
+      if (checkIn) return toResult(checkIn, addUtcDays(checkIn, 1), true);
+    }
   }
 
   // "2nd Saturday of November" / "1st Friday in December" / "ikalawang Sabado ng Nobyembre"
@@ -494,6 +525,14 @@ export function resolveDates(
   m = expr.match(new RegExp(`\\b(${MONTH_NAME_PATTERN})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`));
   if (m) {
     const checkIn = resolveMonthDay(today, MONTHS[m[1]], parseInt(m[2], 10));
+    return toResult(checkIn, addUtcDays(checkIn, 1), true);
+  }
+
+  // Day-before-month single date: "28 Nov", "28 Nobyembre", "sa 28 ng Nobyembre" (a leading
+  // "sa" is just unmatched prefix text, and "ng" — Tagalog "of" — is optional here).
+  m = expr.match(new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:ng\\s+)?(${MONTH_NAME_PATTERN})\\b`));
+  if (m) {
+    const checkIn = resolveMonthDay(today, MONTHS[m[2]], parseInt(m[1], 10));
     return toResult(checkIn, addUtcDays(checkIn, 1), true);
   }
 

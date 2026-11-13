@@ -5,6 +5,8 @@ import {
   resolveGuestPropertyMentionAcrossTurns,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
+  isCapacityQuestion,
+  buildCapacityQuestionContextNote,
 } from "../property-resolver";
 
 const LISTINGS = [
@@ -29,6 +31,14 @@ describe("resolvePropertyMatch", () => {
   it('resolves "mickey 15" using the capacity number to disambiguate', () => {
     const result = resolvePropertyMatch("mickey 15", LISTINGS);
     expect(result).toEqual({ status: "unique", slug: "mickey-in-lipa--full-family-house--sleeps-15", name: LISTINGS[4].name });
+  });
+
+  it("never matches a listing on a bare number alone with no real name/alias overlap (Owner incident, 2026-11-13)", () => {
+    // "11/28" tokenizes to include a bare "11", which must not alone "match" the 11-guest
+    // Mickey Family House — the live bug where "which listing fits 2 adults on 11/28?"
+    // wrongly resolved to that listing regardless of the actual party size.
+    expect(resolvePropertyMatch("which listing fits 2 adults on 11/28", LISTINGS)).toEqual({ status: "none" });
+    expect(resolvePropertyMatch("is anything open 28/11 for 2 adults", LISTINGS)).toEqual({ status: "none" });
   });
 
   it('resolves the Tagalog "yung malaking bahay ng Mickey" ("the big house of Mickey\'s") to the biggest Mickey configuration', () => {
@@ -281,5 +291,45 @@ describe("dropUnknownPropertyClaims", () => {
   it("leaves unrelated text untouched when a match exists but the claim never appears", () => {
     const text = "Yes, we have that! It sleeps up to 15 guests.";
     expect(dropUnknownPropertyClaims(text, UNIQUE, "en", "Mickey")).toBe(text);
+  });
+});
+
+describe("isCapacityQuestion", () => {
+  it("detects an English capacity question", () => {
+    expect(isCapacityQuestion("How many guests can it fit?")).toBe(true);
+    expect(isCapacityQuestion("What's the max capacity?")).toBe(true);
+  });
+
+  it("detects a Tagalog capacity question", () => {
+    expect(isCapacityQuestion("Ilang tao ang kasya sa Cozy 1BR?")).toBe(true);
+    expect(isCapacityQuestion("Kasya ba ilang tao sa Spacious 2BR?")).toBe(true);
+  });
+
+  it("does not fire for an unrelated or plain availability question", () => {
+    expect(isCapacityQuestion("May bakante ba sa 12/5?")).toBe(false);
+    expect(isCapacityQuestion("What time is check-in?")).toBe(false);
+  });
+});
+
+describe("buildCapacityQuestionContextNote", () => {
+  const COZY = { status: "unique" as const, slug: "cozy-1-bedroom", label: "Cozy 1BR Haven" };
+
+  it("states the exact maxGuests for a uniquely-resolved property's capacity question", () => {
+    const note = buildCapacityQuestionContextNote(
+      "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?",
+      COZY,
+      LISTINGS
+    );
+    expect(note).toMatch(/maxGuests is 5/);
+    expect(note).toMatch(/kasya hanggang 5 tao/);
+    expect(note).toMatch(/never skip the capacity question/i);
+  });
+
+  it("returns empty when the message isn't a capacity question", () => {
+    expect(buildCapacityQuestionContextNote("May bakante ba sa 12/5?", COZY, LISTINGS)).toBe("");
+  });
+
+  it("returns empty when no single property is uniquely resolved", () => {
+    expect(buildCapacityQuestionContextNote("Ilang tao ang kasya?", { status: "none" }, LISTINGS)).toBe("");
   });
 });

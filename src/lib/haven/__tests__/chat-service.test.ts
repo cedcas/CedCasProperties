@@ -926,7 +926,7 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     const result = await handleHavenChat(validBody({ lang: "tl" }), "1.2.3.4");
 
     expect(result.reply).not.toMatch(/dadalaw/i);
-    expect(result.reply).toContain("Ilang guests kayo?");
+    expect(result.reply).toContain("Ilang tao po kayo?");
   });
 
   it("shortens a raw DB property name in the reply text, not just link labels", async () => {
@@ -1412,5 +1412,144 @@ describe("handleHavenChat — Wi-Fi/access guard (Cedric, 2026-10-15)", () => {
         data: expect.objectContaining({ outcome: "handoff", inputTokens: 0, outputTokens: 0, toolCalls: 0 }),
       })
     );
+  });
+});
+
+// Nov 13 2026 incident: a headless test inside the blog embed (lang: "auto", the
+// ChatWidget default), "Hi Haven, which listing fits 2 adults on 11/28?" got the generic
+// "let me get you to a real person" handoff with no AI answer, while the exact same text
+// via a direct API call with lang: "en" got a quote — nothing forced the model to actually
+// settle on an answer for a dated+guest-count question, so it was free to exhaust
+// MAX_TOOL_ROUNDS without ever producing final text. These tests cover the fix: forcing
+// find_stay on round 0 whenever a date and a guest count are already resolved (and no
+// single property is already uniquely named), plus a deterministic fallback reply built
+// straight from that tool result if the model still comes back with no text at all.
+describe("handleHavenChat — dated availability questions never hand off (fix/haven-dates-tagalog-111326)", () => {
+  it.each([
+    ["auto", "Hi Haven, which listing fits 2 adults on 11/28?"],
+    ["en", "Is anything open 28/11 for 2 adults?"],
+    ["en", "Nov 28-30 for 4 people"],
+    ["tl", "2 tao po sa 11/28, may bakante?"],
+  ])("forces a find_stay tool call on round 0 for a dated+guest-count question (lang %s): %s", async (lang, message) => {
+    providerChat.mockResolvedValue({
+      text: "Here's what's open!",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(validBody({ lang, messages: [{ role: "user", content: message }] }), "1.2.3.4");
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBe("find_stay");
+  });
+
+  it("does not force find_stay when the message has a date but no guest count", async () => {
+    providerChat.mockResolvedValue({
+      text: "Ilang tao po kayo?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available po ba sa Dec 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBeUndefined();
+  });
+
+  it("does not force find_stay when a single property is already uniquely named", async () => {
+    providerChat.mockResolvedValue({
+      text: "Sige, checking that for you.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+    const { handleHavenChat } = await freshChatService();
+    await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "2 adults for Cozy 1BR on 11/28" }] }),
+      "1.2.3.4"
+    );
+
+    expect(providerChat.mock.calls[0][0].forceToolName).toBeUndefined();
+  });
+
+  it("falls back to a deterministic find_stay-based reply, never the generic handoff, when the model's text comes back empty", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [{ id: "1", name: "find_stay", input: { checkIn: "2026-11-28", checkOut: "2026-11-29", guests: 2 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 0 },
+        stopReason: "max_tokens",
+      });
+    runHavenToolMock.mockResolvedValue({
+      options: [
+        {
+          properties: [
+            {
+              slug: "spacious-2-bedroom",
+              name: "Spacious 2BR Haven | Solar Power•Netflix•Wi-Fi•9 Pax",
+              guests: 2,
+              quote: { total: 3500 },
+              bookingLink: "/properties/spacious-2-bedroom/book?checkIn=2026-11-28&checkOut=2026-11-29&guests=2",
+            },
+          ],
+          combinedTotal: 3500,
+        },
+      ],
+      stayLabel: {
+        en: "Sat, Nov 28 → Sun, Nov 29, 2026 (check-out) · 1 night",
+        tl: "Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi",
+        btg: "Sabado, Nob 28 → Linggo, Nob 29, 2026 (check-out) · 1 gabi",
+      },
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "auto", messages: [{ role: "user", content: "Hi Haven, which listing fits 2 adults on 11/28?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).not.toMatch(/real person/i);
+    expect(result.reply).toContain("Spacious 2BR Haven");
+    expect(result.reply).toContain("3,500");
+    expect(result.links).toEqual(
+      expect.arrayContaining([expect.objectContaining({ href: expect.stringContaining("spacious-2-bedroom/book") })])
+    );
+  });
+
+  it("the deterministic fallback replies in Tagalog when find_stay comes back with no options", async () => {
+    providerChat
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [{ id: "1", name: "find_stay", input: { checkIn: "2026-12-05", checkOut: "2026-12-06", guests: 20 } }],
+        usage: { inputTokens: 10, outputTokens: 5 },
+        stopReason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        text: "",
+        toolCalls: [],
+        usage: { inputTokens: 5, outputTokens: 0 },
+        stopReason: "max_tokens",
+      });
+    runHavenToolMock.mockResolvedValue({ options: [], stayLabel: null, message: "Nothing fits." });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May bakante ba para sa 20 tao sa Dis 5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.mode).toBe("ai");
+    expect(result.reply).not.toMatch(/real person/i);
+    expect(result.reply).toMatch(/walang bakante/i);
   });
 });
