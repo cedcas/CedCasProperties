@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-11-13, latest — Production B34 internet-speed correction run; temporary route removed (chore/remove-b34-route-111326)
+
+Area: Website | Content
+
+Status: **Run done and verified live. Route-removal PR opened against `dev`, not merged.**
+On 2026-11-13 the Owner (Cedric) ran the temporary DEC-012 route
+`/api/admin/dev/fix-b34-speed` on production — live since release PR #108. GET dry run,
+then POST with the matching `confirm`/`planHash`: `success: true`, 10 fields written across
+the 2 B34 properties, and the post-write re-verification passed. The Owner then checked both
+live listings logged out — `/properties/cozy-1-bedroom` and `/properties/spacious-2-bedroom`
+each show only "500+ Mbps," no residual "340 Mbps." This follow-up PR deletes
+`src/app/api/admin/dev/fix-b34-speed/` and the route-only POST gate
+(`APPLY_B34_SPEED_CONFIRM`/`checkApplyRequest` and their tests) from
+`src/lib/b34-speed-fixes.ts`, same precedent as the drive-time route's removal. It keeps
+`planB34SpeedFixes` and the rest of the lib's tests; there is no CLI pass to update (this
+module was never wired into `scripts/fix-property-content.ts`). Lint, `tsc --noEmit`, and
+`npx vitest run` clean (243 files / 4,677 tests). No `.env` file was read; no `npm run
+build`/Prisma db-push/migrate/seed command was run; no schema change. See the
+[DEC-032 addendum](HIL_DECISIONS.md).
+
+---
+
 ## 2026-11-12, latest — Haven chat discovery + tracking, blog embed, blog-slug redirects, property-page SEO (feature/haven-chat-batch-111226)
 
 Area: Website | SEO
