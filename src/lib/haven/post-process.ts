@@ -893,6 +893,37 @@ export function fixDadalawPhrasing(text: string, lang: HavenLang): string {
   return text.replace(DADALAW_RE, replacement);
 }
 
+// ── Guest-count roundabout-filler guard (Tagalog/Batangueño) ────────────────
+
+/**
+ * Owner incident (2026-11-13): instead of just asking "Ilan po kayong bisita?", Haven said
+ * "Tinitingnan ko muna kung ilan tao kayo, para mahanap ang tamang property para sa inyo" —
+ * a roundabout filler sentence ("let me first see how many people you are, so I can find
+ * the right property for you") where a direct question would do. Whole-sentence swap for
+ * the plain ask, same pattern as `replaceTuklasinFamily`.
+ */
+const GUEST_COUNT_FILLER_RE = /\btinitingnan\s+ko\s+muna\s+kung\s+ilan\s+(?:na\s+)?tao\s+kayo\b/i;
+
+export function fixGuestCountFillerPhrasing(text: string, lang: HavenLang): string {
+  if (!GUEST_COUNT_FILLER_RE.test(text)) return text;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : GUEST_COUNT_ONLY_ASK.tl;
+  return tidyAfterSentenceDrop(replaceMatchingSentences(text, GUEST_COUNT_FILLER_RE, ask));
+}
+
+// ── Informal "mo" pronoun guard (Tagalog/Batangueño) ─────────────────────────
+
+/**
+ * Owner incident (2026-11-13): "... ang dating mo, tama ba?" used the informal second-
+ * person "mo" ("your") instead of the respectful "po"/"ninyo" register Haven otherwise
+ * keeps throughout (e.g. "Ilan po kayong bisita?"). Narrow, exact-phrase swap for the
+ * reported wording, same style as `fixUmabotGuestsPhrasing`/`fixTitiginganTypo`.
+ */
+const INFORMAL_DATING_MO_RE = /\bdating\s+mo\b/gi;
+
+export function fixInformalDatingMo(text: string): string {
+  return text.replace(INFORMAL_DATING_MO_RE, (match) => capitalizeLike(match, "dating ninyo"));
+}
+
 // ── Guest-count English-mixing guard (Tagalog/Batangueño) ───────────────────
 
 /**
@@ -1121,6 +1152,40 @@ export function dropStayLengthQuestionWhenSingleDate(
   return dropped.length > 0 ? `${dropped}\n\n${ask}` : ask;
 }
 
+// ── Guaranteed date acknowledgement for a date-only availability question ──
+
+/**
+ * Owner incident (2026-11-13): "May bakante po ba sa 28 ng Nobyembre?" — a date-only
+ * availability question with no guest count yet — got a reply that dropped the already-
+ * resolved date entirely: "Tinitingnan ko muna kung aling property ang gusto ninyo!"
+ * followed by the full listings overview (every property, base rate). The pre-resolved
+ * date context note (`dateContextNote`, chat-service.ts) already handed the model the
+ * exact range; a near-identical case the model got right ("2 adults, 28 Nov") always had a
+ * guest count attached, so a prompt instruction alone isn't reliable enough here either
+ * (same "prompt alone isn't trustworthy" precedent as `ensureCapacityStated`). `applies` is
+ * true only when a date WAS resolved pre-call, no guest count is known yet, no single
+ * property is already uniquely identified, and the message reads as an availability
+ * question (`isAvailabilityQuestion`, property-resolver.ts) — see chat-service.ts. A no-op
+ * when the reply already states the resolved stayLabel verbatim (as the Dec-12 case did —
+ * that reply's bug was wording, not a dropped date; see `fixGuestCountFillerPhrasing`/
+ * `fixInformalDatingMo` for that one).
+ */
+export function ensureDateAcknowledgedBeforeGuestCount(
+  text: string,
+  applies: boolean,
+  stayLabel: StayLabel | null,
+  lang: HavenLang,
+  isEnglish: boolean
+): string {
+  if (!applies || !stayLabel) return text;
+  const label = isEnglish ? stayLabel.en : stayLabel.tl;
+  if (text.includes(label)) return text;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : isEnglish ? GUEST_COUNT_ONLY_ASK.en : GUEST_COUNT_ONLY_ASK.tl;
+  return isEnglish
+    ? `Let me check ${label} — ${ask}`
+    : `Tingnan ko ang bakante para sa ${label} — ${ask}`;
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the
@@ -1141,16 +1206,27 @@ const TAGALOG_WORDS_IN_ENGLISH: Record<string, string> = {
   grupo: "group",
   kabayan: "friend",
   kaibigan: "friend",
+  bakante: "available",
   po: "",
 };
 
 /**
+ * Owner incident (2026-11-13): an explicit `lang: "en"` reply still said "Provisional lang
+ * ito, kukumpirmahin sa checkout." — the Tagalog standard caveat (`PROVISIONAL_CAVEAT_TL`)
+ * verbatim — instead of the English one. The model is told which caveat goes with which
+ * language (system-prompt.ts), but mixed them up live; this is the independent backstop,
+ * a literal swap for the exact Tagalog caveat text whenever the reply is in English.
+ */
+const PROVISIONAL_CAVEAT_TL_RE = /provisional\s+lang\s+ito,?\s*kukumpirmahin\s+sa\s+checkout\.?/gi;
+
+/**
  * Backstop for English mode: strips a small set of Tagalog words the model sometimes
  * leaks into an otherwise-English reply (see `isEnglishContext`), independent of the
- * system prompt's own "reply in English" instruction.
+ * system prompt's own "reply in English" instruction. Same incident as above: "bakante"
+ * (availability) leaked into an English reply ("Here's what's bakante for...").
  */
 export function stripTagalogWordsInEnglish(text: string): string {
-  let out = text;
+  let out = text.replace(PROVISIONAL_CAVEAT_TL_RE, PROVISIONAL_CAVEAT_EN);
   for (const [word, replacement] of Object.entries(TAGALOG_WORDS_IN_ENGLISH)) {
     out = out.replace(new RegExp(`\\b${word}\\b`, "gi"), (match) => (replacement ? capitalizeLike(match, replacement) : ""));
   }

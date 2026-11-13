@@ -1,6 +1,25 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-13 (Haven: capacity question always answered + "Libre" banned +
+> **Last updated:** 2026-11-13 (Haven: English replies stay English, Tagalog date-only
+> questions use the date, branch `fix/haven-lang-leak-111326`, DEC-029 addendum —
+> regressions found in a dev test pass right after the capacity/Libre/single-date fix below
+> shipped: an explicit `lang: "en"` reply leaked the Tagalog provisional caveat and the word
+> "bakante"; a Tagalog date-only availability question ("May bakante po ba sa 28 ng
+> Nobyembre?", no guest count yet) got the generic "which property do you want?" overview
+> answer instead of using the already-resolved date; and a near-identical case ("Dec 12")
+> got the right shape but awkward wording — a roundabout guest-count filler and the informal
+> "mo" pronoun instead of "ninyo"). See [Haven AI Chat → Implementation note, 2026-11-13
+> (English-leak/Tagalog date-only follow-up)](#haven-ai-chat) below for full detail — in
+> short: `stripTagalogWordsInEnglish()` gained a literal Tagalog-caveat swap and a
+> "bakante" → "available" entry; `fixLibreAvailabilityWording()`'s call site now skips
+> entirely in English mode; two narrow new backstops (`fixGuestCountFillerPhrasing()`,
+> `fixInformalDatingMo()`) fix the Dec-12-style wording bug; and a new
+> `isAvailabilityQuestion()` (`property-resolver.ts`) plus
+> `ensureDateAcknowledgedBeforeGuestCount()` (`post-process.ts`) guarantee the resolved date
+> is stated — never dropped for the generic overview — whenever an availability question has
+> no guest count yet and no single property is already uniquely identified. Lint/typecheck/
+> `vitest run` clean (243 files / 4,932 tests, 60 new); PR into `dev`, not merged.
+> Earlier, 2026-11-13 (Haven: capacity question always answered + "Libre" banned +
 > single-date asks only guest count, branch `fix/haven-tl-capacity-111326`, DEC-029
 > addendum — remaining bug after the dated-question handoff fix below, tested on
 > `dev.haveninlipa.com`: a Tagalog capacity question about a named listing ("Ilang tao ang
@@ -2996,6 +3015,45 @@ buttons and "Talk to a Human" link are unaffected either way.
   `chat-service.ts` right after `ensureDatesStated()`, before `ensureSingleNightNudge()` —
   so a reply can still get the "want to add more nights?" nudge even after its stay-length
   question is dropped.
+  **English-leak / Tagalog date-only follow-up** *(added 2026-11-13, DEC-029 addendum,
+  branch `fix/haven-lang-leak-111326` — remaining regressions found in a dev test pass
+  right after the capacity/Libre/single-date fix above shipped)*: an explicit `lang: "en"`
+  reply was still leaking Tagalog — the Tagalog provisional caveat
+  ("Provisional lang ito, kukumpirmahin sa checkout.") and the word "bakante" both turned
+  up verbatim in English replies — and a Tagalog date-only availability question with no
+  guest count yet ("May bakante po ba sa 28 ng Nobyembre?") got the generic "which property
+  do you want?" overview answer (every listing, base rates) instead of using the
+  already-resolved date; a near-identical case ("Dec 12") got the right general shape but
+  with awkward wording (a roundabout "Tinitingnan ko muna kung ilan tao kayo" filler and the
+  informal "mo" pronoun instead of "ninyo"). Four new backstops, all independent of the
+  corresponding `system-prompt.ts` instruction (the English-only-words rule gained a
+  "bakante" example and an explicit caveat-language pairing; `GUEST_COUNT_RULE` gained the
+  filler/pronoun ban; a new `AVAILABILITY_QUESTION_NO_GUEST_COUNT_RULE` tells the model not
+  to drop a resolved date for the generic overview framing):
+  `stripTagalogWordsInEnglish()` (English-mode only, unchanged call site) gained a literal
+  swap of the Tagalog caveat for `PROVISIONAL_CAVEAT_EN` and a `"bakante" → "available"`
+  entry in its word map. `fixLibreAvailabilityWording()`'s call site in `chat-service.ts`
+  is now skipped entirely in English mode (`libreFixed = englishMode ? umabotFixed :
+  fixLibreAvailabilityWording(umabotFixed)`) — belt-and-suspenders, since "libre" never
+  legitimately appears in English prose anyway. `fixGuestCountFillerPhrasing(text, lang)`
+  and `fixInformalDatingMo(text)` (Tagalog/Batangueño; run right after `fixDadalawPhrasing()`)
+  are narrow, exact-phrase swaps — the filler sentence becomes a bare "Ilan po kayong
+  bisita?"/"Ilan ga kayo?", and "dating mo" becomes "dating ninyo" — same style as
+  `fixUmabotGuestsPhrasing`/`fixTitiginganTypo`. `isAvailabilityQuestion(message)` (new
+  export, `property-resolver.ts`, same narrow-regex style as `isCapacityQuestion`) detects
+  an availability/vacancy question ("available", "vacant", "open", "bakante", "libre pa
+  ba") without matching an unrelated question that happens to mention a date (e.g. a
+  check-out-time question). `chat-service.ts` computes
+  `needsDateAckBeforeGuestCount` from it (date resolved pre-call, no guest count yet, no
+  single property already unique, `!isOverviewQuestion`) and `ensureDateAcknowledgedBeforeGuestCount(text, applies, stayLabel, lang, isEnglish)`
+  (`post-process.ts`) checks whether the reply already states the resolved `stayLabel`
+  verbatim; if not — the "dropped the date entirely" failure mode — the WHOLE reply is
+  replaced with a date-stating, guest-count-asking sentence, same "prompt alone isn't
+  reliable enough" precedent as `ensureCapacityStated`. A reply that already states the
+  `stayLabel` (the "Dec 12" case) is left untouched here — that bug was wording-only, fixed
+  by the two filler/pronoun backstops above instead. Run in `chat-service.ts` right after
+  `scrubAccessLeak()`, before the price-claim guard. Lint/typecheck/`vitest run` clean (243
+  files / 4,932 tests, 60 new); PR into `dev`, not merged.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);

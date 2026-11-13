@@ -6,6 +6,7 @@ import {
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
   isCapacityQuestion,
+  isAvailabilityQuestion,
   buildCapacityQuestionContextNote,
 } from "../property-resolver";
 
@@ -308,6 +309,24 @@ describe("isCapacityQuestion", () => {
   it("does not fire for an unrelated or plain availability question", () => {
     expect(isCapacityQuestion("May bakante ba sa 12/5?")).toBe(false);
     expect(isCapacityQuestion("What time is check-in?")).toBe(false);
+  });
+});
+
+describe("isAvailabilityQuestion (Owner incident, 2026-11-13)", () => {
+  it("detects an English availability question", () => {
+    expect(isAvailabilityQuestion("Is anything available on 11/28?")).toBe(true);
+    expect(isAvailabilityQuestion("Any vacant units this weekend?")).toBe(true);
+    expect(isAvailabilityQuestion("Is anything open 28/11?")).toBe(true);
+  });
+
+  it("detects a Tagalog/Batangueño availability question", () => {
+    expect(isAvailabilityQuestion("May bakante po ba sa 28 ng Nobyembre?")).toBe(true);
+    expect(isAvailabilityQuestion("Libre pa ba ang Cozy 1BR sa Dis 5?")).toBe(true);
+  });
+
+  it("does not fire for an unrelated question that happens to mention a date", () => {
+    expect(isAvailabilityQuestion("What time is check-in on 11/28?")).toBe(false);
+    expect(isAvailabilityQuestion("Magkano ang Cozy 1BR sa Dis 5?")).toBe(false);
   });
 });
 
