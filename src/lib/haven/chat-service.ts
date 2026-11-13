@@ -11,6 +11,7 @@ import {
   buildCapacityQuestionContextNote,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
+  isCapacityQuestion,
   resolveGuestPropertyMentionAcrossTurns,
 } from "./property-resolver";
 import {
@@ -41,6 +42,9 @@ import {
   fixFivePropertiesWording,
   fixTitiginganTypo,
   fixUmabotGuestsPhrasing,
+  fixLibreAvailabilityWording,
+  ensureCapacityStated,
+  dropStayLengthQuestionWhenSingleDate,
   isEnglishContext,
   stripTagalogWordsInEnglish,
   firstResolvedDateRange,
@@ -449,6 +453,17 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     resolvedDates !== null &&
     guestCount !== null &&
     guestCount > 0;
+  // Deterministic capacity-sentence guarantee (Nov 13 2026 incident — see
+  // ensureCapacityStated in post-process.ts): the prompt-level context note below is advisory
+  // only, and the model still sometimes dropped the capacity half of a compound question.
+  // Resolved here, once, from the same isCapacityQuestion/unique-resolution check the context
+  // note uses, so the post-process step after the model runs can guarantee the sentence is
+  // present regardless of what the model actually wrote.
+  const capacityQuestionListing =
+    propertyResolution.status === "unique" && isCapacityQuestion(latestMessage)
+      ? (Array.isArray(publicListings) ? publicListings : []).find((l) => l.slug === propertyResolution.slug)
+      : undefined;
+  const capacityQuestionLabel = propertyResolution.status === "unique" ? propertyResolution.label : "";
 
   const system =
     buildHavenSystemPrompt(lang) +
@@ -561,11 +576,24 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // DEC-029 addendum (2026-10-23): "umabot sa/ng N guests/tao" (max capacity) always reads
   // "kasya hanggang N tao" — see MAX_GUESTS_PHRASING_RULE in system-prompt.ts.
   const umabotFixed = fixUmabotGuestsPhrasing(titigenanFixed);
+  // Owner incident (2026-11-13): "libre" ("free of charge") must never stand in for
+  // "available"/"bakante" in an availability-sounding sentence.
+  const libreFixed = fixLibreAvailabilityWording(umabotFixed);
+  // Owner incident (2026-11-13): guarantee the capacity sentence is present whenever the
+  // guest asked about capacity for an already-resolved listing, regardless of whether the
+  // model's own text included it (see capacityQuestionListing/capacityQuestionLabel above).
+  const capacityStated = ensureCapacityStated(
+    libreFixed,
+    Boolean(capacityQuestionListing),
+    capacityQuestionLabel,
+    capacityQuestionListing?.maxGuests ?? 0,
+    englishMode
+  );
   // Independent backstop (access-guard.ts): whatever the model wrote, scrub any leaked
   // Wi-Fi/password/door-code-like text before any other guard runs on it. Detected against
   // the pre-scrub text so the Messenger button can still be forced on below.
-  const accessLeakDetected = containsAccessLeak(umabotFixed);
-  const accessScrubbed = scrubAccessLeak(umabotFixed, lang, guestMessages);
+  const accessLeakDetected = containsAccessLeak(capacityStated);
+  const accessScrubbed = scrubAccessLeak(capacityStated, lang, guestMessages);
   const priceChecked = limitToOneProvisional(enforcePriceClaims(accessScrubbed, allowedAmounts));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));
@@ -591,11 +619,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const bareUrlsStripped = stripBareUrls(strippedReply);
   const englishClean = englishMode ? stripTagalogWordsInEnglish(bareUrlsStripped) : bareUrlsStripped;
   const datesStated = ensureDatesStated(englishClean, resolvedRange, stayLabel, englishMode);
+  // Owner incident (2026-11-13): a single bare date already defaults to exactly 1 night —
+  // never ask how long the stay is in the same turn, only the still-unknown guest count.
+  const stayLengthDropped = dropStayLengthQuestionWhenSingleDate(
+    datesStated,
+    Boolean(resolvedDates?.singleDateDefault),
+    lang,
+    englishMode
+  );
   // Owner rule (2026-10-16 / 2026-10-19): once dates are resolved this turn, never let a
   // single-date default (e.g. "10/24") get re-questioned as "1 night lang ba?" — and always
   // invite the guest to add nights instead.
   const singleNightNudged = ensureSingleNightNudge(
-    datesStated,
+    stayLengthDropped,
     Boolean(resolvedDates?.singleDateDefault),
     lang,
     englishMode

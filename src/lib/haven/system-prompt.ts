@@ -105,6 +105,43 @@ const MAX_GUESTS_PHRASING_RULE =
   'tao" (fits up to N people) — never "umabot sa N guests" or "umabot ng N guests/tao".';
 
 /**
+ * Owner incident (Cedric, 2026-11-13 — DEC-029 addendum): Haven said "Libre ang Cozy 1BR
+ * Haven para sa Sabado..." when stating a listing IS available — "libre" means "free of
+ * charge", not "available"/"vacant", so it misreads as a pricing claim. Backed by
+ * `fixLibreAvailabilityWording` in post-process.ts.
+ */
+const AVAILABILITY_WORDING_RULE =
+  'When telling a guest a listing IS available for their dates, say "available" (English) ' +
+  'or "bakante" (Tagalog/Batangueño) — never "libre," which means "free of charge" and reads ' +
+  "as a pricing claim, not an availability one.";
+
+/**
+ * Owner incident (Cedric, 2026-11-13 — DEC-029 addendum): "Ilang tao ang kasya sa Cozy 1BR?
+ * May bakante ba sa 12/5?" skipped the capacity half entirely. A context note already hands
+ * the model the exact maxGuests for this case (`buildCapacityQuestionContextNote`,
+ * property-resolver.ts), but a prompt instruction alone proved unreliable — `ensureCapacityStated`
+ * in post-process.ts now guarantees the sentence is present regardless of what the model
+ * writes, so this rule is a courtesy, not the only guard.
+ */
+const CAPACITY_QUESTION_RULE =
+  'When the guest asks about a listing\'s capacity (e.g. "ilang tao ang kasya", "max guests", ' +
+  '"how many guests can it fit"), ALWAYS state that listing\'s exact capacity in your reply, ' +
+  'even if the same message also asks about availability or anything else — never answer only ' +
+  "the other part and skip the capacity question.";
+
+/**
+ * Owner incident (Cedric, 2026-11-13 — DEC-029 addendum): a bare single date already
+ * defaults to exactly 1 night (`SINGLE_DATE_NIGHT_RULE` above) — Haven still asked "ilan po
+ * kayo, at gaano katagal ng stay ninyo?" (how many guests, AND how long is your stay), which
+ * contradicts that default. Backed by `dropStayLengthQuestionWhenSingleDate` in
+ * post-process.ts.
+ */
+const NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE =
+  "When a guest named only a single date with no check-out of their own, never ALSO ask how " +
+  'long they\'re staying ("gaano katagal", "how long will you stay") — the 1-night default ' +
+  "above already answers that. If the guest count is still unknown, ask only for that.";
+
+/**
  * Owner rules 1 & 2 (Cedric, 2026-10-16). A date range is industry-standard parsed —
  * first date is check-in, second is check-out — and the server already resolves it
  * (resolve_dates, or the pre-resolved date context note) before Haven ever needs to ask
@@ -300,12 +337,15 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
     NO_YEAR_QUESTION_RULE,
     NUMERIC_DATE_RULE,
     SINGLE_DATE_NIGHT_RULE,
+    NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE,
     NEXT_WEEKEND_RULE,
     "- When replying in English, never mix in Tagalog words (e.g. \"grupo\", \"po\", " +
       "\"kabayan\") — English replies stay English-only.",
     GUEST_COUNT_RULE,
     TITINGNAN_SPELLING_RULE,
     MAX_GUESTS_PHRASING_RULE,
+    AVAILABILITY_WORDING_RULE,
+    CAPACITY_QUESTION_RULE,
     "- When a guest's single message asks more than one question (e.g. a listing's " +
       "capacity AND its availability for a date), answer EVERY question asked — never " +
       "skip one to answer only the other.",

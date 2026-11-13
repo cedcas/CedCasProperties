@@ -42,6 +42,9 @@ import {
   dropDateReconfirmationQuestions,
   dropWhatYearQuestions,
   ensureSingleNightNudge,
+  fixLibreAvailabilityWording,
+  ensureCapacityStated,
+  dropStayLengthQuestionWhenSingleDate,
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
@@ -1266,6 +1269,107 @@ describe("fixUmabotGuestsPhrasing", () => {
   it("is a no-op when already saying kasya hanggang", () => {
     const input = "Kasya hanggang 15 tao ang Mickey in Lipa.";
     expect(fixUmabotGuestsPhrasing(input)).toBe(input);
+  });
+});
+
+describe("fixLibreAvailabilityWording (Owner incident, 2026-11-13)", () => {
+  it('rewrites "Libre ang X para sa..." to "Bakante ang X para sa..."', () => {
+    const input = "Oo, may bakante! Libre ang Cozy 1BR Haven para sa Sabado, Dis 5 → Linggo, Dis 6, 2026 (check-out) · 1 gabi.";
+    expect(fixLibreAvailabilityWording(input)).toContain("Bakante ang Cozy 1BR Haven para sa");
+    expect(fixLibreAvailabilityWording(input)).not.toMatch(/\blibre\b/i);
+  });
+
+  it("preserves capitalization of the matched word", () => {
+    expect(fixLibreAvailabilityWording("libre ang bahay para sa petsang gusto n'yo")).toContain("bakante ang bahay");
+  });
+
+  it('fires near "check-out"/"check-in" too, not just "para sa"', () => {
+    expect(fixLibreAvailabilityWording("Libre ang Spacious 2BR check-in Sabado.")).toContain("Bakante ang Spacious 2BR");
+  });
+
+  it("leaves an unrelated, legitimate \"libre\" (free of charge) untouched", () => {
+    const input = "Libre ang parking sa bahay.";
+    expect(fixLibreAvailabilityWording(input)).toBe(input);
+  });
+
+  it("is a no-op when the text never says libre", () => {
+    const input = "Bakante ang Cozy 1BR Haven para sa Sabado.";
+    expect(fixLibreAvailabilityWording(input)).toBe(input);
+  });
+});
+
+describe("ensureCapacityStated (Owner incident, 2026-11-13)", () => {
+  it("prepends the Tagalog capacity sentence when applies is true and it's missing", () => {
+    const input = "Oo, may bakante! Ilan po kayong bisita?";
+    const result = ensureCapacityStated(input, true, "Cozy 1BR Haven", 5, false);
+    expect(result).toContain("Kasya hanggang 5 tao ang Cozy 1BR Haven.");
+    expect(result).toContain(input);
+  });
+
+  it("prepends the English capacity sentence when applies is true and it's missing", () => {
+    const input = "Yes, it's available! How many guests?";
+    const result = ensureCapacityStated(input, true, "Cozy 1BR Haven", 5, true);
+    expect(result).toBe("Cozy 1BR Haven sleeps up to 5.\n\n" + input);
+  });
+
+  it("is a no-op when applies is false", () => {
+    const input = "Oo, may bakante! Ilan po kayong bisita?";
+    expect(ensureCapacityStated(input, false, "Cozy 1BR Haven", 5, false)).toBe(input);
+  });
+
+  it('does not duplicate when the reply already says "kasya hanggang N tao"', () => {
+    const input = "Kasya hanggang 5 tao ang Cozy 1BR Haven. Oo, may bakante!";
+    expect(ensureCapacityStated(input, true, "Cozy 1BR Haven", 5, false)).toBe(input);
+  });
+
+  it('does not duplicate when the reply already says "sleeps up to N"', () => {
+    const input = "Cozy 1BR Haven sleeps up to 5. Yes, it's available!";
+    expect(ensureCapacityStated(input, true, "Cozy 1BR Haven", 5, true)).toBe(input);
+  });
+
+  it("is a no-op when maxGuests is 0 (unresolved listing)", () => {
+    const input = "Oo, may bakante!";
+    expect(ensureCapacityStated(input, true, "Cozy 1BR Haven", 0, false)).toBe(input);
+  });
+});
+
+describe("dropStayLengthQuestionWhenSingleDate (Owner incident, 2026-11-13)", () => {
+  it("drops the Tagalog compound question, keeping only a guest-count ask", () => {
+    const input =
+      "Tinitingnan ko muna kung available kami sa Disyembre 12! Pero kailangan ko munang " +
+      "malaman: ilan po kayo, at gaano katagal ng stay ninyo?";
+    const result = dropStayLengthQuestionWhenSingleDate(input, true, "tl", false);
+    expect(result).not.toMatch(/gaano katagal/i);
+    expect(result).toMatch(/ilan po kayong bisita\?/i);
+  });
+
+  it("drops an English compound question, keeping only a guest-count ask", () => {
+    const input = "Got it, Dec 12! How many guests, and how long will you stay?";
+    const result = dropStayLengthQuestionWhenSingleDate(input, true, "en", true);
+    expect(result).not.toMatch(/how long/i);
+    expect(result).toContain("How many guests?");
+  });
+
+  it("keeps an existing separate guest-count sentence intact when dropping the stay-length one", () => {
+    const input = "Ilan po kayong bisita? Gaano katagal ang stay ninyo?";
+    const result = dropStayLengthQuestionWhenSingleDate(input, true, "tl", false);
+    expect(result).toBe("Ilan po kayong bisita?");
+  });
+
+  it("is a no-op when applies is false", () => {
+    const input = "Ilan po kayo, at gaano katagal ng stay ninyo?";
+    expect(dropStayLengthQuestionWhenSingleDate(input, false, "tl", false)).toBe(input);
+  });
+
+  it("is a no-op when there's no stay-length question to drop", () => {
+    const input = "Ilan po kayong bisita?";
+    expect(dropStayLengthQuestionWhenSingleDate(input, true, "tl", false)).toBe(input);
+  });
+
+  it("uses the Batangueño-only guest-count ask for lang 'btg'", () => {
+    const input = "Ilan ga kayo, at gaano katagal ng stay ninyo?";
+    const result = dropStayLengthQuestionWhenSingleDate(input, true, "btg", false);
+    expect(result).toMatch(/ilan ga kayo/i);
   });
 });
 
