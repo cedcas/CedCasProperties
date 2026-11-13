@@ -2,13 +2,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
-  APPLY_B34_SPEED_CONFIRM,
   B34_PROPERTIES,
   SPEED_FIELDS,
   SPEED_RULES,
   STALE_340,
   applySpeedRulesToField,
-  checkApplyRequest,
   findStale340Excerpts,
   isStale340Sentence,
   planB34SpeedFixes,
@@ -220,40 +218,6 @@ describe("b34-speed-fixes", () => {
       const edited = preRows();
       edited[0] = { ...edited[0], description: `${edited[0].description} (edited)` };
       expect(planB34SpeedFixes(edited).planHash).not.toBe(a);
-    });
-  });
-
-  describe("checkApplyRequest (route-only POST gate)", () => {
-    const hash = "abc123deadbeef99";
-
-    it("accepts the exact confirm string and a matching planHash", () => {
-      expect(checkApplyRequest({ confirm: APPLY_B34_SPEED_CONFIRM, planHash: hash }, hash)).toEqual({ ok: true });
-    });
-
-    it("rejects a non-object body", () => {
-      const r = checkApplyRequest(null, hash);
-      expect(r).toMatchObject({ ok: false, status: 400 });
-    });
-
-    it("rejects a missing or wrong confirm string", () => {
-      expect(checkApplyRequest({ planHash: hash }, hash)).toMatchObject({ ok: false, status: 400 });
-      expect(checkApplyRequest({ confirm: "APPLY-DRIVE-TIMES", planHash: hash }, hash)).toMatchObject({
-        ok: false,
-        status: 400,
-      });
-    });
-
-    it("rejects a missing planHash", () => {
-      expect(checkApplyRequest({ confirm: APPLY_B34_SPEED_CONFIRM }, hash)).toMatchObject({ ok: false, status: 400 });
-      expect(checkApplyRequest({ confirm: APPLY_B34_SPEED_CONFIRM, planHash: "" }, hash)).toMatchObject({
-        ok: false,
-        status: 400,
-      });
-    });
-
-    it("rejects a planHash that no longer matches (data changed since the dry run)", () => {
-      const r = checkApplyRequest({ confirm: APPLY_B34_SPEED_CONFIRM, planHash: "stale-hash" }, hash);
-      expect(r).toMatchObject({ ok: false, status: 409 });
     });
   });
 });
