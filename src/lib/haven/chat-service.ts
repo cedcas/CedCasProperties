@@ -8,6 +8,7 @@ import { buildHavenSystemPrompt, type HavenLang } from "./system-prompt";
 import { maskPii } from "./masking";
 import { resolveDates, buildStayLabel, todayContextNote, manilaYear, type ResolvedDates } from "./dates";
 import {
+  buildCapacityQuestionContextNote,
   buildPropertyContextNote,
   dropUnknownPropertyClaims,
   resolveGuestPropertyMentionAcrossTurns,
@@ -30,6 +31,8 @@ import {
   shortenPropertyNamesInText,
   shortPropertyLabels,
   fixDadalawPhrasing,
+  fixGuestCountEnglishMixing,
+  stripEnglishFillerWordsInTagalog,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
   replaceSikatSaInyo,
@@ -174,6 +177,61 @@ export interface HavenChatResponse {
 
 const NO_ANSWER_FALLBACK =
   "Let me get you to a real person for this one — message us at https://m.me/haveninlipa, or use the contact page.";
+
+interface FindStayToolResultOption {
+  properties: Array<{ slug: string; name: string; guests: number; quote: { total: number } | null; bookingLink: string }>;
+  combinedTotal: number;
+}
+
+interface FindStayToolResult {
+  options?: FindStayToolResultOption[];
+  stayLabel?: { en: string; tl: string; btg: string } | null;
+  message?: string;
+}
+
+/**
+ * Deterministic last-resort reply built directly from THIS turn's own `find_stay` tool
+ * result — used only when the model's own final text came back empty (see the
+ * `NO_ANSWER_FALLBACK` fallback below). Root-cause fix for the Nov 13 2026 incident: a
+ * dated availability question ("which listing fits 2 adults on 11/28?") got the generic
+ * "let me get you to a real person" handoff through the blog embed (lang: "auto"), while
+ * the identical text via a direct API call with lang: "en" got a quote — nothing forced the
+ * model to settle on an answer, so it was free to exhaust MAX_TOOL_ROUNDS without producing
+ * final text even after find_stay already returned real availability data. This guarantees
+ * a genuinely answerable dated question is never handed off just because the model itself
+ * went quiet; booking links are still collected normally downstream (`collectBookingLinks`),
+ * and `shortenPropertyNamesInText` (called on `text` right after this) still shortens the
+ * raw property names embedded here, since they're the exact strings the tool returned.
+ */
+function buildDeterministicFindStayReply(
+  lang: HavenLang,
+  guestMessages: string,
+  toolExchangesThisTurn: ToolExchange[]
+): string | null {
+  const exchange = [...toolExchangesThisTurn].reverse().find((t) => t.name === "find_stay");
+  if (!exchange) return null;
+  const result = exchange.result as FindStayToolResult;
+  const english = isEnglishContext(lang, guestMessages);
+
+  if (!Array.isArray(result.options) || result.options.length === 0) {
+    return english
+      ? "Sorry, nothing fits that on those dates right now — want to try different dates?"
+      : "Paumanhin, walang bakante para diyan sa petsang iyon — gusto n'yo bang subukan ng ibang petsa?";
+  }
+
+  const stay = result.stayLabel ? (english ? result.stayLabel.en : result.stayLabel.tl) : "";
+  const intro = english
+    ? `Here's what's open${stay ? ` for ${stay}` : ""}:`
+    : `Narito ang bakante${stay ? ` para sa ${stay}` : ""}:`;
+  const lines = result.options.slice(0, 5).map((opt) => {
+    const names = opt.properties.map((p) => p.name).join(" + ");
+    const total = Number(opt.combinedTotal);
+    const totalText = Number.isFinite(total) ? ` — ₱${total.toLocaleString("en-US")} total` : "";
+    return `**${names}**${totalText}`;
+  });
+  const nudge = english ? "Want me to help you book one?" : "Gusto n'yo na bang i-book?";
+  return [intro, ...lines, nudge].join("\n");
+}
 
 function lastUserMessage(messages: ChatRequestBody["messages"]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -378,6 +436,19 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   // question — see overview-intent.ts — so this specific question can never be answered
   // from memory, in addition to the listingsContextNote below and the system-prompt rule.
   const isOverviewQuestion = isPropertyOverviewMessage(latestMessage);
+  // Root-cause fix (Nov 13 2026 incident, see buildDeterministicFindStayReply above): a
+  // dated availability/fit question ("which listing fits 2 adults on 11/28?", "is anything
+  // open 28/11 for 2 adults?") must never be left to the model's own judgment on whether to
+  // call find_stay — force it on round 0 whenever a date AND a guest count are already
+  // resolved this turn and no single property is already uniquely identified (a uniquely
+  // resolved property already gets its own "call get_quote now" instruction from
+  // buildPropertyContextNote above, which this must not contradict).
+  const shouldForceFindStay =
+    !isOverviewQuestion &&
+    propertyResolution.status !== "unique" &&
+    resolvedDates !== null &&
+    guestCount !== null &&
+    guestCount > 0;
 
   const system =
     buildHavenSystemPrompt(lang) +
@@ -390,7 +461,12 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
       checkIn: resolvedDates?.checkIn,
       checkOut: resolvedDates?.checkOut,
       guests: guestCount,
-    });
+    }) +
+    buildCapacityQuestionContextNote(
+      latestMessage,
+      propertyResolution,
+      Array.isArray(publicListings) ? publicListings : []
+    );
   const messages: ProviderMessage[] = body.messages.map((m) => ({ role: m.role, content: m.content }));
   const tools = getToolDefinitions();
 
@@ -403,7 +479,12 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   let text = "";
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const forceToolName = round === 0 && isOverviewQuestion ? "list_properties" : undefined;
+    const forceToolName =
+      round === 0 && isOverviewQuestion
+        ? "list_properties"
+        : round === 0 && shouldForceFindStay
+          ? "find_stay"
+          : undefined;
     const result = await provider.chat({ system, messages, tools, maxTokens: MAX_OUTPUT_TOKENS, forceToolName });
     inputTokens += result.usage.inputTokens;
     outputTokens += result.usage.outputTokens;
@@ -428,7 +509,9 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     }
   }
 
-  if (!text.trim()) text = NO_ANSWER_FALLBACK;
+  if (!text.trim()) {
+    text = buildDeterministicFindStayReply(lang, guestMessages, toolExchangesThisTurn) ?? NO_ANSWER_FALLBACK;
+  }
 
   const englishMode = isEnglishContext(lang, guestMessages);
 
@@ -449,10 +532,16 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
   const noBudgetAsk = stripBudgetQuestions(affordFixed);
   const kidsClaimFixed = removeKidsFreeClaims(noBudgetAsk, lang);
   const dadalawFixed = fixDadalawPhrasing(kidsClaimFixed, lang);
+  // Owner incident (2026-11-13): never mix the bare English word "guests" into an
+  // otherwise-Tagalog guest-count question, or other stray English filler ("ang meaning
+  // nito", "Pero first,") into an otherwise-Tagalog/Batangueño reply — independent backstop
+  // for GUEST_COUNT_RULE in system-prompt.ts.
+  const guestCountWordingFixed = fixGuestCountEnglishMixing(dadalawFixed, englishMode);
+  const englishFillerFixed = stripEnglishFillerWordsInTagalog(guestCountWordingFixed, englishMode);
   // Owner incident (2026-10-16): ban deep/literary Tagalog ("tutuklasin ng tama sa
   // checkout") in favor of Haven's plain, conversational voice — independent backstop for
   // system-prompt.ts's PLAIN_LANGUAGE_RULE.
-  const tuklasinFixed = replaceTuklasinFamily(dadalawFixed, englishMode);
+  const tuklasinFixed = replaceTuklasinFamily(englishFillerFixed, englishMode);
   // Owner incident (2026-10-23): ban "sikat sa inyo/iyo/'yo" ("what appeals to you") — not a
   // real Tagalog/Batangueño idiom — independent backstop for system-prompt.ts's
   // PLAIN_LANGUAGE_RULE, same wiring as replaceTuklasinFamily above.

@@ -201,4 +201,40 @@ describe("ChatWidget — embedded (blog) mode", () => {
     expect(link?.getAttribute("href")).toContain("utm_campaign=ask-haven");
     expect(link?.getAttribute("target")).toBe("_top");
   });
+
+  // Nov 13 2026 incident: a headless test inside the blog embed sent a dated question
+  // with the widget's default language ("Auto") and got a generic handoff, while the
+  // identical text via a direct API call with lang: "en" got a quote. This test documents
+  // the actual client-side contract that investigation confirmed: the embed sends
+  // `lang: "auto"` by default, same as the main site — there is no separate client-side
+  // keyword matcher or embed-only code path that could itself produce a handoff. The real
+  // fix is server-side (chat-service.ts forcing find_stay for a dated+guest-count message,
+  // and the property-resolver false-positive fix) — see chat-service.test.ts.
+  it("sends lang: 'auto' by default on a free-text message through the embed", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      json: async () => ({ mode: "ai", reply: "Here's what's open!", links: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const host = mount({ chatSurface: "blog", embedded: true });
+    const input = host.querySelector('input[aria-label="Message Haven"]') as HTMLInputElement;
+    const form = input.closest("form")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "Hi Haven, which listing fits 2 adults on 11/28?"
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith("/api/haven/chat", expect.objectContaining({ method: "POST" }));
+    const [, init] = fetchMock.mock.calls[0]!;
+    const body = JSON.parse(init!.body as string);
+    expect(body.lang).toBe("auto");
+  });
 });

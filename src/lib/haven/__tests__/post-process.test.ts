@@ -21,6 +21,8 @@ import {
   enforceTermsOfAddress,
   shortenPropertyNamesInText,
   fixDadalawPhrasing,
+  fixGuestCountEnglishMixing,
+  stripEnglishFillerWordsInTagalog,
   replaceTuklasinFamily,
   simplifyDeepTagalogWords,
   replaceSikatSaInyo,
@@ -973,7 +975,11 @@ describe("shortenPropertyNamesInText", () => {
 
 describe("fixDadalawPhrasing", () => {
   it("replaces an 'ilang guests ang dadalaw' question in Tagalog mode", () => {
-    expect(fixDadalawPhrasing("Sige, ilang guests ang dadalaw sa inyo?", "tl")).toBe("Sige, Ilang guests kayo?");
+    expect(fixDadalawPhrasing("Sige, ilang guests ang dadalaw sa inyo?", "tl")).toBe("Sige, Ilang tao po kayo?");
+  });
+
+  it("replaces an 'ilang tao ang dadalo' question in Tagalog mode", () => {
+    expect(fixDadalawPhrasing("Sige, ilang tao ang dadalo sa inyo?", "tl")).toBe("Sige, Ilang tao po kayo?");
   });
 
   it("replaces it with the Batangueño form in btg mode", () => {
@@ -983,6 +989,47 @@ describe("fixDadalawPhrasing", () => {
   it("leaves text with no 'dadalaw' phrasing untouched", () => {
     const input = "Ilang guests kayo?";
     expect(fixDadalawPhrasing(input, "tl")).toBe(input);
+  });
+});
+
+describe("fixGuestCountEnglishMixing (owner incident, 2026-11-13)", () => {
+  it("replaces 'Ilang guests kayo?' with plain Tagalog outside English mode", () => {
+    expect(fixGuestCountEnglishMixing("Sige lang, Ilang guests kayo?", false)).toBe("Sige lang, Ilang tao po kayo?");
+  });
+
+  it("is case-insensitive", () => {
+    expect(fixGuestCountEnglishMixing("ilang guest kayo?", false)).toBe("Ilang tao po kayo?");
+  });
+
+  it("leaves it untouched in English mode", () => {
+    const input = "Ilang guests kayo?";
+    expect(fixGuestCountEnglishMixing(input, true)).toBe(input);
+  });
+});
+
+describe("stripEnglishFillerWordsInTagalog (owner incident, 2026-11-13)", () => {
+  it("drops 'ang meaning nito'", () => {
+    const input = "Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi ang meaning nito.";
+    expect(stripEnglishFillerWordsInTagalog(input, false)).toBe(
+      "Sabado, Dis 12 → Linggo, Dis 13, 2026 (check-out) · 1 gabi."
+    );
+  });
+
+  it("replaces 'Pero first,' with 'Pero una'", () => {
+    expect(stripEnglishFillerWordsInTagalog("Pero first, ilang tao ang mag-stay?", false)).toBe(
+      "Pero una, ilang tao ang mag-stay?"
+    );
+  });
+
+  it("replaces a trailing 'first,' with 'una,'", () => {
+    expect(stripEnglishFillerWordsInTagalog("Sabihin mo sa akin first, ang petsa.", false)).toBe(
+      "Sabihin mo sa akin una, ang petsa."
+    );
+  });
+
+  it("leaves English-mode text untouched", () => {
+    const input = "But first, how many guests?";
+    expect(stripEnglishFillerWordsInTagalog(input, true)).toBe(input);
   });
 });
 

@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-11-13, latest — Haven: dated-question handoff fix + Tagalog guest-count wording (fix/haven-dates-tagalog-111326)
+
+Area: Website
+
+Status: Built and tested on branch `fix/haven-dates-tagalog-111326` (based on `origin/dev`);
+lint, `tsc --noEmit`, and the full `npx vitest run` suite clean (243 files / 4,791 tests
+across all three timezone projects, 36 new). No `.env` file was read; no `npm run
+build`/Prisma `db push`/`migrate`/`seed` command was run; no schema change, no migration.
+Opened as a PR into `dev` (not merged).
+
+### Outcome
+Fixed a live/API incident where a dated availability question through the blog embed
+(`lang: "auto"`, the `ChatWidget` default) got the generic "let me get you to a real
+person" handoff with no AI answer, while the identical text via a direct API call with
+`lang: "en"` got a real quote — plus a related case that pushed the wrong (11-guest)
+listing for a 2-adult group, and a Tagalog capacity+availability question that skipped the
+capacity half entirely and mixed English words into Tagalog prose. See the
+[2026-11-13 DEC-029 addendum](HIL_DECISIONS.md) for the full root-cause writeup. In short:
+
+1. **`property-resolver.ts`'s listing matcher had a bare-digit false positive** — a date's
+   own digit (the "11" in "11/28") could alone "match" a listing whose `maxGuests` happens
+   to be 11, with zero real name overlap, since a listing's slug carries its capacity as a
+   literal numeric token. Fixed by excluding bare-digit query tokens from the plain overlap
+   score and gating the existing capacity-disambiguation bonus on an already-nonzero score.
+2. **Nothing forced a `find_stay` tool call for a dated+guest-count question** — the model
+   was free to exhaust its tool-call budget without ever producing final text. Fixed with a
+   new `shouldForceFindStay` (same `forceToolName` mechanism as the 2026-10-22
+   property-overview fix) plus a deterministic `buildDeterministicFindStayReply()` fallback
+   built straight from the tool result, used only in place of the generic handoff.
+3. **`dates.ts` widened to understand day-first numeric dates** ("28/11", day-first only
+   when the first number can't be a month), day-before-month phrasing ("28 Nov", "sa 28 ng
+   Nobyembre"), and Tagalog month abbreviations ("Nob 28").
+4. **Tagalog guest-count wording**: "dadalo" joins "dadalaw" as a banned word; the
+   guest-count question's own suggested phrasing no longer mixes in the English word
+   "guests" ("Ilang tao po kayo?", not "Ilang guests kayo?"); stray English filler ("ang
+   meaning nito", "Pero first,") is stripped from Tagalog replies; a capacity question
+   combined with an availability question in one message now always gets both parts
+   answered, via a new capacity-question context note stating the resolved property's
+   exact `maxGuests`.
+
+---
+
 ## 2026-11-13, latest — Production B34 internet-speed correction run; temporary route removed (chore/remove-b34-route-111326)
 
 Area: Website | Content
