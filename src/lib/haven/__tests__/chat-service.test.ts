@@ -1553,3 +1553,123 @@ describe("handleHavenChat — dated availability questions never hand off (fix/h
     expect(result.reply).toMatch(/walang bakante/i);
   });
 });
+
+// Owner incident (2026-11-13, remaining bug after fix/haven-dates-tagalog-111326): a
+// compound "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" question still
+// skipped the capacity half, "Libre" ("free of charge") was used to mean "available", and a
+// single-date default got an extra, contradictory "how long is your stay" question.
+describe("handleHavenChat — capacity always answered, 'Libre' banned, single-date asks only guest count (2026-11-13)", () => {
+  it.each([
+    ["tl", "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?"],
+    ["tl", "Hello po, ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?"],
+  ])("guarantees the capacity sentence even when the model's own text omits it (lang %s): %s", async (lang, message) => {
+    providerChat.mockResolvedValue({
+      text:
+        "Oo, may bakante! Bakante ang Cozy 1BR Haven para sa Sabado, Dis 5 → Linggo, Dis 6, " +
+        "2026 (check-out) · 1 gabi.\nIlan po kayong bisita? Para malaman ko ang presyo para sa inyo.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(validBody({ lang, messages: [{ role: "user", content: message }] }), "1.2.3.4");
+
+    expect(result.reply).toMatch(/kasya hanggang 5 tao/i);
+    expect(result.reply).toContain("Cozy 1BR Haven");
+  });
+
+  it("guarantees the English capacity sentence too", async () => {
+    providerChat.mockResolvedValue({
+      text: "Yes, it's available for Dec 5 → Dec 6, 2026 (check-out) · 1 night.\nHow many guests?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "How many people fit in Cozy 1BR? Is it open on 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toMatch(/Cozy 1BR Haven sleeps up to 5/i);
+  });
+
+  it("does not duplicate the capacity sentence when the model already stated it correctly", async () => {
+    providerChat.mockResolvedValue({
+      text: "Kasya hanggang 5 tao ang Cozy 1BR Haven. Oo, may bakante! Ilan po kayong bisita?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply?.match(/kasya hanggang 5 tao/gi)?.length).toBe(1);
+  });
+
+  it('bans "Libre" to mean "available" and rewrites it to "Bakante"', async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Oo, may bakante! Libre ang Cozy 1BR Haven para sa Sabado, Dis 5 → Linggo, Dis 6, " +
+        "2026 (check-out) · 1 gabi.\nIlan po kayong bisita? Para malaman ko ang presyo para sa inyo.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/\blibre\b/i);
+    expect(result.reply).toMatch(/bakante ang cozy 1br haven/i);
+  });
+
+  it("asks only the guest count, never the stay length too, when only a single date was given (Tagalog)", async () => {
+    providerChat.mockResolvedValue({
+      text:
+        "Tinitingnan ko muna kung available kami sa Disyembre 12! Pero kailangan ko munang " +
+        "malaman: ilan po kayo, at gaano katagal ng stay ninyo?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "tl", messages: [{ role: "user", content: "May available ba kayo sa Disyembre 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/gaano katagal/i);
+    expect(result.reply).toMatch(/ilan po kayong bisita\?/i);
+    expect(result.reply).toContain("Pwede pong dagdagan ang gabi — sabihin n'yo lang.");
+  });
+
+  it("asks only the guest count, never the stay length too, when only a single date was given (English)", async () => {
+    providerChat.mockResolvedValue({
+      text: "Got it, Dec 12! How many guests, and how long will you stay?",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ lang: "en", messages: [{ role: "user", content: "Are you available on December 12?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toMatch(/how long/i);
+    expect(result.reply).toContain("How many guests?");
+    expect(result.reply).toContain("Want to add more nights? Just tell me.");
+  });
+});

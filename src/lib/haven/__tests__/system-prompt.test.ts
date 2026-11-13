@@ -412,4 +412,25 @@ describe("buildHavenSystemPrompt", () => {
       expect(prompt).toMatch(/exceptions are the Messenger handoff rule and the official social links rule/i);
     });
   });
+
+  // Owner incident (Cedric, 2026-11-13): a capacity question's answer was still being
+  // skipped despite the capacity-question context note, "Libre" ("free of charge") was used
+  // to mean "available", and a single-date default got an extra, contradictory "how long is
+  // your stay" question.
+  describe("capacity/availability/single-date wording (Cedric, 2026-11-13 follow-up)", () => {
+    const prompt = buildHavenSystemPrompt("en");
+
+    it('bans "libre" for availability, naming "available"/"bakante" as correct', () => {
+      expect(prompt).toMatch(/never "libre," which means "free of charge"/i);
+      expect(prompt).toMatch(/say "available" \(English\) or "bakante" \(Tagalog\/Batangueño\)/i);
+    });
+
+    it("requires a capacity question to always be answered, even in a compound question", () => {
+      expect(prompt).toMatch(/ALWAYS state that listing's exact capacity in your reply/i);
+    });
+
+    it("bans asking how long the stay is when only a single date was given", () => {
+      expect(prompt).toMatch(/never ALSO ask how long they're staying/i);
+    });
+  });
 });

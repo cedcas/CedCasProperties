@@ -1024,6 +1024,103 @@ export function fixUmabotGuestsPhrasing(text: string): string {
   return text.replace(UMABOT_GUESTS_RE, (match, num: string) => capitalizeLike(match, `kasya hanggang ${num} tao`));
 }
 
+// ── "Libre" availability-wording guard ──────────────────────────────────────
+
+/**
+ * Owner incident (2026-11-13): Haven said "Libre ang Cozy 1BR Haven para sa Sabado..." when
+ * stating a listing IS available for the requested dates — "libre" means "free of charge",
+ * not "available"/"vacant", so it reads as a pricing claim rather than an availability one.
+ * The correct word is "bakante" (Tagalog/Batangueño) — see the few-shot block in
+ * system-prompt.ts, which already always uses "bakante" for this. Scoped to a sentence that
+ * already sounds like an availability statement (near "para sa", a check-in/check-out/date
+ * word, or "available"/"bakante"/"vacant" itself) so an unrelated, legitimate "libre" (e.g.
+ * "libre ang parking") is left untouched.
+ */
+const LIBRE_AVAILABILITY_RE =
+  /\blibre\b(?=[^.!?\n]{0,80}\b(?:para\s+sa|check-?in|check-?out|gabi|petsa|available|bakante|vacant)\b)/gi;
+
+export function fixLibreAvailabilityWording(text: string): string {
+  return text.replace(LIBRE_AVAILABILITY_RE, (match) => capitalizeLike(match, "bakante"));
+}
+
+// ── Guaranteed capacity sentence (deterministic backstop) ───────────────────
+
+/**
+ * Owner incident (2026-11-13): even with `buildCapacityQuestionContextNote`
+ * (property-resolver.ts) handing the model the exact `maxGuests` for a uniquely-resolved
+ * listing and instructing it not to skip the capacity half of a compound question, the model
+ * still sometimes answered only the availability half and dropped the capacity question
+ * entirely — a prompt instruction alone wasn't reliable enough. This deterministic backstop
+ * guarantees the sentence is present regardless of what the model wrote: `applies` is
+ * computed in chat-service.ts from the same `isCapacityQuestion`/unique-resolution check the
+ * context note uses, so this only ever fires when a capacity question was actually asked
+ * about an already-resolved listing.
+ */
+function capacityAlreadyStated(text: string, maxGuests: number): boolean {
+  const n = String(maxGuests);
+  const re = new RegExp(
+    `kasya\\s+hanggang\\s+${n}\\b|hanggang\\s+${n}\\s+tao\\b|sleeps?\\s+up\\s+to\\s+${n}\\b|` +
+      `fits?\\s+up\\s+to\\s+${n}\\b|max(?:imum)?\\D{0,12}${n}\\b|\\b${n}\\s+(?:guests?|tao|katao|pax)\\s+max\\b`,
+    "i"
+  );
+  return re.test(text);
+}
+
+export function ensureCapacityStated(
+  text: string,
+  applies: boolean,
+  listingLabel: string,
+  maxGuests: number,
+  isEnglish: boolean
+): string {
+  if (!applies || !maxGuests) return text;
+  if (capacityAlreadyStated(text, maxGuests)) return text;
+  const sentence = isEnglish
+    ? `${listingLabel} sleeps up to ${maxGuests}.`
+    : `Kasya hanggang ${maxGuests} tao ang ${listingLabel}.`;
+  return `${sentence}\n\n${text}`;
+}
+
+// ── Single-date default: ask guest count only, never stay length too ───────
+
+/**
+ * Owner incident (2026-11-13): asked "Tinitingnan ko muna kung available kami sa Disyembre
+ * 12! Pero kailangan ko munang malaman: ilan po kayo, at gaano katagal ng stay ninyo?" — a
+ * bare single date ("Disyembre 12") already defaults to exactly 1 night
+ * (`resolveDates`'s `singleDateDefault`, see dates.ts and `SINGLE_DATE_NIGHT_RULE` in
+ * system-prompt.ts), so asking how long the stay is contradicts the resolver's own default
+ * and must never be asked in the same turn — only the still-unknown guest count should be
+ * asked. `ensureSingleNightNudge` already states the 1-night default and invites more
+ * nights; this backstop only ever fires when `applies` (the same `singleDateDefault` flag)
+ * is true, and re-adds a bare guest-count question if dropping the compound question
+ * happened to remove it too.
+ */
+const STAY_LENGTH_QUESTION_RE =
+  /\bgaano\s+katagal\b[^?!.\n]*\b(?:stay|titigil|titira)\b[^?!.\n]*|\bhow\s+long\s+(?:will\s+you\s+stay|are\s+you\s+staying|is\s+your\s+stay)\b[^?!.\n]*/i;
+
+const GUEST_COUNT_ASK_RE =
+  /\bilan\s+(?:po\s+)?(?:ga\s+)?kayo(?:ng)?\b|\bilang\s+(?:tao|bisita|katao|guests?)\b|\bhow\s+many\s+guests?\b/i;
+
+const GUEST_COUNT_ONLY_ASK = {
+  en: "How many guests?",
+  tl: "Ilan po kayong bisita?",
+  btg: "Ilan ga kayo?",
+} as const;
+
+export function dropStayLengthQuestionWhenSingleDate(
+  text: string,
+  applies: boolean,
+  lang: HavenLang,
+  isEnglish: boolean
+): string {
+  if (!applies) return text;
+  if (!STAY_LENGTH_QUESTION_RE.test(text)) return text;
+  const dropped = tidyAfterSentenceDrop(replaceMatchingSentences(text, STAY_LENGTH_QUESTION_RE, ""));
+  if (GUEST_COUNT_ASK_RE.test(dropped)) return dropped;
+  const ask = lang === "btg" ? GUEST_COUNT_ONLY_ASK.btg : isEnglish ? GUEST_COUNT_ONLY_ASK.en : GUEST_COUNT_ONLY_ASK.tl;
+  return dropped.length > 0 ? `${dropped}\n\n${ask}` : ask;
+}
+
 // ── English-mode guard: no stray Tagalog words ──────────────────────────────
 
 /** Common Tagalog function words — their presence in the guest's own message means the

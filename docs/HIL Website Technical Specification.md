@@ -1,6 +1,24 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-13 (Haven: dated-question handoff + Tagalog guest-count wording,
+> **Last updated:** 2026-11-13 (Haven: capacity question always answered + "Libre" banned +
+> single-date asks only guest count, branch `fix/haven-tl-capacity-111326`, DEC-029
+> addendum — remaining bug after the dated-question handoff fix below, tested on
+> `dev.haveninlipa.com`: a Tagalog capacity question about a named listing ("Ilang tao ang
+> kasya sa Cozy 1BR? May bakante ba sa 12/5?") still skipped the capacity half even with the
+> capacity-question context note in place, "Libre" ("free of charge") was used to mean
+> "available," and a single bare date ("Disyembre 12") with no guest count yet got an extra,
+> contradictory "how long is your stay" question stacked onto the guest-count ask). See
+> [Haven AI Chat → Implementation note, 2026-11-13 (capacity/Libre/single-date
+> follow-up)](#haven-ai-chat) below for full detail — in short: a prompt instruction alone
+> (the 2026-11-13 `buildCapacityQuestionContextNote()` fix, below) wasn't reliable enough, so
+> a new deterministic `ensureCapacityStated()` post-process backstop now guarantees the
+> capacity sentence is present regardless of what the model actually wrote ("Kasya hanggang
+> N tao ang <listing>."/"<listing> sleeps up to N."); a new `fixLibreAvailabilityWording()`
+> rewrites "Libre" to "Bakante" whenever it appears in an availability-sounding sentence; and
+> a new `dropStayLengthQuestionWhenSingleDate()` drops the stay-length question and re-adds a
+> bare guest-count ask whenever `resolveDates()`'s `singleDateDefault` is true. Lint/
+> typecheck/`vitest run` clean (243 files / 4,872 tests, 81 new); PR into `dev`, not merged.
+> Earlier, 2026-11-13 (Haven: dated-question handoff + Tagalog guest-count wording,
 > branch `fix/haven-dates-tagalog-111326`, DEC-029 addendum — live/API incident: a dated
 > availability question through the blog embed's default `lang: "auto"` got the generic
 > "let me get you to a real person" handoff with no AI answer, and a separate case pushed
@@ -2480,6 +2498,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   `maxGuests` directly and reminding the model never to skip the capacity question just
   because the same message also asks about something else. Backed by a new general
   system-prompt rule (below) that a compound question must always get every part answered.
+  **This prompt-level note alone proved unreliable** *(found 2026-11-13, branch
+  `fix/haven-tl-capacity-111326` — same exact Owner-reported message still skipped the
+  capacity half live on `dev.haveninlipa.com`)*: see `post-process.ts`'s
+  `ensureCapacityStated()` below for the deterministic fix — `chat-service.ts` now computes
+  `capacityQuestionListing`/`capacityQuestionLabel` from the same `isCapacityQuestion()` +
+  unique-resolution check this note uses, and passes them to `ensureCapacityStated()` so the
+  capacity sentence is guaranteed in the final reply regardless of what the model wrote.
 - `system-prompt.ts` — the fixed, server-side persona (a warm, chatty Batangueña host) and
   hard rules (facts only from this turn's tool results, except the owner-approved facts
   above; totals always carry the standard provisional/checkout caveat — EN "This is
@@ -2503,7 +2528,16 @@ buttons and "Talk to a Human" link are unaffected either way.
   correctly, never the typo "titigingan"; state a listing's maximum capacity in Tagalog/
   Batangueño as "kasya hanggang N tao" (fits up to N people), never "umabot sa N guests"/
   "umabot ng N guests/tao" *(these two rules added 2026-10-23, DEC-029 addendum,
-  `TITINGNAN_SPELLING_RULE`/`MAX_GUESTS_PHRASING_RULE`)*; a house rule that's identical everywhere, e.g. quiet hours, gets a
+  `TITINGNAN_SPELLING_RULE`/`MAX_GUESTS_PHRASING_RULE`)*; say "available"/"bakante" when a
+  listing IS available, never "libre" (free of charge); ALWAYS state a listing's exact
+  capacity when asked, even inside a compound question; never ask how long a stay is when
+  the guest named only a single date with no check-out of their own — the 1-night default
+  already answers that, ask only the still-unknown guest count *(these three rules added
+  2026-11-13, DEC-029 addendum, branch `fix/haven-tl-capacity-111326`,
+  `AVAILABILITY_WORDING_RULE`/`CAPACITY_QUESTION_RULE`/
+  `NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE` — each backed by an independent
+  `post-process.ts` guarantee below, since a prompt instruction alone proved unreliable for
+  the capacity case)*; a house rule that's identical everywhere, e.g. quiet hours, gets a
   direct general answer rather than "which house?"; an early-check-in/late-checkout
   question with a specific date calls `check_early_late` first *(the last five rules added
   2026-10-14, owner-guardrails pass)*; an `ambiguous: true` tool result (property-resolver.ts,
@@ -2919,6 +2953,49 @@ buttons and "Talk to a Human" link are unaffected either way.
   capitalization, backing `system-prompt.ts`'s new `MAX_GUESTS_PHRASING_RULE` — all three
   independent of, and backing, the corresponding prompt instruction, same
   `capitalizeLike()` pattern as the other word-level guards above.
+  **Capacity guarantee / "Libre" ban / single-date guest-count-only follow-up** *(added
+  2026-11-13, DEC-029 addendum, branch `fix/haven-tl-capacity-111326` — remaining bug after
+  the same-day dated-question handoff fix above, tested live on `dev.haveninlipa.com`)*:
+  three new, independent backstops, all wired into `chat-service.ts`'s post-process chain.
+  `fixLibreAvailabilityWording(text)` rewrites "libre" ("free of charge") to "bakante"
+  whenever it appears within 80 characters of an availability-sounding word ("para sa",
+  "check-in"/"check-out", "gabi", "petsa", "available", "bakante", "vacant"), preserving
+  capitalization — scoped narrowly so an unrelated, legitimate "libre" (e.g. "libre ang
+  parking") is left untouched; backs the new `AVAILABILITY_WORDING_RULE` in
+  `system-prompt.ts`. Run right after `fixUmabotGuestsPhrasing()`.
+  `ensureCapacityStated(text, applies, listingLabel, maxGuests, isEnglish)` is the
+  deterministic fix for the capacity-question bug the 2026-11-13 context note above
+  (`buildCapacityQuestionContextNote()`, `property-resolver.ts`) was supposed to close but
+  didn't reliably — the exact same Owner-reported message ("Ilang tao ang kasya sa Cozy
+  1BR? May bakante ba sa 12/5?") still skipped the capacity half live, proving a prompt
+  instruction alone isn't enough. `chat-service.ts` now computes `applies`
+  (`isCapacityQuestion(latestMessage)` AND the property is uniquely resolved this turn —
+  the same two checks the context note itself uses) and the resolved listing's label/
+  `maxGuests` once, before the model is ever called; after generation, if the reply doesn't
+  already state that exact capacity number in a capacity-sounding phrase ("kasya hanggang
+  N", "sleeps/fits up to N", "max... N", "N guests/tao/pax max" — checked case-
+  insensitively so a correct model answer is never duplicated), the guaranteed sentence is
+  prepended: "Kasya hanggang N tao ang `<listing>`." (Tagalog/Batangueño) or "`<listing>`
+  sleeps up to N." (English). Run right after `fixLibreAvailabilityWording()`, so the
+  prepended sentence itself is never re-mangled by an earlier step and flows through every
+  later guard (price checks, terms of address, link extraction, etc.) like the rest of the
+  reply. `dropStayLengthQuestionWhenSingleDate(text, applies, lang, isEnglish)` fixes a
+  second reported bug in the same incident — a bare single date with no guest count yet
+  ("Disyembre 12") got Haven asking BOTH "ilan po kayo" (how many guests — still genuinely
+  unknown) AND "gaano katagal ng stay ninyo" (how long is your stay — already answered by
+  `resolveDates()`'s own 1-night `singleDateDefault`, see `dates.ts` above and
+  `SINGLE_DATE_NIGHT_RULE`). `applies` is that same `singleDateDefault` flag; when true and
+  the reply contains a stay-length question ("gaano katagal... stay/titigil/titira", "how
+  long will you stay/are you staying/is your stay"), the whole sentence/bullet line
+  containing it is dropped (same `replaceMatchingSentences()`/`tidyAfterSentenceDrop()`
+  pattern as `dropDateReconfirmationQuestions()`) — and because that sentence often also
+  carries the still-needed guest-count question in the same breath ("ilan po kayo, at
+  gaano katagal..."), a bare guest-count ask ("Ilan po kayong bisita?"/"How many guests?"/
+  btg "Ilan ga kayo?") is appended back whenever the drop removed it too. Backs the new
+  `NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE` in `system-prompt.ts`. Run in
+  `chat-service.ts` right after `ensureDatesStated()`, before `ensureSingleNightNudge()` —
+  so a reply can still get the "want to add more nights?" nudge even after its stay-length
+  question is dropped.
 - `masking.ts` — `maskPii()` strips emails, PH phone numbers (`+63`/`09xx`), and card-like
   digit runs from text **before** it is ever written to `HavenChatTranscript`.
 - `rate-limit.ts` — `hashIp()` (sha256 + `HAVEN_IP_SALT`, the raw IP never stored);

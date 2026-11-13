@@ -806,8 +806,64 @@ None. Amends DEC-002 (meaning of `pending`).
 ## DEC-029 — Haven AI answers only from tool results, ships flag-off by default, and is capped and killable
 
 Date: 2026-10-14
-Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, 2026-10-23 on `hil-pm/haven-wording-102326`, 2026-10-26 on `hil-pm/haven-socials-102626`, and 2026-11-13 on `fix/haven-dates-tagalog-111326` (not new decisions — see notes below).
+Status: Active — built on `feature/haven-ai-h1-101426`, `HAVEN_AI_ENABLED` unset in every environment at merge time (default OFF). Implementation refined 2026-10-14 on `fix/haven-ai-polish-101426` and again on `fix/haven-ai-guardrails-101426`, 2026-10-15 on `fix/haven-ai-freetext-reset-101526`, 2026-10-16 on `fix/haven-ai-checkout-date-101626`, 2026-10-22 on `hil-pm/haven-property-list-102226`, 2026-10-23 on `hil-pm/haven-listing-grouping-102326` and `hil-pm/haven-sikat-102326`, 2026-10-23 on `hil-pm/haven-wording-102326`, 2026-10-26 on `hil-pm/haven-socials-102626`, 2026-11-13 on `fix/haven-dates-tagalog-111326`, and 2026-11-13 on `fix/haven-tl-capacity-111326` (not new decisions — see notes below).
 Area: Website
+
+### Implementation note (2026-11-13 capacity question always answered + "Libre" banned + single-date asks only guest count — addendum)
+Remaining bug after the "dated-question handoff + Tagalog guest-count wording" fix
+immediately below, found testing live on `dev.haveninlipa.com /api/haven/chat` with
+`lang: "tl"`:
+1. **The exact same Owner-reported capacity question still skipped the capacity half.**
+   "Ilang tao ang kasya sa Cozy 1BR? May bakante ba sa 12/5?" (and the same question with a
+   "Hello po," greeting prefixed) answered only the availability half, even though the
+   capacity-question context note below (`buildCapacityQuestionContextNote()`) already
+   handed the model the property's exact `maxGuests` and told it not to skip the question.
+   A prompt instruction alone proved unreliable for this case. Fixed with a new
+   deterministic `ensureCapacityStated()` backstop in `post-process.ts`: `chat-service.ts`
+   now resolves, once, the same `isCapacityQuestion(latestMessage)` AND unique-property
+   check the context note itself uses (`capacityQuestionListing`/`capacityQuestionLabel`),
+   and after the model generates its reply, if that reply doesn't already state the exact
+   capacity number in a capacity-sounding phrase ("kasya hanggang N", "sleeps/fits up to
+   N", "max... N", "N guests/tao/pax max" — checked so a correct answer is never
+   duplicated), the guaranteed sentence is prepended: "Kasya hanggang N tao ang
+   `<listing>`." (Tagalog/Batangueño) or "`<listing>` sleeps up to N." (English). This now
+   makes the guarantee independent of model behavior entirely, rather than relying on the
+   model reliably following an instruction.
+2. **"Libre" was used to mean "available."** The same live reply said "Libre ang Cozy 1BR
+   Haven para sa Sabado, Dis 5 → Linggo, Dis 6, 2026 (check-out) · 1 gabi" — "libre" means
+   "free of charge," not "available"/"vacant" ("bakante"), so it reads as a pricing claim.
+   Fixed with a new `fixLibreAvailabilityWording()` backstop (and a paired
+   `AVAILABILITY_WORDING_RULE` prompt instruction): "libre" is rewritten to "bakante"
+   whenever it appears within 80 characters of an availability-sounding word ("para sa",
+   "check-in"/"check-out", "gabi", "petsa", "available", "bakante", "vacant"), so an
+   unrelated, legitimate "libre" (e.g. "libre ang parking," free parking) is left
+   untouched.
+3. **A single-date default got an extra, contradictory stay-length question.** "Tinitingnan
+   ko muna kung available kami sa Disyembre 12! Pero kailangan ko munang malaman: ilan po
+   kayo, at gaano katagal ng stay ninyo?" asked BOTH the still-unknown guest count AND how
+   long the stay is — but a bare single date with no check-out of the guest's own already
+   defaults to exactly 1 night (`resolveDates()`'s `singleDateDefault`, unchanged from the
+   2026-10-19 rule), so the stay-length half contradicts that default and should never be
+   asked. Fixed with a new `dropStayLengthQuestionWhenSingleDate()` backstop (and a paired
+   `NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE` prompt instruction): when
+   `singleDateDefault` is true and the reply contains a stay-length question ("gaano
+   katagal... stay/titigil/titira", "how long will you stay/are you staying/is your
+   stay"), the whole sentence containing it is dropped; since that sentence often also
+   carries the still-needed guest-count question in the same breath ("ilan po kayo, at
+   gaano katagal..."), a bare guest-count-only ask ("Ilan po kayong bisita?"/"How many
+   guests?"/btg "Ilan ga kayo?") is re-added if the drop removed it too. The existing
+   `ensureSingleNightNudge()`'s "want to add more nights?" line is unaffected and still
+   runs afterward.
+- **Tests:** suite 4,791 → 4,872 (81 new): `fixLibreAvailabilityWording` (EN marker words,
+  capitalization, the unrelated "libre ang parking" no-op), `ensureCapacityStated` (EN/TL
+  sentence construction, no-op when `applies` is false, no duplicate when already stated
+  correctly in either phrasing, no-op when `maxGuests` is 0), `dropStayLengthQuestionWhenSingleDate`
+  (EN/TL compound-question drop + guest-count-ask fallback, no-op when `applies` is false,
+  no-op when there's no stay-length question, keeps an existing separate guest-count
+  sentence intact, the Batangueño-only ask), the three new `system-prompt.ts` rules, and
+  end-to-end `chat-service.test.ts` cases reproducing the exact reported messages (EN and
+  TL) through the full `handleHavenChat()` pipeline. `npm run lint`, `tsc --noEmit`, and
+  `vitest run` all clean (243 files / 4,872 tests).
 
 ### Implementation note (2026-11-13 dated-question handoff + Tagalog guest-count wording — addendum)
 Production/live-API incident (Nov 13, 2026): a headless test inside the blog embed

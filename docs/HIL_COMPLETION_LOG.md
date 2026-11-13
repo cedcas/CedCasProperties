@@ -4,7 +4,52 @@
 
 ---
 
-## 2026-11-13, latest — Haven: dated-question handoff fix + Tagalog guest-count wording (fix/haven-dates-tagalog-111326)
+## 2026-11-13, latest — Haven: capacity question always answered, "Libre" banned, single-date asks only guest count (fix/haven-tl-capacity-111326)
+
+Area: Website
+
+Status: Built and tested on branch `fix/haven-tl-capacity-111326` (based on `origin/dev`,
+which includes the dated-question handoff PR below); lint, `tsc --noEmit`, and the full
+`npx vitest run` suite clean (243 files / 4,872 tests across all three timezone projects,
+81 new). No `.env` file was read; no `npm run build`/Prisma `db push`/`migrate`/`seed`
+command was run; no schema change, no migration. Opened as a PR into `dev` (not merged).
+
+### Outcome
+Fixed a remaining bug found live on `dev.haveninlipa.com` right after the dated-question
+handoff fix below shipped: the same Owner-reported Tagalog capacity question still skipped
+the capacity half of the answer even with a context note already in place, "Libre" (free
+of charge) was used to mean "available," and a single bare date with no guest count yet
+got an extra, contradictory "how long is your stay" question stacked onto the guest-count
+ask. See the [2026-11-13 DEC-029 addendum](HIL_DECISIONS.md) for the full root-cause
+writeup. In short:
+
+1. **The capacity-question context note alone wasn't reliable** — "Ilang tao ang kasya sa
+   Cozy 1BR? May bakante ba sa 12/5?" still skipped the capacity half live, even though
+   `buildCapacityQuestionContextNote()` (from the same-day prior fix) handed the model the
+   exact `maxGuests`. Fixed with a new deterministic `ensureCapacityStated()` post-process
+   backstop: `chat-service.ts` resolves the same `isCapacityQuestion()` + unique-property
+   check the context note uses, and — if the final reply doesn't already state that exact
+   capacity number — prepends the guaranteed sentence ("Kasya hanggang N tao ang
+   `<listing>`." / "`<listing>` sleeps up to N.") regardless of what the model wrote.
+2. **"Libre" was used to mean "available"** — "Libre ang Cozy 1BR Haven para sa Sabado..."
+   reads as "free of charge," not "available"/"vacant." New `fixLibreAvailabilityWording()`
+   rewrites "libre" to "bakante" whenever it appears in an availability-sounding sentence,
+   leaving an unrelated, legitimate "libre" (e.g. "libre ang parking") untouched.
+3. **A single-date default got an extra, contradictory stay-length question** — "Pero
+   kailangan ko munang malaman: ilan po kayo, at gaano katagal ng stay ninyo?" asked how
+   long the stay is even though a bare single date already defaults to exactly 1 night.
+   New `dropStayLengthQuestionWhenSingleDate()` drops that question when
+   `resolveDates()`'s `singleDateDefault` is true, re-adding a bare guest-count ask if the
+   drop removed it too.
+
+Each fix pairs a `system-prompt.ts` instruction (`AVAILABILITY_WORDING_RULE`,
+`CAPACITY_QUESTION_RULE`, `NO_STAY_LENGTH_QUESTION_WITH_SINGLE_DATE_RULE`) with the
+independent, deterministic `post-process.ts` backstop described above — the capacity case
+in particular showed a prompt instruction alone isn't trustworthy enough on its own.
+
+---
+
+## 2026-11-13 — Haven: dated-question handoff fix + Tagalog guest-count wording (fix/haven-dates-tagalog-111326)
 
 Area: Website
 
