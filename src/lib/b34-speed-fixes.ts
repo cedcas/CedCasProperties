@@ -6,9 +6,10 @@
 // correction established. B38 (Mickey in Lipa, "up to 520 Mbps") is untouched
 // and out of scope for this module.
 //
-// Caller: the TEMPORARY DEC-012 route /api/admin/dev/fix-b34-speed, which does
-// the Prisma I/O; this module has no Prisma or database access so it can be
-// unit tested offline against frozen fixtures.
+// Caller: this module has no Prisma or database access so it can be unit
+// tested offline against frozen fixtures. (The TEMPORARY DEC-012 route
+// /api/admin/dev/fix-b34-speed that used it to do the Prisma I/O ran once on
+// production 2026-11-13 and was then removed — see the DEC-032 addendum.)
 //
 // Same TARGETED-replacement shape as src/lib/drive-time-fixes.ts (DEC-016
 // extension): a hardcoded, reviewed table of exact old → new substrings per
@@ -348,40 +349,4 @@ export function planB34SpeedFixes(rows: PropertyContentRow[]): SpeedPlan {
   }
 
   return { changes, updates, planHash: computePlanHash(changes) };
-}
-
-// ── Route-only POST gate ────────────────────────────────────────────────────
-// Used only by the TEMPORARY route /api/admin/dev/fix-b34-speed. Kept here
-// (not in the route file) so it's unit-testable without a Next.js request
-// object — same precedent as the old DRIVE_TIME_CONFIRM/checkApplyRequest in
-// src/lib/drive-time-fixes.ts. Deleted together with the route and this
-// function's tests in the follow-up PR once the Owner's run is confirmed;
-// planB34SpeedFixes above stays.
-export const APPLY_B34_SPEED_CONFIRM = "APPLY-B34-SPEED";
-
-export type ApplyGateResult = { ok: true } | { ok: false; status: 400 | 409; error: string };
-
-export function checkApplyRequest(body: unknown, currentPlanHash: string): ApplyGateResult {
-  if (!body || typeof body !== "object") {
-    return {
-      ok: false,
-      status: 400,
-      error: `JSON body required: {"confirm":"${APPLY_B34_SPEED_CONFIRM}","planHash":"<from GET>"}`,
-    };
-  }
-  const { confirm, planHash } = body as { confirm?: unknown; planHash?: unknown };
-  if (confirm !== APPLY_B34_SPEED_CONFIRM) {
-    return { ok: false, status: 400, error: `Missing or wrong confirm — expected "${APPLY_B34_SPEED_CONFIRM}".` };
-  }
-  if (typeof planHash !== "string" || planHash.length === 0) {
-    return { ok: false, status: 400, error: "Missing planHash — run GET first and pass its planHash." };
-  }
-  if (planHash !== currentPlanHash) {
-    return {
-      ok: false,
-      status: 409,
-      error: `planHash mismatch (sent ${planHash}, current ${currentPlanHash}) — the data changed since the dry run. Re-run GET and review again.`,
-    };
-  }
-  return { ok: true };
 }
