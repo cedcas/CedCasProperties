@@ -20,10 +20,11 @@
 //     seed).
 //
 // Caller: this module has no Prisma or database access so it can be unit
-// tested offline against frozen fixtures — see src/lib/b34-speed-fixes.ts for
-// the precedent this follows (DEC-012/DEC-016 pattern): GET = dry-run plan +
-// planHash, POST = confirm string + planHash, one transaction, post-write
-// re-verification, never a schema change.
+// tested offline against frozen fixtures. (The TEMPORARY DEC-012 route
+// /api/admin/dev/fix-listing-presentation that used it to do the Prisma I/O
+// ran once on production 2026-11-15 — planHash 914e8a633bfc9051, 23 fields
+// across all 5 properties, verification ok — and was then removed. See the
+// DEC-034 addendum.)
 //
 // Three independent correction passes live in this one module because the
 // task asked for ONE route covering all of them: a whole-field `name`
@@ -446,38 +447,4 @@ export function planListingPresentationFixes(rows: PropertyContentRow[]): Presen
   }
 
   return { changes, updates, planHash: computePlanHash(changes) };
-}
-
-// ── Route-only POST gate ────────────────────────────────────────────────────
-// Used only by the TEMPORARY route /api/admin/dev/fix-listing-presentation.
-// Same precedent as DRIVE_TIME_CONFIRM / APPLY_B34_SPEED_CONFIRM. Deleted
-// together with the route once the Owner's run is confirmed;
-// planListingPresentationFixes above stays.
-export const APPLY_LISTING_PRESENTATION_CONFIRM = "APPLY-LISTING-PRESENTATION";
-
-export type ApplyGateResult = { ok: true } | { ok: false; status: 400 | 409; error: string };
-
-export function checkApplyRequest(body: unknown, currentPlanHash: string): ApplyGateResult {
-  if (!body || typeof body !== "object") {
-    return {
-      ok: false,
-      status: 400,
-      error: `JSON body required: {"confirm":"${APPLY_LISTING_PRESENTATION_CONFIRM}","planHash":"<from GET>"}`,
-    };
-  }
-  const { confirm, planHash } = body as { confirm?: unknown; planHash?: unknown };
-  if (confirm !== APPLY_LISTING_PRESENTATION_CONFIRM) {
-    return { ok: false, status: 400, error: `Missing or wrong confirm — expected "${APPLY_LISTING_PRESENTATION_CONFIRM}".` };
-  }
-  if (typeof planHash !== "string" || planHash.length === 0) {
-    return { ok: false, status: 400, error: "Missing planHash — run GET first and pass its planHash." };
-  }
-  if (planHash !== currentPlanHash) {
-    return {
-      ok: false,
-      status: 409,
-      error: `planHash mismatch (sent ${planHash}, current ${currentPlanHash}) — the data changed since the dry run. Re-run GET and review again.`,
-    };
-  }
-  return { ok: true };
 }

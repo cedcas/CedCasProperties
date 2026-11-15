@@ -4,7 +4,35 @@
 
 ---
 
-## 2026-11-15, latest — Extend listing-presentation route: seoTitle speeds, plain taglines, names (content/extend-listing-presentation-111526)
+## 2026-11-15, latest — Production run of the listing-presentation correction, and the temporary route removed (chore/remove-listing-presentation-route-111526)
+
+Area: Website
+
+Status: Built and tested on `chore/remove-listing-presentation-route-111526` (from
+`origin/dev`, which equals production `main` at `76a22f0` / release PR #117). Lint,
+`tsc --noEmit`, and `npx vitest run` clean (273 files / 5,148 tests). No `.env` file was
+read; no `npm run build`/Prisma `db`/`migrate`/`seed` command was run; no schema change, no
+migration, no database touched by this PR. Opened as a PR into `dev`, not merged.
+
+### Outcome
+On 2026-11-15 the Owner (Cedric) ran the TEMPORARY DEC-012 route
+`/api/admin/dev/fix-listing-presentation` once on production: GET dry run, planHash
+`914e8a633bfc9051`, then POST returned `success: true`, 23 fields written across all 5
+properties, and verification ok with 0 remaining. Logged-out check the same day on
+`haveninlipa.com`: all five listing pages show the plain names and "best for" taglines, no
+"520 Mbps", no "400 Mbps", no keyword taglines.
+
+This PR deletes `src/app/api/admin/dev/fix-listing-presentation/` and the route-only POST
+gate (`APPLY_LISTING_PRESENTATION_CONFIRM`, `checkApplyRequest`) from
+`src/lib/listing-presentation-fixes.ts`, plus the route's own test file
+(`fix-listing-presentation-route.test.ts`) — same precedent as the `fix-b34-speed`/
+`fix-drive-times` route removals. `planListingPresentationFixes` and the rest of the lib's
+unit tests (DB-free) stay. See [DEC-034](HIL_DECISIONS.md)'s 2026-11-15 addendum for the
+full production-run record.
+
+---
+
+## 2026-11-15 — Extend listing-presentation route: seoTitle speeds, plain taglines, names (content/extend-listing-presentation-111526)
 
 Area: Website
 
