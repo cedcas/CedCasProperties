@@ -1,6 +1,10 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-13 (Haven: English replies stay English, Tagalog date-only
+> **Last updated:** 2026-11-15 (DEC-034 product-led listing presentation: canonical
+> display names + "best for", featured reviews, walkthrough-video slot, booking CTA
+> simplification, 500+ Mbps consistency, no guest-facing Airbnb comparison; branch
+> `feature/product-led-listing-fixes-111526`, built on `dev`, not merged). Prior:
+> 2026-11-13 (Haven: English replies stay English, Tagalog date-only
 > questions use the date, branch `fix/haven-lang-leak-111326`, DEC-029 addendum —
 > regressions found in a dev test pass right after the capacity/Libre/single-date fix below
 > shipped: an explicit `lang: "en"` reply leaked the Tagalog provisional caveat and the word
@@ -1813,7 +1817,7 @@ Added 2026-08-16 (`9a8e47c` / `6a0da20`) when `/properties` and `/about` both ne
 |---|---|
 | `PUBLIC_LISTING_GATE` | `{ isActive: true, pricePerNight: { gt: 0 } }` — the definition of "a listing the public can see". `pricePerNight` of 0 means *not yet configured*; publishing it would put a ₱0 rate on a page, and its `/book` URL redirects back to the property page anyway. |
 | `PUBLIC_LISTING_ORDER` | `{ createdAt: "desc" }` — newest first, the order every public surface lists in. |
-| `buildShortNames()` | Display names for prose. `Property.name` carries an SEO suffix after a pipe ("Cozy 1BR Haven \| Solar Power•Netflix•Wi-Fi•5 Pax") that reads badly mid-sentence. Returns the first segment, falling back to the second when several listings share the first — which is what keeps the three `Mickey in Lipa` configurations distinguishable. Derived, not hardcoded, so renaming a listing in admin can't leave a stale label on a page. |
+| `buildShortNames()` | Display names for prose. `Property.name` carries an SEO suffix after a pipe ("Cozy 1BR Haven \| Solar Power•Netflix•Wi-Fi•5 Pax") that reads badly mid-sentence. Returns the first segment, falling back to the second when several listings share the first — which is what keeps the three `Mickey in Lipa` configurations distinguishable. Derived, not hardcoded, so renaming a listing in admin can't leave a stale label on a page. Deliberately **not** overridden with the DEC-034 canonical map inside this function — Haven AI (`src/lib/haven/*`) also calls it directly for chat wording, and DEC-034 only needed to change the *public page* display, not Haven's tested short-name output. A caller that wants the canonical name applies `getDisplayName()` (`src/lib/property-display.ts`) on top of this function's result — see `/properties`'s own call site. |
 | `numberWord()` / `plural()` | "five" for 5; `plural(1, "bedroom")` → "bedroom". |
 | `getPublicListings()` / `getPublicListingCount()` | The gated query and count, wrapped in `unstable_cache` with a **1-hour** revalidate and a `public-listings` tag (`c2c5e6b`). Used by `/properties`, `/about`, `/weddings-accommodation` and `/staycation`. **Caching is on the query, not the response**: an App Router page can't set its own `Cache-Control`, and a `next.config.ts` header loses to the framework's no-store on Vercel — see the SEO spec for the full finding. ⚠️ Values round-trip as JSON, so Prisma `Decimal` returns a **string** and `DateTime` an **ISO string** while the TS types still claim `Decimal`/`Date`. Read new fields through `Number(...)` / `JSON.parse(...)`, never off the raw value. |
 | `getPublicListingGroups()` | *(2026-08-17, `7fa3421`)* Every `InventoryGroupMember` row as `{ propertyId, inventoryGroupId }`, on the same cache window and `public-listings` tag. Ungated on purpose — membership is joined in memory against whatever the gate returned, so a deactivated listing simply has no row to match. |
@@ -1831,6 +1835,43 @@ Two rules the implementation encodes, both of which are easy to get wrong:
 Ordered largest house first and tie-broken by slug so renders are deterministic. Tested rather than eyeballed because the arithmetic is a promise a couple plans a wedding around, and because Hostinger blocks DB access from laptops **and** CI — the same constraint that shaped `planDerivedBlocks`.
 
 ⚠️ **Three older surfaces still inline a byte-identical gate** — the homepage grid ([Properties.tsx](../src/components/sections/Properties.tsx)), the [sitemap](../src/app/sitemap.ts) and the [feed](../src/app/api/properties.json/route.ts). They were deliberately left untouched (each extra file changed is extra deploy risk on a live booking site). **Anything new should import from `listings.ts` rather than adding a fifth copy**, and those three can adopt the constant whenever they're next edited.
+
+## Listing presentation (DEC-034, 2026-11-15)
+
+Product-led fix: plain display names + a "best for" line, no guest-facing Airbnb
+comparison, consistent 500+ Mbps Wi-Fi wording, featured reviews above the fold, an
+optional walkthrough-video slot, and a listing-page booking CTA that no longer waits on
+a rules checkbox. None of this required a schema change or a DB write for the display
+layer — `Property.name`/`tagline` are still the keyword-stuffed production values; the
+public pages override them in code.
+
+| Piece | Where | Behavior |
+|---|---|---|
+| Canonical display name + "best for" | [src/lib/property-display.ts](../src/lib/property-display.ts) | `CANONICAL_PROPERTY_DISPLAY`, keyed by **slug** (stable across `dev`'s `[DEVDB]`-prefixed names and production) — not derived from `Property.name`. `getDisplayName(slug, fallback)` / `getBestFor(slug)`. Read directly by [PropertyCard.tsx](../src/components/ui/PropertyCard.tsx) and the listing-page H1 (`buildPropertyPageH1()` in [property-name.ts](../src/lib/property-name.ts) now takes an optional `slug` and prefers the canonical name — this is what correctly disambiguates a Mickey configuration in the H1, where the old first-pipe-segment fallback alone could not). `/properties`' comparison table applies the same override **on top of** `buildShortNames()`'s result locally, rather than inside that function — see the row above for why. |
+| Featured reviews | [src/lib/testimonials.ts](../src/lib/testimonials.ts) (`selectFeaturedTestimonials`, pure) + [FeaturedReviews.tsx](../src/components/ui/FeaturedReviews.tsx) | Up to 3 of a property's already-fetched active `Testimonial` rows (the same query the page already runs for JSON-LD `review`), highest rating first then longest message. Renders nothing for zero testimonials — never fabricates a quote. Rendered right after the gallery on `/properties/[slug]`; a "See all N reviews" link jumps to `#reviews` on the existing lower "What guests say" block when more exist than shown. |
+| Walkthrough video slot | [src/lib/walkthrough-videos.ts](../src/lib/walkthrough-videos.ts) (empty map) + [PropertyWalkthrough.tsx](../src/components/ui/PropertyWalkthrough.tsx) | Optional `slug → url` map, no schema migration. Renders a YouTube/Vimeo iframe or a native `<video>` fallback for a direct file URL; renders nothing when a slug has no entry — true for all 5 today (searched `/workspace/hil-marketing`: "Haven Reels" are persona videos, the m360 clips are a vendor-portal walkthrough, neither is a unit tour). |
+| Booking CTA simplification | [BookingCard.tsx](../src/components/ui/BookingCard.tsx) (`src/lib/booking-card-cta.ts` for the pure disabled/label logic) | The listing-page CTA no longer waits on a "Agree to Rules to Book" checkbox — that gate was duplicated; [BookingForm.tsx](../src/components/booking/BookingForm.tsx)'s checkout (`/book`) already requires the same agreement before it will proceed, at both the form and payment steps. The listing-page CTA now reaches `/book` as soon as dates (and, implicitly, guests) are chosen; a missing date still shows the existing inline error instead of navigating. |
+| 500+ Mbps consistency | [src/lib/faqs.ts](../src/lib/faqs.ts), [prisma/property-content/mickey-content.ts](../prisma/property-content/mickey-content.ts) | B38/Mickey's "up to 520 Mbps" wording is now "500+ Mbps" in code-level copy, matching B34 (superseding [DEC-032](HIL_DECISIONS.md)'s "B38 unaffected" note for *marketing language* only — not a new speed test, B38 is not claimed slower). Production DB still says "520 Mbps" for the 3 Mickey rows until the route below runs. |
+| No guest-facing Airbnb comparison | `/properties` intro, [Hero.tsx](../src/components/sections/Hero.tsx), [chat-tree.ts](../src/lib/chat/chat-tree.ts) (static-tree fallback mode only), the listing-page metadata fallback + CTA block, `b34-content.ts`/`mickey-content.ts` narrative descriptions | Rephrased to drop the named Airbnb comparison while keeping the "book direct, save on fees" pitch. Deliberately **not** touched: the existing `About`/`Staycation` pages' dedicated Airbnb-targeted SEO copy, `BookingForm.tsx`'s Airbnb-savings calculator widget, and the pre-existing "Why book direct instead of through Airbnb?" FAQ entries — established, intentional positioning (DEC-007) outside this fix's scope; flagged for a future decision if a full sweep is wanted. |
+
+### TEMPORARY production content-correction route (DEC-012 pattern)
+
+[src/lib/listing-presentation-fixes.ts](../src/lib/listing-presentation-fixes.ts) +
+`src/app/api/admin/dev/fix-listing-presentation/route.ts` (GET dry run + `planHash`, POST
+`{"confirm":"APPLY-LISTING-PRESENTATION","planHash":…}`) plans/applies, on production:
+(1) `Property.name` → the DEC-034 canonical plain name for all 5 properties (prefix-
+preserving, so a `[DEVDB] ` tag survives the write on `dev`); (2) the 3 Mickey rows'
+"up to 520 Mbps" substrings in `tagline`/`seoDescription`/`heroSummary`/`description`/
+`amenityDetails`/`propertyFaqs` → "500+ Mbps". Never touches B34's Mbps wording — that
+correction already ran via the now-removed `fix-b34-speed` route. Same safety shape as
+`fix-b34-speed`/`fix-drive-times`: exact `{id, slug}` assertions, a prefix-preserving name
+rewrite with its own "doesn't look like the expected string" abort, targeted exact-
+substring Mbps replacements only (never a whole-field overwrite), any residual stale
+"520 Mbps" aborts the whole run, one `$transaction`, post-write re-verification,
+`revalidatePath` on all 5 property pages. **Not yet run against production** — see
+`HIL_PROJECT_STATUS.md` for the Owner's GET-then-POST steps. The same route also works
+unmodified against `dev.haveninlipa.com` to fix its `[DEVDB]`-prefixed titles, if wanted —
+the public UI already shows the plain name from the code map without that write either way.
 
 ## GA4 Analytics Events (gtag.js)
 

@@ -5,6 +5,7 @@ import FeeBreakdown from "./FeeBreakdown";
 import { calcExtraGuestFee } from "@/lib/pricing-core";
 import { extraGuestFeeApplies } from "@/lib/occupancy";
 import { useEarliestCheckIn } from "@/components/booking/useEarliestCheckIn";
+import { bookingCtaLabel, isBookingCtaDisabled } from "@/lib/booking-card-cta";
 
 interface Props {
   slug: string;
@@ -16,7 +17,6 @@ interface Props {
   bathrooms: number;
   location: string;
   type: string;
-  propertyRules?: string | null;
   /** Seeded from ?checkIn / ?checkOut / ?guests when a link carries dates forward. */
   initialCheckIn?: string;
   initialCheckOut?: string;
@@ -33,7 +33,6 @@ export default function BookingCard({
   bathrooms,
   location,
   type,
-  propertyRules,
   initialCheckIn = "",
   initialCheckOut = "",
   initialGuests = "",
@@ -53,7 +52,6 @@ export default function BookingCard({
   // Set when the server refuses the check-in as too soon (advance notice) rather than taken.
   const [tooSoonMessage, setTooSoonMessage] = useState("");
   const [dateError, setDateError] = useState("");
-  const [rulesAgreed, setRulesAgreed] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // True nightly subtotal from /api/rates (weekday/weekend/override aware).
@@ -145,12 +143,6 @@ export default function BookingCard({
       return;
     }
     if (availability === "unavailable") return;
-
-    // Check property rules agreement if rules exist
-    if (propertyRules && !rulesAgreed) {
-      setDateError("Please agree to the property rules to continue.");
-      return;
-    }
 
     setDateError("");
     const params = new URLSearchParams({ checkIn, checkOut, guests: String(guests) });
@@ -289,32 +281,19 @@ export default function BookingCard({
         ))}
       </div>
 
-      {/* Property Rules Agreement */}
-      {propertyRules && (
-        <div className="mb-4">
-          <label className="flex items-start gap-3 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={rulesAgreed}
-              onChange={(e) => setRulesAgreed(e.target.checked)}
-              className="mt-0.5 w-4 h-4 accent-forest border-2 border-gray-300 rounded focus:ring-forest focus:ring-2"
-            />
-            <span className="text-[12px] text-charcoal/70 leading-[1.5]">
-              I agree to the property rules and policies
-            </span>
-          </label>
-        </div>
-      )}
-
-      {/* CTA */}
+      {/* CTA. Property-rules agreement (when the property has rules) now lives
+          inline at checkout (BookingForm.tsx's form and payment steps) instead
+          of gating this button — DEC-034: the listing-page CTA should move a
+          guest with dates chosen straight to /book, not add a second, earlier
+          agree-to-continue step. */}
       <button
         onClick={handleBook}
-        disabled={notPriced || availability === "unavailable" || availability === "checking" || (!!propertyRules && !rulesAgreed)}
+        disabled={isBookingCtaDisabled({ notPriced, availability })}
         className="w-full flex items-center justify-center gap-2 py-3.5 min-h-[48px] rounded-full text-[14px] font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0 disabled:shadow-none"
-        style={{ background: (notPriced || availability === "unavailable" || (propertyRules && !rulesAgreed)) ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
+        style={{ background: (notPriced || availability === "unavailable") ? "#9CA3AF" : "linear-gradient(135deg,#FF5371,#E03D5A)" }}
       >
         <i className={`fa-solid ${availability === "checking" ? "fa-circle-notch fa-spin" : "fa-calendar-check"}`} aria-hidden="true" />
-        {notPriced ? "Not Available Yet" : availability === "unavailable" ? "Dates Not Available" : (propertyRules && !rulesAgreed) ? "Agree to Rules to Book" : nights > 0 ? `Book — ₱${Math.round(stayTotal).toLocaleString()}` : "Book this Property"}
+        {bookingCtaLabel({ notPriced, availability, nights, stayTotal })}
       </button>
 
       {availability === "available" && (

@@ -13,6 +13,11 @@ import { buildPropertyJsonLd } from "@/lib/property-schema";
 import { socialMetadata, stripBrandSuffix } from "@/lib/seo-metadata";
 import { buildOccupancyNote, normalizePricingProse, sanitizeChargeProse } from "@/lib/occupancy";
 import { buildPropertyPageH1 } from "@/lib/property-name";
+import { getBestFor } from "@/lib/property-display";
+import { selectFeaturedTestimonials } from "@/lib/testimonials";
+import { getWalkthroughVideoUrl } from "@/lib/walkthrough-videos";
+import FeaturedReviews from "@/components/ui/FeaturedReviews";
+import PropertyWalkthrough from "@/components/ui/PropertyWalkthrough";
 
 export const dynamic = "force-dynamic";
 
@@ -119,7 +124,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
     property.seoDescription ||
       (property.description
         ? property.description.slice(0, 155).replace(/\s+\S*$/, "")
-        : `${property.type} vacation rental in ${property.location}, Batangas. Book direct and save 15–20% vs. Airbnb.`),
+        : `${property.type} vacation rental in ${property.location}, Batangas. Book direct and save 15–20% on platform fees.`),
     { pricePerNight: Number(property.pricePerNight), includedGuests: property.includedGuests }
   );
 
@@ -176,6 +181,9 @@ export default async function PropertyDetailPage({
   const pricingNotes: PricingNotes = safeJsonParse(property.pricingNotes, {});
   const propertyFaqs: PropertyFaq[] = safeJsonParse(property.propertyFaqs, []);
   const coverImage = featuredUrl || images[0] || null;
+  const bestFor = getBestFor(property.slug);
+  const featuredTestimonials = selectFeaturedTestimonials(reviewTestimonials);
+  const walkthroughUrl = getWalkthroughVideoUrl(property.slug);
 
   // The three fields every fee surface on this page reads from.
   const occupancy = {
@@ -247,13 +255,14 @@ export default async function PropertyDetailPage({
                   )}
                 </div>
                 <h1 className="font-serif font-semibold text-white leading-tight" style={{ fontSize: "clamp(1.6rem,4vw,2.5rem)" }}>
-                  {buildPropertyPageH1(property.name, property.location)}
+                  {buildPropertyPageH1(property.name, property.location, property.slug)}
                 </h1>
-                {/* Original Airbnb-style listing title, kept visible (October SEO review:
-                    H1 should name the home + Lipa City, not the listing title — but the
-                    title itself is still useful context, so it moves here rather than
-                    disappearing from the page). */}
-                <p className="text-white/55 text-[12.5px] mt-1">{property.name}</p>
+                {/* DEC-034: the raw keyword-stuffed Property.name used to render here
+                    (October SEO review note — H1 should name the home + Lipa City, not
+                    the Airbnb-style listing title, but the title was kept visible as
+                    context). Replaced with the one-line "best for" so the subtitle is
+                    useful to a visitor instead of repeating the keyword string. */}
+                {bestFor && <p className="text-white/55 text-[12.5px] mt-1">{bestFor}</p>}
               </div>
               <div className="text-right">
                 {Number(property.pricePerNight) > 0 ? (
@@ -313,7 +322,6 @@ export default async function PropertyDetailPage({
               bathrooms={property.bathrooms}
               location={property.location}
               type={property.type}
-              propertyRules={sanitizeChargeProse(property.propertyRules, occupancy)}
               initialCheckIn={qCheckIn ?? ""}
               initialCheckOut={qCheckOut ?? ""}
               initialGuests={initialGuests}
@@ -334,6 +342,12 @@ export default async function PropertyDetailPage({
                 />
               </div>
             )}
+
+            {/* Demonstration & proof (DEC-034): top-of-page reviews + an optional
+                walkthrough video, right after the gallery so a visitor sees social
+                proof before scrolling through the full description. */}
+            <FeaturedReviews testimonials={featuredTestimonials} totalCount={reviewTestimonials.length} />
+            <PropertyWalkthrough url={walkthroughUrl} name={property.name} />
 
             {/* Stats bar */}
             <div className="flex flex-wrap gap-6 py-6 border-y border-black/[.08]">
@@ -500,8 +514,9 @@ export default async function PropertyDetailPage({
               </div>
             </div>
 
-            {/* Guest Reviews — existing testimonials component */}
-            <div>
+            {/* Guest Reviews — full list. id="reviews" is the jump-link target from
+                the featured-reviews block above the fold. */}
+            <div id="reviews" className="scroll-mt-[90px]">
               <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-4">What guests say</h2>
               <Testimonials propertyId={property.id} />
             </div>
@@ -628,7 +643,7 @@ export default async function PropertyDetailPage({
             >
               <h2 className="font-serif font-semibold text-charcoal text-[1.3rem] mb-2">Book direct, save 15–20%</h2>
               <p className="text-charcoal/70 text-[14.5px] leading-[1.75] mb-4">
-                Skip the Airbnb service fee, talk to a real host, get more flexible cancellations and check-in. Use the booking card on this page or message Melody on the homepage — we usually reply within an hour during the day.
+                Skip the platform service fee, talk to a real host, get more flexible cancellations and check-in. Use the booking card on this page or message Melody on the homepage — we usually reply within an hour during the day.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link

@@ -9,7 +9,7 @@ import { SOCIAL_LINKS } from "@/lib/social-links";
 export const metadata: Metadata = {
   title: "Haven in Lipa — Short-Term Rentals in Lipa City, Batangas",
   description:
-    "Clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas. Book direct and save 15–20% vs. Airbnb. GCash, BPI & credit cards accepted.",
+    "Clean, comfortable, and thoughtfully managed short-term rentals in Lipa City, Batangas. Book direct and save 15–20% on platform fees. GCash, BPI & credit cards accepted.",
   alternates: {
     canonical: "/",
   },

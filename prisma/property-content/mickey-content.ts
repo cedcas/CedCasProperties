@@ -127,7 +127,7 @@ const SHARED_FAQS_TAIL: PropertyFaq[] = [
   {
     question: "How fast is the internet?",
     answer:
-      "The house has dedicated fiber internet with speeds up to 520 Mbps — built for multiple devices streaming, video calls, and kids on tablets all at once. There's also a backup internet connection.",
+      "The house has dedicated fiber internet at 500+ Mbps — built for multiple devices streaming, video calls, and kids on tablets all at once. There's also a backup internet connection.",
   },
   {
     question: "Is there parking?",
@@ -159,12 +159,12 @@ export const SLEEPS_7: PropertySeoContent = {
   seoTitle:
     "Mickey-Themed Family Staycation House in Lipa City — Sleeps 7 | Haven in Lipa",
   seoDescription:
-    "Mickey-themed 1-bedroom staycation house in Bella Vita, Lipa City. Sleeps 7, full kitchen, fiber up to 520 Mbps, garage. From ₱2,400/night. Book direct.",
-  tagline: "Mickey-Themed • Fiber up to 520 Mbps • Sleeps 7 • Garage",
+    "Mickey-themed 1-bedroom staycation house in Bella Vita, Lipa City. Sleeps 7, full kitchen, fiber at 500+ Mbps, garage. From ₱2,400/night. Book direct.",
+  tagline: "Mickey-Themed • Fiber 500+ Mbps • Sleeps 7 • Garage",
   heroSummary:
-    "A private, Mickey-themed staycation house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole house is yours, not a room or a unit. Built for couples, small families, and groups of up to 7. Master bedroom with a queen bed, a day bed and floor mattresses for the kids, a full kitchen, dining area, living room, garage parking, and dedicated fiber internet up to 520 Mbps. From ₱2,400 per night (covers 5 guests; an extra per-guest fee for the 6th and 7th). One hour from Manila via SLEX/STAR Tollway.",
+    "A private, Mickey-themed staycation house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole house is yours, not a room or a unit. Built for couples, small families, and groups of up to 7. Master bedroom with a queen bed, a day bed and floor mattresses for the kids, a full kitchen, dining area, living room, garage parking, and dedicated fiber internet at 500+ Mbps. From ₱2,400 per night (covers 5 guests; an extra per-guest fee for the 6th and 7th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the smallest of the three Mickey in Lipa configurations — and the right size for a couple, a small family, or a barkada of up to seven who want a whole house instead of a hotel room.\n\nYou get exclusive access to the entire two-floor house: the master bedroom with a queen bed, a living room with a day bed, floor mattresses for the kids, a full kitchen, a dining area, and a garage. The Mickey-inspired décor and photo-worthy corners are a hit with kids (and the adults who pretend they aren't). The fiber, up to 520 Mbps, means everyone streams and scrolls without the buffering arguments.\n\nIt sits in a quiet, family-friendly gated subdivision close to cafés, restaurants, and the SM Lipa area. For bigger groups, the same house is offered in larger configurations that open up the bunk rooms.",
+    "This is the smallest of the three Mickey in Lipa configurations — and the right size for a couple, a small family, or a barkada of up to seven who want a whole house instead of a hotel room.\n\nYou get exclusive access to the entire two-floor house: the master bedroom with a queen bed, a living room with a day bed, floor mattresses for the kids, a full kitchen, a dining area, and a garage. The Mickey-inspired décor and photo-worthy corners are a hit with kids (and the adults who pretend they aren't). The fiber, 500+ Mbps, means everyone streams and scrolls without the buffering arguments.\n\nIt sits in a quiet, family-friendly gated subdivision close to cafés, restaurants, and the SM Lipa area. For bigger groups, the same house is offered in larger configurations that open up the bunk rooms.",
   bestForSegments: [
     {
       title: "Couples and small families",
@@ -223,7 +223,7 @@ export const SLEEPS_7: PropertySeoContent = {
       items: [
         "Mickey-inspired décor and photo-worthy spaces",
         "Smart TV in the living area, streaming-ready",
-        "Dedicated fiber WiFi up to 520 Mbps",
+        "Dedicated fiber WiFi at 500+ Mbps",
         "Living room and dining area for family meals and movie nights",
       ],
     },
@@ -281,9 +281,9 @@ export const SLEEPS_11: PropertySeoContent = {
     "Mickey-themed 2-bedroom family house in Bella Vita, Lipa City. Sleeps 11 with a kids' bunk room, full kitchen, fiber, garage. From ₱4,200/night. Book direct.",
   tagline: "Mickey-Themed • Bunk Room • Sleeps 11 • Garage",
   heroSummary:
-    "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱4,200 per night (covers 9 guests; an extra per-guest fee for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
+    "A Mickey-themed family house in the gated Bella Vita subdivision, Lipa City, Batangas — the whole two-floor house is yours. This 2-bedroom configuration pairs the master bedroom with one of our popular themed bunk rooms, so parents get privacy and the kids get their own fun space. Sleeps up to 11 across the master, the bunk room, and a living-room day bed, with a full kitchen, dining area, garage parking, and dedicated fiber at 500+ Mbps. From ₱4,200 per night (covers 9 guests; an extra per-guest fee for the 10th and 11th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "Bring the whole family. This 2-bedroom configuration of Mickey in Lipa is designed around how families actually travel — the master bedroom plus a themed bunk room means parents enjoy privacy while the kids get a fun space of their own, all under one roof.\n\nThe entire two-floor house is yours: master bedroom with a queen bed, a themed bunk room for the kids, a living room with a day bed, a full kitchen, a large dining area, and a garage. Mickey-inspired décor throughout, dedicated fiber up to 520 Mbps, and a quiet gated subdivision about 20 minutes by car from SM Lipa.\n\nWhether it's a family reunion, a birthday weekend, or a staycation away from Manila, this setup keeps everyone together for family meals, movie nights, and celebrations. For larger groups, the full-house configuration opens a second bunk room and sleeps up to 15.",
+    "Bring the whole family. This 2-bedroom configuration of Mickey in Lipa is designed around how families actually travel — the master bedroom plus a themed bunk room means parents enjoy privacy while the kids get a fun space of their own, all under one roof.\n\nThe entire two-floor house is yours: master bedroom with a queen bed, a themed bunk room for the kids, a living room with a day bed, a full kitchen, a large dining area, and a garage. Mickey-inspired décor throughout, dedicated fiber at 500+ Mbps, and a quiet gated subdivision about 20 minutes by car from SM Lipa.\n\nWhether it's a family reunion, a birthday weekend, or a staycation away from Manila, this setup keeps everyone together for family meals, movie nights, and celebrations. For larger groups, the full-house configuration opens a second bunk room and sleeps up to 15.",
   bestForSegments: [
     {
       title: "Families who want a kids' room",
@@ -343,7 +343,7 @@ export const SLEEPS_11: PropertySeoContent = {
       items: [
         "Mickey-inspired décor and photo-worthy spaces",
         "Smart TV in the living area, streaming-ready",
-        "Dedicated fiber WiFi up to 520 Mbps",
+        "Dedicated fiber WiFi at 500+ Mbps",
         "Living room and dining area for family meals and movie nights",
       ],
     },
@@ -401,9 +401,9 @@ export const SLEEPS_15: PropertySeoContent = {
     "Mickey-themed full house in Bella Vita, Lipa City for reunions and barkadas. Sleeps 15, two bunk rooms, full kitchen, garage. From ₱7,000/night. Book direct.",
   tagline: "Whole House • Two Bunk Rooms • Sleeps 15 • Garage",
   heroSummary:
-    "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated fiber up to 520 Mbps. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
+    "The full Mickey in Lipa house in the gated Bella Vita subdivision, Lipa City, Batangas — a one-of-a-kind themed home built for reunions, birthdays, barkadas, and multi-generation getaways. The entire two-floor house is yours, sleeping up to 15 across a master bedroom, two themed bunk rooms, a living-room day bed, and floor mattresses. Full kitchen, large dining area, garage parking, and dedicated fiber at 500+ Mbps. From ₱7,000 per night (covers 13 guests; an extra per-guest fee for the 14th and 15th). One hour from Manila via SLEX/STAR Tollway.",
   description:
-    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a typical Airbnb room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber up to 520 Mbps, and garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, about 20 minutes by car from SM Lipa and a short drive from Taal and Tagaytay.",
+    "This is the full house — a one-of-a-kind themed home created specifically for families and groups who want to stay together, celebrate together, and make memories together. Unlike a single hotel room, the entire two-floor house is yours.\n\nSleeps up to 15 comfortably: master bedroom with a queen bed (sleeps 2), two themed bunk rooms (sleeps 4 each), a living-room day bed (sleeps 3), and two floor mattresses (sleeps 2). Add a Mickey-inspired gallery wall and décor, a full kitchen, a large dining area, dedicated fiber at 500+ Mbps, and garage parking inside a family-friendly gated subdivision.\n\nIt's built for the things big groups actually do — reunions, birthday parties, barkada weekends, and multi-generation trips out of Manila. Everyone under one roof, about 20 minutes by car from SM Lipa and a short drive from Taal and Tagaytay.",
   bestForSegments: [
     {
       title: "Reunions and multi-generation trips",
@@ -465,7 +465,7 @@ export const SLEEPS_15: PropertySeoContent = {
         "Mickey-inspired gallery wall and themed décor",
         "Two themed bunk rooms kids love",
         "Smart TV in the living area, streaming-ready",
-        "Dedicated fiber WiFi up to 520 Mbps",
+        "Dedicated fiber WiFi at 500+ Mbps",
       ],
     },
     {
