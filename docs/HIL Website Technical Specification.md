@@ -1,8 +1,12 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-15 (DEC-034 product-led listing presentation: canonical
+> **Last updated:** 2026-11-15 (listing-presentation production content correction ran —
+> planHash `914e8a633bfc9051`, 23 fields / 5 properties, verified live — and the
+> TEMPORARY DEC-012 route was removed; branch
+> `chore/remove-listing-presentation-route-111526`, built on `dev`, not merged). Prior,
+> same day: DEC-034 product-led listing presentation: canonical
 > display names + "best for", featured reviews, walkthrough-video slot, booking CTA
-> simplification, 500+ Mbps consistency, no guest-facing Airbnb comparison; branch
+> simplification, 500+ Mbps consistency, no guest-facing Airbnb comparison (branch
 > `feature/product-led-listing-fixes-111526`, built on `dev`, not merged). Prior:
 > 2026-11-13 (Haven: English replies stay English, Tagalog date-only
 > questions use the date, branch `fix/haven-lang-leak-111326`, DEC-029 addendum —
@@ -1851,27 +1855,31 @@ public pages override them in code.
 | Featured reviews | [src/lib/testimonials.ts](../src/lib/testimonials.ts) (`selectFeaturedTestimonials`, pure) + [FeaturedReviews.tsx](../src/components/ui/FeaturedReviews.tsx) | Up to 3 of a property's already-fetched active `Testimonial` rows (the same query the page already runs for JSON-LD `review`), highest rating first then longest message. Renders nothing for zero testimonials — never fabricates a quote. Rendered right after the gallery on `/properties/[slug]`; a "See all N reviews" link jumps to `#reviews` on the existing lower "What guests say" block when more exist than shown. |
 | Walkthrough video slot | [src/lib/walkthrough-videos.ts](../src/lib/walkthrough-videos.ts) (empty map) + [PropertyWalkthrough.tsx](../src/components/ui/PropertyWalkthrough.tsx) | Optional `slug → url` map, no schema migration. Renders a YouTube/Vimeo iframe or a native `<video>` fallback for a direct file URL; renders nothing when a slug has no entry — true for all 5 today (searched `/workspace/hil-marketing`: "Haven Reels" are persona videos, the m360 clips are a vendor-portal walkthrough, neither is a unit tour). |
 | Booking CTA simplification | [BookingCard.tsx](../src/components/ui/BookingCard.tsx) (`src/lib/booking-card-cta.ts` for the pure disabled/label logic) | The listing-page CTA no longer waits on a "Agree to Rules to Book" checkbox — that gate was duplicated; [BookingForm.tsx](../src/components/booking/BookingForm.tsx)'s checkout (`/book`) already requires the same agreement before it will proceed, at both the form and payment steps. The listing-page CTA now reaches `/book` as soon as dates (and, implicitly, guests) are chosen; a missing date still shows the existing inline error instead of navigating. |
-| 500+ Mbps consistency | [src/lib/faqs.ts](../src/lib/faqs.ts), [prisma/property-content/mickey-content.ts](../prisma/property-content/mickey-content.ts) | B38/Mickey's "up to 520 Mbps" wording is now "500+ Mbps" in code-level copy, matching B34 (superseding [DEC-032](HIL_DECISIONS.md)'s "B38 unaffected" note for *marketing language* only — not a new speed test, B38 is not claimed slower). Production DB still says "520 Mbps" for the 3 Mickey rows until the route below runs. |
+| 500+ Mbps consistency | [src/lib/faqs.ts](../src/lib/faqs.ts), [prisma/property-content/mickey-content.ts](../prisma/property-content/mickey-content.ts) | B38/Mickey's "up to 520 Mbps" wording is now "500+ Mbps" in code-level copy, matching B34 (superseding [DEC-032](HIL_DECISIONS.md)'s "B38 unaffected" note for *marketing language* only — not a new speed test, B38 is not claimed slower). Production DB corrected 2026-11-15 — see below. |
 | No guest-facing Airbnb comparison | `/properties` intro, [Hero.tsx](../src/components/sections/Hero.tsx), [chat-tree.ts](../src/lib/chat/chat-tree.ts) (static-tree fallback mode only), the listing-page metadata fallback + CTA block, `b34-content.ts`/`mickey-content.ts` narrative descriptions | Rephrased to drop the named Airbnb comparison while keeping the "book direct, save on fees" pitch. Deliberately **not** touched: the existing `About`/`Staycation` pages' dedicated Airbnb-targeted SEO copy, `BookingForm.tsx`'s Airbnb-savings calculator widget, and the pre-existing "Why book direct instead of through Airbnb?" FAQ entries — established, intentional positioning (DEC-007) outside this fix's scope; flagged for a future decision if a full sweep is wanted. |
 
-### TEMPORARY production content-correction route (DEC-012 pattern)
+### Production content correction (DEC-012 pattern) — done, route removed
 
-[src/lib/listing-presentation-fixes.ts](../src/lib/listing-presentation-fixes.ts) +
-`src/app/api/admin/dev/fix-listing-presentation/route.ts` (GET dry run + `planHash`, POST
-`{"confirm":"APPLY-LISTING-PRESENTATION","planHash":…}`) plans/applies, on production:
-(1) `Property.name` → the DEC-034 canonical plain name for all 5 properties (prefix-
-preserving, so a `[DEVDB] ` tag survives the write on `dev`); (2) the 3 Mickey rows'
-"up to 520 Mbps" substrings in `tagline`/`seoDescription`/`heroSummary`/`description`/
-`amenityDetails`/`propertyFaqs` → "500+ Mbps". Never touches B34's Mbps wording — that
-correction already ran via the now-removed `fix-b34-speed` route. Same safety shape as
-`fix-b34-speed`/`fix-drive-times`: exact `{id, slug}` assertions, a prefix-preserving name
-rewrite with its own "doesn't look like the expected string" abort, targeted exact-
-substring Mbps replacements only (never a whole-field overwrite), any residual stale
-"520 Mbps" aborts the whole run, one `$transaction`, post-write re-verification,
-`revalidatePath` on all 5 property pages. **Not yet run against production** — see
-`HIL_PROJECT_STATUS.md` for the Owner's GET-then-POST steps. The same route also works
-unmodified against `dev.haveninlipa.com` to fix its `[DEVDB]`-prefixed titles, if wanted —
-the public UI already shows the plain name from the code map without that write either way.
+[src/lib/listing-presentation-fixes.ts](../src/lib/listing-presentation-fixes.ts)'s
+`planListingPresentationFixes` plans (1) `Property.name` → the DEC-034 canonical plain name
+for all 5 properties (prefix-preserving, so a `[DEVDB] ` tag survives), (2) `tagline` →
+the plain `bestFor` line (whole-field rewrite, allow-listed known current/previous
+variants), and (3) stale Wi-Fi speed figures ("400 Mbps" B34/cozy, "up to 520 Mbps"
+Mickey/B38) across `seoTitle`/`seoDescription`/`heroSummary`/`description`/
+`amenityDetails`/`propertyFaqs` → "500+ Mbps" (targeted exact-substring replacements, never
+a whole-field overwrite). Never touches B34's "340 Mbps" wording — that correction already
+ran via the now-removed `fix-b34-speed` route.
+
+**Production run (done 2026-11-15):** ran once on production through a TEMPORARY
+admin-only DEC-012 route, `/api/admin/dev/fix-listing-presentation`. GET gave a read-only
+plan with a `planHash`; POST required the confirm string `APPLY-LISTING-PRESENTATION` plus
+the reviewed hash. The Owner's POST returned `success: true`, 23 fields written across all
+5 properties, and the re-check passed. All 5 live listings were checked logged out — plain
+names and "best for" taglines, no "520 Mbps", no "400 Mbps", no keyword taglines.
+**The route has since been removed.** For any future production run, add a new temporary
+route that reuses `planListingPresentationFixes`, following the DEC-034 addendum. Idempotent:
+a re-run now proposes nothing. Not wired into `scripts/fix-property-content.ts`, so there is
+no CLI pass.
 
 ## GA4 Analytics Events (gtag.js)
 

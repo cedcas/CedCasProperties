@@ -1637,6 +1637,23 @@ Still built on `content/extend-listing-presentation-111526` (from `dev`), PR ope
 `dev`, not merged. The production and dev GET/POST commands are in the route's own comment
 and in `HIL_PROJECT_STATUS.md`. No run has happened against any database.
 
+**Addendum, 2026-11-15 — the production run, and the route was removed.** PR #117 (release
+`dev` → `main`) and PR #116 (the extension above) landed first. The Owner (Cedric) then ran
+`/api/admin/dev/fix-listing-presentation` once on production: GET dry run, planHash
+`914e8a633bfc9051`, then POST with the matching `confirm`/`planHash` returned
+`success: true`, 23 fields written across all 5 properties, and the post-write
+re-verification passed (0 remaining changes). Checked logged out on `haveninlipa.com` the
+same day: all five listing pages show the plain names and "best for" taglines, with no
+"520 Mbps", no "400 Mbps", and no keyword taglines (e.g. "Netflix • Wi-Fi • 9 Pax •
+Parking"). `/properties` may still lag up to an hour on the public-listings cache
+([DEC-005](#dec-005--cache-the-query-not-the-response-a-page-cannot-set-its-own-cache-control-on-vercel)) — expected, not a failed run.
+
+The route and its route-only POST gate (`APPLY_LISTING_PRESENTATION_CONFIRM`,
+`checkApplyRequest`) were deleted in the follow-up PR, same precedent as the
+`fix-b34-speed`/`fix-drive-times` route removals. `src/lib/listing-presentation-fixes.ts`'s
+`planListingPresentationFixes` and its lib tests stay. A future one-off production content
+correction needs a new temporary route, following the pattern above.
+
 ---
 
 ## Migrated SEO Decisions
