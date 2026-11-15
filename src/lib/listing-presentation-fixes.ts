@@ -1,11 +1,23 @@
 // Pure planning/assertion logic for the one-time Owner-approved production
-// correction of (a) `Property.name` — still the keyword-stuffed, Airbnb-style
-// string in production/dev (e.g. "Spacious 2BR Getaway |
-// Netflix•Wi-Fi•9Pax•Parking") — to the plain DEC-034 canonical name, and
-// (b) the Mickey/B38 "up to 520 Mbps" wording in `tagline` and the other
-// speed-bearing content fields, superseded by "500+ Mbps" (DEC-034, which
-// extends DEC-032's B34-only 500+ Mbps correction to B38 for marketing-
-// language consistency — not a new speed test, and B38 is not claimed slower).
+// correction of three related, still-stale content issues (DEC-034 and its
+// 2026-11-15 addendum):
+// (a) `Property.name` — still the keyword-stuffed, Airbnb-style string in
+//     production/dev (e.g. "Spacious 2BR Getaway |
+//     Netflix•Wi-Fi•9Pax•Parking") — rewritten to the plain DEC-034 canonical
+//     name;
+// (b) `tagline` — still the keyword-stuffed string (e.g. "Netflix • Wi-Fi •
+//     9 Pax • Parking") — rewritten whole-field to the same plain "best for"
+//     line src/lib/property-display.ts already renders in code
+//     (CANONICAL_PROPERTY_DISPLAY[slug].bestFor), never inventing an
+//     amenity;
+// (c) stale Wi-Fi speed figures ("400 Mbps" for B34/cozy, "up to 520 Mbps"
+//     for Mickey/B38) in `seoTitle` and the other speed-bearing content
+//     fields, superseded by "500+ Mbps" — not a new speed test, and neither
+//     building is claimed slower (DEC-032, extended to B38 by DEC-034, then
+//     extended again to cover `seoTitle` and the B34/cozy "400 Mbps" wording
+//     by the 2026-11-15 addendum, since dev's stored copy turned out to
+//     differ from both the reviewed-and-run production fix and the current
+//     seed).
 //
 // Caller: this module has no Prisma or database access so it can be unit
 // tested offline against frozen fixtures — see src/lib/b34-speed-fixes.ts for
@@ -13,11 +25,13 @@
 // planHash, POST = confirm string + planHash, one transaction, post-write
 // re-verification, never a schema change.
 //
-// Two independent correction tables live in this one module because the task
-// asked for ONE route covering both (DEC-034): a whole-field `name` rewrite
-// (all 5 properties) and a targeted substring replacement for Mickey's Mbps
-// wording (3 properties, several fields) — never B34, whose 500+ Mbps
-// production correction already ran and was removed (DEC-032 addenda).
+// Three independent correction passes live in this one module because the
+// task asked for ONE route covering all of them: a whole-field `name`
+// rewrite (all 5 properties), a whole-field `tagline` rewrite (all 5
+// properties), and a targeted substring replacement for stale Mbps wording
+// (any of the 5 properties, several fields) — never B34's already-run
+// "340 Mbps" production correction, which used a different figure and was
+// removed (DEC-032 addenda).
 import { createHash } from "node:crypto";
 import { basePropertyName } from "./property-name";
 import { CANONICAL_PROPERTY_DISPLAY } from "./property-display";
@@ -37,12 +51,6 @@ export const ALL_PROPERTIES: PropertyTarget[] = [
   { id: 4, slug: "mickey-in-lipa--family-house--sleeps-11" },
   { id: 5, slug: "mickey-in-lipa--full-family-house--sleeps-15" },
 ];
-
-const MICKEY_SLUGS = new Set([
-  "mickey-in-lipa--family-staycation--sleeps-7",
-  "mickey-in-lipa--family-house--sleeps-11",
-  "mickey-in-lipa--full-family-house--sleeps-15",
-]);
 
 // ── Part A: Property.name — whole-field, prefix-preserving ─────────────────
 //
@@ -85,15 +93,57 @@ export function planNameFix(slug: string, currentName: string): Replacement | nu
   return { old: currentName, new: target };
 }
 
-// ── Part B: Mickey/B38 "up to 520 Mbps" → "500+ Mbps" ──────────────────────
-// Reviewed, exact old→new substrings per slug/field, mirrored 1:1 from this
-// PR's diff of prisma/property-content/mickey-content.ts. JSON fields are
-// parsed/re-serialized with JSON.stringify, aborting if the stored text
-// doesn't round-trip — same shape as src/lib/b34-speed-fixes.ts.
-export type SpeedField = "tagline" | "seoDescription" | "heroSummary" | "description" | "amenityDetails" | "propertyFaqs";
+// ── Part B: tagline — whole-field rewrite to the canonical "best for" ──────
+//
+// Allow-listed current/previous stored `tagline` values this run is
+// permitted to overwrite — a production row may still carry the original
+// keyword tagline, a dev-only variant, or the current (still keyword-based)
+// seed value. Anything else is unexpected — abort rather than guess at it.
+const KNOWN_TAGLINE_VARIANTS: Record<string, string[]> = {
+  "cozy-1-bedroom": ["Solar Power • Netflix • Wi-Fi • 5 Pax"],
+  "spacious-2-bedroom": ["Netflix • Wi-Fi • 9 Pax • Parking"],
+  "mickey-in-lipa--family-staycation--sleeps-7": [
+    "Mickey-Themed • Fiber up to 520 Mbps • Sleeps 7 • Garage", // production, pre-DEC-034
+    "Mickey-Themed • 500 Mbps Wi-Fi • Sleeps 7 • Garage", // dev
+    "Mickey-Themed • Fiber 500+ Mbps • Sleeps 7 • Garage", // current seed (still keyword-based)
+  ],
+  "mickey-in-lipa--family-house--sleeps-11": ["Mickey-Themed • Bunk Room • Sleeps 11 • Garage"],
+  "mickey-in-lipa--full-family-house--sleeps-15": ["Whole House • Two Bunk Rooms • Sleeps 15 • Garage"],
+};
+
+/**
+ * Whole-field tagline rewrite to the canonical "best for" line
+ * (src/lib/property-display.ts) — never invents an amenity, just swaps the
+ * keyword-stuffed tagline for the same plain line the public site already
+ * renders in code. Only rewrites when the stored value is already the
+ * target, or is one of the allow-listed current/previous variants above;
+ * anything else aborts rather than overwriting an unexpected admin edit.
+ */
+export function planTaglineFix(slug: string, currentTagline: string): Replacement | null {
+  const target = CANONICAL_PROPERTY_DISPLAY[slug]?.bestFor;
+  if (!target) throw new UnexpectedContentError(`No canonical "best for" line defined for slug "${slug}".`);
+  if (currentTagline === target) return null; // already fixed
+
+  const known = KNOWN_TAGLINE_VARIANTS[slug] ?? [];
+  if (!known.includes(currentTagline)) {
+    throw new UnexpectedContentError(
+      `${slug}.tagline: stored value "${currentTagline}" is not a known current/previous tagline and isn't ` +
+        `already the target "${target}". Refusing to write.`
+    );
+  }
+  return { old: currentTagline, new: target };
+}
+
+// ── Part C: stale "400 Mbps" (B34) / "520 Mbps" (Mickey/B38) → "500+ Mbps" ─
+// Reviewed, exact old→new substrings per slug/field. The Mickey entries are
+// mirrored 1:1 from this PR's diff of prisma/property-content/mickey-content.ts.
+// JSON fields are parsed/re-serialized with JSON.stringify, aborting if the
+// stored text doesn't round-trip. `tagline` is deliberately not a member of
+// this field set — it is rewritten wholesale by Part B above instead.
+export type SpeedField = "seoTitle" | "seoDescription" | "heroSummary" | "description" | "amenityDetails" | "propertyFaqs";
 
 export const SPEED_FIELDS: SpeedField[] = [
-  "tagline",
+  "seoTitle",
   "seoDescription",
   "heroSummary",
   "description",
@@ -105,12 +155,18 @@ const JSON_FIELDS = new Set<SpeedField>(["amenityDetails", "propertyFaqs"]);
 
 export type SpeedRules = Partial<Record<SpeedField, Replacement[]>>;
 
-export const MICKEY_SPEED_RULES: Record<string, SpeedRules> = {
+export const SPEED_RULES: Record<string, SpeedRules> = {
+  "cozy-1-bedroom": {
+    // Dev's stored seoTitle differs from both the already-run production fix
+    // and the current seed ("Fiber WiFi at 500+ Mbps") — a bare "400 Mbps"
+    // with no surrounding literal this table can safely assume, hence a
+    // minimal digit-only substring swap rather than a longer reviewed phrase.
+    seoTitle: [{ old: "400 Mbps", new: "500+ Mbps" }],
+  },
   "mickey-in-lipa--family-staycation--sleeps-7": {
     seoDescription: [
       { old: "fiber up to 520 Mbps, garage", new: "fiber at 500+ Mbps, garage" },
     ],
-    tagline: [{ old: "Mickey-Themed • Fiber up to 520 Mbps • Sleeps 7 • Garage", new: "Mickey-Themed • Fiber 500+ Mbps • Sleeps 7 • Garage" }],
     heroSummary: [
       { old: "dedicated fiber internet up to 520 Mbps. From ₱2,400 per night", new: "dedicated fiber internet at 500+ Mbps. From ₱2,400 per night" },
     ],
@@ -157,7 +213,16 @@ export const MICKEY_SPEED_RULES: Record<string, SpeedRules> = {
   },
 };
 
-export const STALE_520 = /\b520\s*mbps\b/i;
+// A bare "500 Mbps" (no "+") is also stale — e.g. a dev row rewritten by hand
+// to the wrong figure. Never matches "500+ Mbps" (there is no "+" in the
+// literal substring "500 Mbps", and "500+ Mbps" always has one between "500"
+// and the space), so it's safe to always try alongside whatever rule already
+// applies to a field — but only there: this is not a blanket scan of every
+// field for any mention of "500", which could collide with an unrelated
+// number (a price, a guest count).
+const BARE_500_FIX: Replacement = { old: "500 Mbps", new: "500+ Mbps" };
+
+export const STALE_SPEED = /\b(?:400|520)\s*mbps\b/i;
 
 function sentences(text: string): string[] {
   return text.split("\n").flatMap((line) => line.split(/(?<=[.!?])\s+/));
@@ -180,8 +245,8 @@ function textsOf(field: SpeedField, raw: string): string[] {
   }
 }
 
-export function findStale520Excerpts(field: SpeedField, raw: string): string[] {
-  return textsOf(field, raw).flatMap((t) => sentences(t).filter((s) => STALE_520.test(s)));
+export function findStaleSpeedExcerpts(field: SpeedField, raw: string): string[] {
+  return textsOf(field, raw).flatMap((t) => sentences(t).filter((s) => STALE_SPEED.test(s)));
 }
 
 function countOccurrences(haystack: string, needle: string): number {
@@ -237,9 +302,10 @@ export function applySpeedRulesToField(
   field: SpeedField,
   raw: string
 ): { value: string; fragments: Fragment[] } {
-  const rules = MICKEY_SPEED_RULES[slug]?.[field];
+  const configured = SPEED_RULES[slug]?.[field];
   const fragments: Fragment[] = [];
-  if (!rules) return { value: raw, fragments };
+  if (!configured) return { value: raw, fragments };
+  const rules = [...configured, BARE_500_FIX];
   const where = `${slug}.${field}`;
 
   if (!JSON_FIELDS.has(field)) {
@@ -251,12 +317,14 @@ export function applySpeedRulesToField(
 }
 
 // ── Whole-run planning ──────────────────────────────────────────────────────
-export type PropertyContentRow = { id: number; slug: string; name: string } & Partial<Record<SpeedField, string | null>>;
+export type PropertyContentRow = { id: number; slug: string; name: string; tagline?: string | null } & Partial<
+  Record<SpeedField, string | null>
+>;
 
 export type FieldChange = {
   id: number;
   slug: string;
-  field: "name" | SpeedField;
+  field: "name" | "tagline" | SpeedField;
   before: string;
   after: string;
   fragments: Fragment[];
@@ -265,7 +333,7 @@ export type FieldChange = {
 
 export type PresentationPlan = {
   changes: FieldChange[];
-  updates: { id: number; slug: string; data: Partial<Record<"name" | SpeedField, string>> }[];
+  updates: { id: number; slug: string; data: Partial<Record<"name" | "tagline" | SpeedField, string>> }[];
   planHash: string;
 };
 
@@ -295,11 +363,13 @@ export function computePlanHash(changes: FieldChange[]): string {
 }
 
 /**
- * Builds the full plan or throws UnexpectedContentError. Name correction
- * applies to all 5 properties; the Mbps substring correction applies only to
- * the 3 Mickey/B38 properties. After the targeted replacements, every
- * Mickey speed-bearing field is re-scanned for a residual "520 Mbps" the
- * reviewed table didn't cover — found → abort the whole run, nothing written.
+ * Builds the full plan or throws UnexpectedContentError. Name and tagline
+ * corrections apply to all 5 properties; the Mbps substring correction is
+ * also evaluated for all 5 (most have no reviewed rule and are therefore a
+ * no-op). After the targeted replacements, every speed-bearing field of
+ * every property is re-scanned for a residual "400 Mbps"/"520 Mbps" the
+ * reviewed table didn't cover — found → abort the whole run, nothing
+ * written.
  */
 export function planListingPresentationFixes(rows: PropertyContentRow[]): PresentationPlan {
   assertExpectedPropertyRows(rows);
@@ -310,7 +380,7 @@ export function planListingPresentationFixes(rows: PropertyContentRow[]): Presen
   const residual: string[] = [];
 
   for (const row of ordered) {
-    const data: Partial<Record<"name" | SpeedField, string>> = {};
+    const data: Partial<Record<"name" | "tagline" | SpeedField, string>> = {};
 
     const nameFix = planNameFix(row.slug, row.name);
     if (nameFix) {
@@ -326,29 +396,43 @@ export function planListingPresentationFixes(rows: PropertyContentRow[]): Presen
       });
     }
 
-    if (MICKEY_SLUGS.has(row.slug)) {
-      for (const field of SPEED_FIELDS) {
-        const before = row[field];
-        if (before == null) continue;
-        const { value, fragments } = applySpeedRulesToField(row.slug, field, before);
-        if (value === before) continue;
-        data[field] = value;
+    if (row.tagline != null) {
+      const taglineFix = planTaglineFix(row.slug, row.tagline);
+      if (taglineFix) {
+        data.tagline = taglineFix.new;
         changes.push({
           id: row.id,
           slug: row.slug,
-          field,
-          before,
-          after: value,
-          fragments,
-          excerpt: excerptDiff(before, value),
+          field: "tagline",
+          before: taglineFix.old,
+          after: taglineFix.new,
+          fragments: [taglineFix],
+          excerpt: excerptDiff(taglineFix.old, taglineFix.new),
         });
       }
-      for (const field of SPEED_FIELDS) {
-        const value = data[field] ?? row[field];
-        if (value == null) continue;
-        for (const s of findStale520Excerpts(field, value)) {
-          residual.push(`id=${row.id} ${row.slug}.${field}: "${s.length > 200 ? `${s.slice(0, 200)}…` : s}"`);
-        }
+    }
+
+    for (const field of SPEED_FIELDS) {
+      const before = row[field];
+      if (before == null) continue;
+      const { value, fragments } = applySpeedRulesToField(row.slug, field, before);
+      if (value === before) continue;
+      data[field] = value;
+      changes.push({
+        id: row.id,
+        slug: row.slug,
+        field,
+        before,
+        after: value,
+        fragments,
+        excerpt: excerptDiff(before, value),
+      });
+    }
+    for (const field of SPEED_FIELDS) {
+      const value = data[field] ?? row[field];
+      if (value == null) continue;
+      for (const s of findStaleSpeedExcerpts(field, value)) {
+        residual.push(`id=${row.id} ${row.slug}.${field}: "${s.length > 200 ? `${s.slice(0, 200)}…` : s}"`);
       }
     }
 
@@ -357,7 +441,7 @@ export function planListingPresentationFixes(rows: PropertyContentRow[]): Presen
 
   if (residual.length > 0) {
     throw new UnexpectedContentError(
-      `Stale "520 Mbps" wording not covered by the reviewed replacement table — fix by hand in admin, then re-run. Nothing was written.\n  ${residual.join("\n  ")}`
+      `Stale "400 Mbps"/"520 Mbps" wording not covered by the reviewed replacement table — fix by hand in admin, then re-run. Nothing was written.\n  ${residual.join("\n  ")}`
     );
   }
 

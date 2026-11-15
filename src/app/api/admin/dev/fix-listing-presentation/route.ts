@@ -15,22 +15,27 @@ import {
 } from "@/lib/listing-presentation-fixes";
 
 /**
- * TEMPORARY one-off admin route (DEC-012/DEC-034) — corrects two production
+ * TEMPORARY one-off admin route (DEC-012/DEC-034) — corrects three production
  * content issues that have no admin UI (DEC-015): (1) `Property.name` is
- * still the Airbnb-style keyword-stuffed string for all 5 listings; (2) the
- * 3 Mickey/B38 listings' speed-bearing fields still say "up to 520 Mbps",
- * superseded by "500+ Mbps" for marketing-language consistency with B34
- * (DEC-034 — not a new speed test, B38 is not claimed slower). Does not touch
- * B34's Mbps wording — that correction already ran via the now-removed
- * `/api/admin/dev/fix-b34-speed` (DEC-032 addenda). DELETE THIS FILE once the
- * run is confirmed. Do not generalize it.
+ * still the Airbnb-style keyword-stuffed string for all 5 listings; (2)
+ * `tagline` is still the keyword-stuffed string for all 5 listings, rewritten
+ * whole-field to the same plain "best for" line src/lib/property-display.ts
+ * already renders in code; (3) `seoTitle` and the other speed-bearing content
+ * fields still say "400 Mbps" (B34/cozy) or "up to 520 Mbps" (Mickey/B38),
+ * superseded by "500+ Mbps" for marketing-language consistency (DEC-034 and
+ * its 2026-11-15 addendum — not a new speed test, neither building is claimed
+ * slower). Does not touch B34's already-run "340 Mbps" wording — that
+ * correction ran via the now-removed `/api/admin/dev/fix-b34-speed` (DEC-032
+ * addenda); dev's stored "400 Mbps" is a separate, still-stale figure. DELETE
+ * THIS FILE once the run is confirmed. Do not generalize it.
  *
  * All planning and safety checks live in the pure, unit-tested
  * src/lib/listing-presentation-fixes.ts: exact {id, slug} assertions for all
  * 5 properties, a prefix-preserving name rewrite with its own "doesn't look
- * like the expected string" abort, targeted exact-substring Mbps replacements
- * (never a whole-field overwrite) for Mickey only, and any residual stale
- * "520 Mbps" aborts the whole run.
+ * like the expected string" abort, an allow-listed whole-field tagline
+ * rewrite, targeted exact-substring Mbps replacements (never a whole-field
+ * overwrite), and any residual stale "400 Mbps"/"520 Mbps" aborts the whole
+ * run.
  *
  * GET  → dry run (read-only): per-property/per-field excerpts, full proposed
  *        values, change count, planHash. Never writes.
@@ -40,15 +45,17 @@ import {
  *        returns the verification; revalidates all 5 property pages.
  *        Nothing to do → no write (idempotent).
  *
- * Owner, logged into /admin in the same browser, devtools console:
- *   await (await fetch("/api/admin/dev/fix-listing-presentation")).json()
- *   await (await fetch("/api/admin/dev/fix-listing-presentation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "APPLY-LISTING-PRESENTATION", planHash: "<planHash from GET>" }) })).json()
+ * Owner, logged into /admin in the same browser, devtools console — production:
+ *   await (await fetch("https://haveninlipa.com/api/admin/dev/fix-listing-presentation")).json()
+ *   await (await fetch("https://haveninlipa.com/api/admin/dev/fix-listing-presentation", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirm: "APPLY-LISTING-PRESENTATION", planHash: "<planHash from GET>" }) })).json()
+ *
+ * Same commands against https://dev.haveninlipa.com/api/admin/dev/fix-listing-presentation
+ * run the equivalent dev-DB correction (the [DEVDB] prefix on `name` is preserved, not stripped).
  *
  * Note (HIL_PROJECT_STATUS.md): the public site already shows the plain
- * canonical name from src/lib/property-display.ts without this write — this
- * route only corrects the *stored* value admin screens display, plus the
- * Mickey Mbps text. On dev.haveninlipa.com it also fixes the [DEVDB]-prefixed
- * titles there, if Cedric wants that too (the prefix is preserved).
+ * canonical name and "best for" line from src/lib/property-display.ts
+ * without this write — this route only corrects the *stored* values admin
+ * screens display, plus the stale Mbps text.
  */
 
 export const dynamic = "force-dynamic";
@@ -58,6 +65,7 @@ const SELECT = {
   slug: true,
   name: true,
   tagline: true,
+  seoTitle: true,
   seoDescription: true,
   heroSummary: true,
   description: true,
@@ -178,7 +186,7 @@ export async function POST(req: Request) {
     actor: session.user.name ?? "Admin",
     actorRole: "admin",
     actorId: parseInt(session.user.id),
-    action: `Listing presentation content fix: ${plan.changes.length} field(s) on ${plan.updates.length} properties (plain names + Mickey 520->500+ Mbps)`,
+    action: `Listing presentation content fix: ${plan.changes.length} field(s) on ${plan.updates.length} properties (plain names + taglines + 400/520->500+ Mbps)`,
     module: "properties",
     target: plan.updates.map((u) => `property-${u.id}`).join(","),
     metadata: {
