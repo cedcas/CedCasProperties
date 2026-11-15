@@ -1596,6 +1596,47 @@ DEC-032's "B38/Mickey is unaffected, stays 520 Mbps" note — for marketing-lang
 consistency only; the underlying speed-test fact for B34 is unchanged, and B38 is not
 claimed slower.
 
+**Addendum, 2026-11-15 — extending the still-unrun route to also fix stored meta/speed
+fields and taglines; still not run.** Cedric reviewed this decision's dev deployment and
+confirmed two things stay exactly as they are and are **not to be reopened**: the checkout
+Airbnb-savings calculator (`BookingForm.tsx`) and the on-site Airbnb comparisons that
+explain direct-booking savings — the "Why book direct instead of Airbnb?" FAQ entries and
+the `About`/`Staycation` pages' savings copy. Separately, dev evidence surfaced two gaps
+in the production correction this decision already called for but had not yet run:
+
+1. `seoTitle` was missing from the route's Prisma `SELECT` entirely, so a stale speed
+   figure there (dev's `cozy-1-bedroom` row reads "...— 400 Mbps WiFi | Haven in Lipa")
+   was invisible to the plan.
+2. `tagline` was only getting a partial substring fix (520→500+ for Mickey) rather than
+   the whole-field rewrite to the plain "best for" line this decision's point 1 already
+   put in code (`src/lib/property-display.ts`'s `CANONICAL_PROPERTY_DISPLAY[slug].bestFor`)
+   — admin screens and any surface reading the raw column still showed the keyword string.
+
+`src/lib/listing-presentation-fixes.ts` and the route were extended, same route/plan/hash
+shape, still TEMPORARY/DEC-012, still not run against any database:
+- `seoTitle` added to the `SELECT` and to the per-field stale-speed substring table
+  (targeted exact-substring replacements, not a whole-field overwrite, so this still works
+  if production, dev, and the seed differ slightly from each other).
+- The reviewed speed-figure table now also covers B34/`cozy-1-bedroom`'s "400 Mbps"
+  (a different, still-stale figure from the "340 Mbps" DEC-032 already corrected and
+  removed the route for) alongside Mickey's "up to 520 Mbps" — both superseded by
+  "500+ Mbps". The residual post-write scan now runs across **all 5** properties' speed
+  fields, not just Mickey's 3, so an unreviewed stale figure anywhere aborts the whole run
+  for a human to fix by hand, rather than silently surviving.
+- `tagline` now gets its own whole-field rewrite (`planTaglineFix`) to the exact
+  `bestFor` line, gated by an allow-list of known current/previous stored values per
+  slug (including the dev `mickey-in-lipa--family-staycation--sleeps-7` variant,
+  "Mickey-Themed • 500 Mbps Wi-Fi • Sleeps 7 • Garage") — anything else aborts rather than
+  overwriting an unexpected admin edit. `prisma/property-content/{b34,mickey}-content.ts`
+  taglines were updated to the same `bestFor` strings so seed stays in sync.
+- Descriptions and FAQs that mention Airbnb are untouched except for a speed-figure
+  substring if one is actually present — no rewording of the surrounding Airbnb copy,
+  consistent with the "keep the calculator/FAQ as-is" instruction above.
+
+Still built on `content/extend-listing-presentation-111526` (from `dev`), PR opened into
+`dev`, not merged. The production and dev GET/POST commands are in the route's own comment
+and in `HIL_PROJECT_STATUS.md`. No run has happened against any database.
+
 ---
 
 ## Migrated SEO Decisions

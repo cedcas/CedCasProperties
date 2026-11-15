@@ -67,7 +67,7 @@ export const TWO_BR: PropertySeoContent = {
     "Spacious 2BR Vacation Rental in Lipa City, Batangas — Sleeps 9 | Haven in Lipa",
   seoDescription:
     "Family-friendly 2-bedroom vacation rental in Lipa City. Sleeps 9, full kitchen, fast WiFi, parking. ₱2,800/night. Book direct and save 15–20%.",
-  tagline: "Netflix • Wi-Fi • 9 Pax • Parking",
+  tagline: "For barkadas and two families — up to 9",
   heroSummary:
     "A two-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — built for families, barkadas, and group trips. Sleeps up to 9 across two private bedrooms, a full kitchen for cooking real meals, fast WiFi, Netflix, and parking inside the village. From ₱2,800 per night. Twenty-one verified guest reviews and counting. One hour from Manila via SLEX/STAR Tollway.",
   description:
@@ -261,7 +261,7 @@ export const ONE_BR: PropertySeoContent = {
     "Cozy 1BR Vacation Rental in Lipa City, Batangas — Fiber WiFi at 500+ Mbps | Haven in Lipa",
   seoDescription:
     "Cozy 1-bedroom vacation rental in Lipa City. Sleeps 5, full kitchen, fiber WiFi at 500+ Mbps, Netflix, solar power. ₱1,800/night. Book direct, save 15–20%.",
-  tagline: "Solar Power • Netflix • Wi-Fi • 5 Pax",
+  tagline: "For couples and remote workers — sleeps 5",
   heroSummary:
     "A one-bedroom vacation rental in a quiet gated village in Lipa City, Batangas — designed for couples, solo digital nomads, and small group stays. Sleeps up to 5, full kitchen, fiber WiFi at 500+ Mbps (speed-tested), Netflix Premium, solar-powered backup, and parking inside the village. From ₱1,800 per night. Thirty-two verified guest reviews. One hour from Manila via SLEX/STAR Tollway.",
   description:

@@ -4,6 +4,48 @@
 
 ---
 
+## 2026-11-15, latest — Extend listing-presentation route: seoTitle speeds, plain taglines, names (content/extend-listing-presentation-111526)
+
+Area: Website
+
+Status: Built and tested on `content/extend-listing-presentation-111526` (from `dev`, at
+`a42f760` which already has PR #115/DEC-034 merged), Cedric pre-approved. Lint,
+`tsc --noEmit`, and `npx vitest run` clean (276 files / 5,172 tests across all three
+timezone projects). No `.env` file was read; no `npm run build`/Prisma `db`/`migrate`/
+`seed` command was run; no schema change, no migration, no database touched. Opened as a
+PR into `dev`, not merged; the route itself was not called. See [DEC-034](HIL_DECISIONS.md)'s
+2026-11-15 addendum for the full *why*.
+
+### Outcome
+Extended the still-unrun TEMPORARY DEC-012 route and its planner
+(`src/lib/listing-presentation-fixes.ts`, `/api/admin/dev/fix-listing-presentation`) so
+one future production run also covers two gaps found while reviewing dev:
+1. **`seoTitle` added to the route's `SELECT`** (it was missing entirely) and to the
+   reviewed stale-speed substring table, which now also covers B34/`cozy-1-bedroom`'s
+   "400 Mbps" (dev: `"...— 400 Mbps WiFi | Haven in Lipa"`) alongside Mickey's existing
+   "up to 520 Mbps" — both → "500+ Mbps". The post-write residual scan for a stale figure
+   now runs across all 5 properties' speed fields, not just Mickey's 3.
+2. **`tagline` now gets its own whole-field rewrite** (`planTaglineFix`) to the exact
+   `bestFor` line already in `src/lib/property-display.ts`, gated by an allow-list of
+   known current/previous stored values per slug (production, dev, and seed variants);
+   anything else aborts rather than overwriting an unexpected edit. Seed taglines in
+   `prisma/property-content/{b34,mickey-content}.ts` updated to match so seed stays in
+   sync; `Property.name`'s existing prefix-preserving fix is unchanged.
+3. Descriptions/FAQs that mention Airbnb are untouched except for a speed-figure substring
+   if one is actually present — confirmed per Cedric's 2026-11-15 instruction that the
+   checkout Airbnb-savings calculator, the "Why book direct instead of Airbnb?" FAQ
+   entries, and the About/Staycation savings copy stay exactly as they are.
+
+Added/extended unit tests in `src/lib/__tests__/listing-presentation-fixes.test.ts` and
+`fix-listing-presentation-route.test.ts` covering the new seoTitle fix, the bare "500
+Mbps" companion fix, every known tagline variant (including the dev Staycation "500 Mbps
+Wi-Fi" wording), unexpected-tagline/unexpected-residual aborts, and idempotent no-ops.
+
+**Still not run against any database** — see `HIL_PROJECT_STATUS.md` for the Owner's
+GET-then-POST steps for both `haveninlipa.com` and `dev.haveninlipa.com`.
+
+---
+
 ## 2026-11-15 — Product-led listing presentation: plain names, featured reviews, booking CTA (feature/product-led-listing-fixes-111526)
 
 Area: Website | SEO

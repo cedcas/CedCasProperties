@@ -1,18 +1,29 @@
 /**
- * GET/POST /api/admin/dev/fix-listing-presentation — the TEMPORARY plain-name +
- * Mickey "520 Mbps" -> "500+ Mbps" production content-correction route
- * (DEC-012/DEC-034). Auth, Prisma, revalidation and the audit log are mocked;
- * no DB. A tiny in-memory fake stands in for the properties table so POST's
- * pre-write plan, write, and post-write re-check all see the same evolving
- * state, the way the real route's two loadRows() calls would against a real
- * database.
+ * GET/POST /api/admin/dev/fix-listing-presentation — the TEMPORARY plain-name
+ * + tagline + stale-Mbps ("400 Mbps" B34 / "520 Mbps" Mickey) -> "500+ Mbps"
+ * production content-correction route (DEC-012/DEC-034). Auth, Prisma,
+ * revalidation and the audit log are mocked; no DB. A tiny in-memory fake
+ * stands in for the properties table so POST's pre-write plan, write, and
+ * post-write re-check all see the same evolving state, the way the real
+ * route's two loadRows() calls would against a real database.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { APPLY_LISTING_PRESENTATION_CONFIRM, ALL_PROPERTIES, type PropertyContentRow } from "@/lib/listing-presentation-fixes";
 
 const PRE: Record<string, PropertyContentRow> = {
-  "cozy-1-bedroom": { id: 1, slug: "cozy-1-bedroom", name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax" },
-  "spacious-2-bedroom": { id: 2, slug: "spacious-2-bedroom", name: "Spacious 2BR Getaway | Netflix•Wi-Fi•9Pax•Parking" },
+  "cozy-1-bedroom": {
+    id: 1,
+    slug: "cozy-1-bedroom",
+    name: "Cozy 1BR Haven | Solar Power•Netflix•Wi-Fi•5 Pax",
+    tagline: "Solar Power • Netflix • Wi-Fi • 5 Pax",
+    seoTitle: "Cozy 1BR Vacation Rental in Lipa City, Batangas — 400 Mbps WiFi | Haven in Lipa",
+  },
+  "spacious-2-bedroom": {
+    id: 2,
+    slug: "spacious-2-bedroom",
+    name: "Spacious 2BR Getaway | Netflix•Wi-Fi•9Pax•Parking",
+    tagline: "Netflix • Wi-Fi • 9 Pax • Parking",
+  },
   "mickey-in-lipa--family-staycation--sleeps-7": {
     id: 3,
     slug: "mickey-in-lipa--family-staycation--sleeps-7",
@@ -23,12 +34,14 @@ const PRE: Record<string, PropertyContentRow> = {
     id: 4,
     slug: "mickey-in-lipa--family-house--sleeps-11",
     name: "Mickey in Lipa | Family House | Sleeps 11",
+    tagline: "Mickey-Themed • Bunk Room • Sleeps 11 • Garage",
     heroSummary: "...dedicated fiber up to 520 Mbps. From ₱4,200 per night.",
   },
   "mickey-in-lipa--full-family-house--sleeps-15": {
     id: 5,
     slug: "mickey-in-lipa--full-family-house--sleeps-15",
     name: "Mickey in Lipa | Full Family House | Sleeps 15",
+    tagline: "Whole House • Two Bunk Rooms • Sleeps 15 • Garage",
     description: "...dedicated fiber up to 520 Mbps, and garage parking inside.",
   },
 };
@@ -124,7 +137,9 @@ describe("POST /api/admin/dev/fix-listing-presentation", () => {
     expect(store[1].name).toBe("Cozy 1BR Haven");
     expect(store[2].name).toBe("Spacious 2BR Getaway");
     expect(store[5].name).toBe("Mickey in Lipa — Full Family House");
-    expect(store[3].tagline).toBe("Mickey-Themed • Fiber 500+ Mbps • Sleeps 7 • Garage");
+    expect(store[1].tagline).toBe("For couples and remote workers — sleeps 5");
+    expect(store[1].seoTitle).toBe("Cozy 1BR Vacation Rental in Lipa City, Batangas — 500+ Mbps WiFi | Haven in Lipa");
+    expect(store[3].tagline).toBe("For families with kids — up to 7");
     expect(store[4].heroSummary).not.toContain("520 Mbps");
     expect(store[5].description).not.toContain("520 Mbps");
 
