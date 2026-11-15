@@ -2,6 +2,7 @@ import type { Property } from "@prisma/client";
 import Image from "next/image";
 import Link from "next/link";
 import { extraGuestFeeApplies } from "@/lib/occupancy";
+import { getBestFor, getDisplayName } from "@/lib/property-display";
 
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 
@@ -48,6 +49,11 @@ export default function PropertyCard({
   const images: string[] = JSON.parse(property.images || "[]");
   const coverImage = property.featuredImage || images[0] || null;
   const delayClass = index < 4 ? `reveal-d${index + 1}` : "reveal-d4";
+  // DEC-034: the plain, canonical display name — Property.name in the DB still
+  // carries the Airbnb-style keyword suffix ("Spacious 2BR Getaway |
+  // Netflix•Wi-Fi•9Pax•Parking") — plus a one-line "best for" shown right under it.
+  const displayName = getDisplayName(property.slug, property.name);
+  const bestFor = getBestFor(property.slug);
 
   // "From" only when an extra-guest fee can actually push the total above the
   // base rate (fee > 0 AND maxGuests > includedGuests) — same predicate as the
@@ -65,7 +71,7 @@ export default function PropertyCard({
         {coverImage ? (
           <Image
             src={coverImage}
-            alt={`${property.name} — ${property.type} rental in ${property.location}`}
+            alt={`${displayName} — ${property.type} rental in ${property.location}`}
             fill
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             priority={index < 2}
@@ -95,12 +101,17 @@ export default function PropertyCard({
                 // "See the home" affordance — on an index page the name is the
                 // natural way into the gallery, so it doesn't need a third button.
                 <Link href={`/properties/${property.slug}`} className="hover:text-forest transition-colors">
-                  {property.name}
+                  {displayName}
                 </Link>
               ) : (
-                property.name
+                displayName
               )}
             </h3>
+            {/* DEC-034: one-line "best for" near the title, so a visitor can place
+                themselves without reading the full description. */}
+            {bestFor && (
+              <span className="text-[12px] font-medium text-forest mt-0.5 block">{bestFor}</span>
+            )}
             <span className="text-[12px] text-charcoal/50 mt-0.5 block">
               {isIndex
                 ? `Sleeps up to ${property.maxGuests} · ${property.bedrooms} ${plural(property.bedrooms, "bedroom")} · ${property.bathrooms} ${plural(property.bathrooms, "bath")}`
@@ -144,7 +155,7 @@ export default function PropertyCard({
               rather than the top of a long page — the discovery→booking friction fix. */}
           <Link
             href={`/properties/${property.slug}#book`}
-            aria-label={`Check availability for ${property.name}`}
+            aria-label={`Check availability for ${displayName}`}
             data-analytics="check_availability"
             data-property={property.slug}
             className="flex-1 flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-full text-[13px] font-semibold border-2 border-forest text-forest hover:bg-forest hover:text-white transition-all duration-250"
@@ -155,7 +166,7 @@ export default function PropertyCard({
           {isIndex && (
             <Link
               href={`/properties/${property.slug}/book`}
-              aria-label={`Book ${property.name}`}
+              aria-label={`Book ${displayName}`}
               data-analytics="book_click"
               data-property={property.slug}
               className="flex-1 flex items-center justify-center gap-2 py-3 min-h-[44px] rounded-full text-[13px] font-semibold border-2 border-forest bg-forest text-white hover:bg-[#2d4820] hover:border-[#2d4820] transition-all duration-250"

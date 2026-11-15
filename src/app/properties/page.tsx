@@ -8,6 +8,7 @@ import { normalizePricingProse } from "@/lib/occupancy";
 import { STRIPE_FEE_RATE } from "@/lib/pricing-core";
 import { socialMetadata } from "@/lib/seo-metadata";
 import { buildShortNames, getPublicListingCount, getPublicListings, numberWord } from "@/lib/listings";
+import { getDisplayName } from "@/lib/property-display";
 
 // The inventory index. `/properties` was a 404 until now even though it looks
 // like a real path: it was linked from the five biggest blog evergreens until
@@ -97,7 +98,16 @@ export default async function PropertiesIndexPage() {
   }
 
   const count = properties.length;
+  // DEC-034: the derived short name, with the canonical plain name
+  // (src/lib/property-display.ts) winning wherever one is defined — public
+  // pages show that name even though Property.name is still the
+  // keyword-stuffed string in production. Haven AI's own use of
+  // buildShortNames() (src/lib/haven/*) is deliberately left unmodified by
+  // this override, which lives only here.
   const shortNames = buildShortNames(properties);
+  for (const p of properties) {
+    shortNames.set(p.slug, getDisplayName(p.slug, shortNames.get(p.slug) ?? p.name));
+  }
   const bySlug = new Map(properties.map((p) => [p.slug, p]));
   const sleeps = properties.map((p) => p.maxGuests);
   const minSleeps = sleeps.length ? Math.min(...sleeps) : 0;
@@ -238,9 +248,9 @@ export default async function PropertiesIndexPage() {
               <p className={`${prose} max-w-2xl`}>
                 Every home below is a private, entire-unit apartment or transient house for rent
                 in Lipa City, Batangas — {numberWord(count)} of them, each booked direct with live
-                availability and no platform fee. If you&rsquo;ve been comparing Airbnb listings
-                for a Lipa stay, this is the direct-booking alternative: the same homes, real-time
-                dates, and no service charge on top.
+                availability and no platform fee. If you&rsquo;ve been comparing short-term rental
+                listings for a Lipa stay, this is the direct-booking alternative: the same homes,
+                real-time dates, and no service charge on top.
               </p>
             )}
           </div>

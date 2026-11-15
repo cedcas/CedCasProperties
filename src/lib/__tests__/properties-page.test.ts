@@ -113,4 +113,10 @@ describe("/properties H1 and intro", () => {
     expect(html).toMatch(/direct-booking alternative/);
     expect(html).toMatch(/five of them/i);
   });
+
+  it("never names Airbnb in the rendered page body (DEC-034 — no guest-facing Airbnb comparison)", async () => {
+    withFive();
+    const html = renderToStaticMarkup(await PropertiesIndexPage());
+    expect(html).not.toMatch(/airbnb/i);
+  });
 });

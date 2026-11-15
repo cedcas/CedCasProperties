@@ -1519,6 +1519,126 @@ None — first framing exception to the site's CSP since it was established.
 
 ---
 
+## DEC-034 — Product-led listing presentation: plain names + "best for", 500+ Mbps consistency, no guest-facing Airbnb comparison, featured reviews, optional walkthrough-video slot
+
+Date: 2026-11-15
+Status: Active. Built on `feature/product-led-listing-fixes-111526` (from `dev`, Cedric
+pre-approved for review 2026-11-15). PR opened into `dev`, **not merged**; nothing in this
+decision has reached production.
+Area: Website | SEO | Cross-Workstream
+
+### Decision
+Four related, Owner-approved fixes aimed at making the five listings easier to see,
+compare, trust, and book (NCS Product-Led Marketing Doctrine v1.0, HIL §8/14/17/21/22/24):
+
+1. **Canonical plain display name + one-line "best for" per listing**, keyed by slug, in
+   [src/lib/property-display.ts](../src/lib/property-display.ts) — not derived from
+   `Property.name`, which is still the keyword-stuffed Airbnb-style string in production
+   (e.g. "Spacious 2BR Getaway \| Netflix•Wi-Fi•9Pax•Parking"). Read directly by
+   `PropertyCard.tsx` and the listing-page H1; `/properties`' own comparison table applies
+   the same override on top of `buildShortNames()`'s result rather than inside that
+   function, so Haven AI's own (unrelated, heavily tested) use of `buildShortNames()` is
+   untouched by this decision. Admin screens keep showing the raw stored `Property.name`.
+2. **Wi-Fi marketing language is "500+ Mbps" for all 5 listings**, superseding
+   [DEC-032](#dec-032--b34-fiber-wifi-is-now-marketed-at-500-mbps-superseding-the-340-mbps-figure)'s
+   "B38/Mickey unaffected, stays 520 Mbps" note — for *marketing-language consistency*
+   only. This is not a new speed test and B38 is not claimed to be slower; the backup-
+   internet fact for both buildings is unchanged.
+3. **No guest-facing Airbnb comparison** on the surfaces this fix touches — the
+   `/properties` intro, `Hero.tsx`, `chat-tree.ts`'s static-fallback-mode pricing node, the
+   listing-page metadata fallback and "book direct" CTA block, and the `b34-content.ts`/
+   `mickey-content.ts` narrative descriptions that named Airbnb as a comparison. Rephrased
+   to keep the "book direct, save on platform fees" pitch without naming the platform.
+   **Deliberately not** a full-codebase sweep: the `About`/`Staycation` pages' own
+   Airbnb-targeted SEO copy, `BookingForm.tsx`'s Airbnb-savings calculator, and the
+   pre-existing "Why book direct instead of through Airbnb?" FAQ entries are established,
+   intentional positioning from [DEC-007](#dec-007--marketingseo-prose-is-number-free-or-db-derived-never-a-hardcoded-rate-fee-or-count)
+   and were not in scope for this task — flagged here for a future decision if a broader
+   sweep is wanted.
+4. **Featured reviews above the fold** (`selectFeaturedTestimonials()`, up to 3, highest
+   rating then longest message, never fabricated) and an **optional per-unit walkthrough-
+   video slot** (`src/lib/walkthrough-videos.ts`, ships empty — no schema migration, no
+   media uploaded) on each listing page, both near the gallery.
+5. **Booking CTA simplification**: the listing-page "Agree to Rules to Book" checkbox gate
+   is removed from `BookingCard.tsx` — it duplicated a gate `BookingForm.tsx`'s checkout
+   (`/book`) already enforces at both its form and payment steps. The CTA now reaches
+   `/book` as soon as dates are chosen.
+
+### Reason
+The October SEO review and the Nov 9 chat-usage audit both pointed at the same underlying
+problem: a visitor sees an Airbnb-keyword-stuffed title instead of a plain name they can
+place themselves against, an inconsistent Wi-Fi figure between the two buildings with no
+stated reason, reviews buried below a long description, and a listing-page CTA that forced
+an extra step (reading and checking a rules box) before a guest could even reach checkout —
+where the same agreement is required anyway. October GA4 showed 1 `booking_confirmed` and
+availability checks down 60%; these are the lowest-risk, highest-leverage fixes available
+without touching pricing, payment, or availability logic.
+
+### Implications
+- `Property.name`/`tagline`/the Mickey rows' Mbps wording are still stale in the production
+  DB — the display-name/best-for fix is fully live in code with **no DB write required**
+  (slug-keyed override), but a TEMPORARY DEC-012 admin-gated route,
+  `src/app/api/admin/dev/fix-listing-presentation/route.ts` (GET dry run + `planHash`, POST
+  confirm + `planHash`), plans/applies the matching production content correction — not yet
+  run. See `HIL_PROJECT_STATUS.md` for the Owner's GET-then-POST steps. The same route also
+  corrects `dev.haveninlipa.com`'s `[DEVDB]`-prefixed titles if Cedric wants that too.
+- A future listing (a 6th property) needs its own `CANONICAL_PROPERTY_DISPLAY` entry — the
+  helpers fall back to the old derived/raw name otherwise, not a crash, but silently misses
+  the "best for" line.
+- Any future Airbnb-comparison request anywhere on the site should be checked against both
+  this decision's narrow scope and [DEC-030](#dec-030--no-individual-airbnb-listing-link-anywhere-footer-social-row-is-facebookinstagramtiktokyoutube-only-the-blogs-broken-airbnb-vanity-link-repoints-to-direct-booking)'s link policy before deciding what "no Airbnb" covers on a given page.
+- `src/lib/booking-card-cta.ts` is the new single source of truth for the listing-page
+  CTA's disabled/label logic — it takes no rules-agreement parameter at all, which is the
+  guard against that gate quietly coming back.
+
+### Supersedes
+DEC-032's "B38/Mickey is unaffected, stays 520 Mbps" note — for marketing-language
+consistency only; the underlying speed-test fact for B34 is unchanged, and B38 is not
+claimed slower.
+
+**Addendum, 2026-11-15 — extending the still-unrun route to also fix stored meta/speed
+fields and taglines; still not run.** Cedric reviewed this decision's dev deployment and
+confirmed two things stay exactly as they are and are **not to be reopened**: the checkout
+Airbnb-savings calculator (`BookingForm.tsx`) and the on-site Airbnb comparisons that
+explain direct-booking savings — the "Why book direct instead of Airbnb?" FAQ entries and
+the `About`/`Staycation` pages' savings copy. Separately, dev evidence surfaced two gaps
+in the production correction this decision already called for but had not yet run:
+
+1. `seoTitle` was missing from the route's Prisma `SELECT` entirely, so a stale speed
+   figure there (dev's `cozy-1-bedroom` row reads "...— 400 Mbps WiFi | Haven in Lipa")
+   was invisible to the plan.
+2. `tagline` was only getting a partial substring fix (520→500+ for Mickey) rather than
+   the whole-field rewrite to the plain "best for" line this decision's point 1 already
+   put in code (`src/lib/property-display.ts`'s `CANONICAL_PROPERTY_DISPLAY[slug].bestFor`)
+   — admin screens and any surface reading the raw column still showed the keyword string.
+
+`src/lib/listing-presentation-fixes.ts` and the route were extended, same route/plan/hash
+shape, still TEMPORARY/DEC-012, still not run against any database:
+- `seoTitle` added to the `SELECT` and to the per-field stale-speed substring table
+  (targeted exact-substring replacements, not a whole-field overwrite, so this still works
+  if production, dev, and the seed differ slightly from each other).
+- The reviewed speed-figure table now also covers B34/`cozy-1-bedroom`'s "400 Mbps"
+  (a different, still-stale figure from the "340 Mbps" DEC-032 already corrected and
+  removed the route for) alongside Mickey's "up to 520 Mbps" — both superseded by
+  "500+ Mbps". The residual post-write scan now runs across **all 5** properties' speed
+  fields, not just Mickey's 3, so an unreviewed stale figure anywhere aborts the whole run
+  for a human to fix by hand, rather than silently surviving.
+- `tagline` now gets its own whole-field rewrite (`planTaglineFix`) to the exact
+  `bestFor` line, gated by an allow-list of known current/previous stored values per
+  slug (including the dev `mickey-in-lipa--family-staycation--sleeps-7` variant,
+  "Mickey-Themed • 500 Mbps Wi-Fi • Sleeps 7 • Garage") — anything else aborts rather than
+  overwriting an unexpected admin edit. `prisma/property-content/{b34,mickey}-content.ts`
+  taglines were updated to the same `bestFor` strings so seed stays in sync.
+- Descriptions and FAQs that mention Airbnb are untouched except for a speed-figure
+  substring if one is actually present — no rewording of the surrounding Airbnb copy,
+  consistent with the "keep the calculator/FAQ as-is" instruction above.
+
+Still built on `content/extend-listing-presentation-111526` (from `dev`), PR opened into
+`dev`, not merged. The production and dev GET/POST commands are in the route's own comment
+and in `HIL_PROJECT_STATUS.md`. No run has happened against any database.
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
