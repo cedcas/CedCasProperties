@@ -81,7 +81,7 @@ export default function Hero({ propertyCount }: HeroProps) {
             color: "rgba(44,44,44,0.65)",
           }}
         >
-          Book directly and save 15–20% compared to Airbnb — no platform fees,
+          Book directly and save 15–20% on platform fees — no middleman,
           just a warm, comfortable stay with your host.
         </p>
 

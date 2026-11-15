@@ -204,7 +204,7 @@ export const chatTree: Record<string, ChatNode> = {
     id: "info-safety",
     message:
       "Absolutely! We've hosted over 280 guests and take pride in transparent communication from the moment you inquire.\n\n" +
-      "You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay. Booking directly also means no service fees — so you save compared to Airbnb!",
+      "You'll receive a full booking confirmation by email, and your host will be reachable throughout your stay. Booking directly also means no extra service fees on top of the nightly rate.",
     options: [
       { label: "How do I book?",    nodeId: "booking-how" },
       { label: "💬 Talk to a Human", nodeId: "talk-to-human" },
@@ -219,7 +219,7 @@ export const chatTree: Record<string, ChatNode> = {
     options: [
       { label: "Nightly rates",               nodeId: "pricing-rates" },
       { label: "Weekend vs weekday pricing",   nodeId: "pricing-dynamic" },
-      { label: "Save vs Airbnb",               nodeId: "pricing-savings" },
+      { label: "Save on fees",                 nodeId: "pricing-savings" },
       { label: "← Back to topics",             nodeId: "root" },
     ],
   },
@@ -250,7 +250,7 @@ export const chatTree: Record<string, ChatNode> = {
   "pricing-savings": {
     id: "pricing-savings",
     message:
-      "By booking directly with us instead of through Airbnb, you skip the service fees that platforms charge — which can be 10–15% on top of the nightly rate.\n\n" +
+      "By booking directly with us, you skip the service fees that other booking platforms charge — which can be 10–15% on top of the nightly rate.\n\n" +
       "Same property, same host, better price. We'll even show you how much you're saving during checkout!",
     options: [
       { label: "How do I book?",     nodeId: "booking-how" },

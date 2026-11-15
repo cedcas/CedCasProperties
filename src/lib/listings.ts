@@ -35,7 +35,13 @@ export const PUBLIC_LISTING_ORDER = { createdAt: "desc" } as const;
  * ("Full Family House") to stay distinguishable.
  *
  * Derived rather than hardcoded so renaming a listing in admin can't leave a
- * stale label behind on a page that never learns about the change.
+ * stale label behind on a page that never learns about the change. Haven AI
+ * (src/lib/haven/*) also calls this directly for property-mention/short-name
+ * wording in chat — deliberately NOT overridden with the DEC-034 canonical
+ * map here, so this fix doesn't change Haven's tested chat wording as a side
+ * effect. A public page that wants the DEC-034 canonical name applies
+ * `getDisplayName()` (src/lib/property-display.ts) on top of this map's
+ * result instead — see src/app/properties/page.tsx.
  */
 export function buildShortNames(props: { slug: string; name: string }[]): Map<string, string> {
   const segmentsOf = (name: string) => name.split("|").map((s) => s.trim()).filter(Boolean);

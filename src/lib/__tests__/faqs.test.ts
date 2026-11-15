@@ -59,6 +59,13 @@ describe("faqs", () => {
     }
   });
 
+  it("DEC-034: Wi-Fi speed is 500+ Mbps for both B34 and B38 — no '520 Mbps' survives", () => {
+    const text = faqs.map((f) => f.a).join(" ");
+    expect(text).not.toMatch(/520\s*mbps/i);
+    const wifiItem = faqs.find((f) => f.q === "Is the WiFi fast enough for remote work?");
+    expect(wifiItem!.a).toMatch(/500\+ Mbps/);
+  });
+
   it("FAQ #2 still preserves the approved capacities and the 24-combined-guest fact", () => {
     const item = faqs.find((f) => f.q === "How many guests can each unit accommodate?");
     expect(item!.a).toContain("sleeps up to 5");

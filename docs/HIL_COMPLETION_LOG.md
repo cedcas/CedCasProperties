@@ -4,6 +4,67 @@
 
 ---
 
+## 2026-11-15 — Product-led listing presentation: plain names, featured reviews, booking CTA (feature/product-led-listing-fixes-111526)
+
+Area: Website | SEO
+
+Status: Built and tested on `feature/product-led-listing-fixes-111526` (from `dev`, Cedric
+pre-approved for review 2026-11-15, DEC-034). Lint, `tsc --noEmit`, and the full `npx
+vitest run` suite clean (276 files / 5,142 tests across all three timezone projects, 19
+new test files / ~95 new tests). No `.env` file was read; no `npm run build`/Prisma `db
+push`/`migrate`/`seed` command was run (`npx prisma generate` only, to regenerate client
+types for `tsc`/lint, which this worktree had never run — read-only, no DB connection); no
+schema change, no migration. Opened as a PR into `dev`, not merged, not released to `main`.
+
+### Outcome
+1. **Plain display names + "best for"** — `src/lib/property-display.ts`'s
+   `CANONICAL_PROPERTY_DISPLAY`, keyed by slug, feeds `PropertyCard.tsx`, the listing-page
+   H1 (`buildPropertyPageH1()` now takes an optional `slug`), and `/properties`' comparison
+   table (applied on top of `buildShortNames()`'s result at that call site only, so Haven
+   AI's own use of `buildShortNames()` for chat wording is untouched). All 5 listings show
+   a plain name and a one-line "best for" even though `Property.name` is still the
+   keyword-stuffed Airbnb-style string in production.
+2. **Wi-Fi marketing consistency** — B38/Mickey's "up to 520 Mbps" wording is now "500+
+   Mbps" in `src/lib/faqs.ts` and `prisma/property-content/mickey-content.ts`, matching B34
+   (DEC-034 supersedes DEC-032's B38-unaffected note for marketing language only).
+3. **No guest-facing Airbnb comparison** on `/properties`' intro, `Hero.tsx`,
+   `chat-tree.ts`'s static-fallback pricing node, the listing-page metadata fallback/CTA
+   block, and the `b34-content.ts`/`mickey-content.ts` narrative descriptions that named
+   Airbnb — rephrased to keep the "book direct, save on fees" pitch without naming the
+   platform. Deliberately did not touch the `About`/`Staycation` pages' own Airbnb-targeted
+   SEO copy, `BookingForm.tsx`'s Airbnb-savings calculator, or the pre-existing "Why book
+   direct instead of through Airbnb?" FAQ entries — out of scope, flagged for a future call.
+4. **Featured reviews + walkthrough-video slot** — `selectFeaturedTestimonials()` (pure, up
+   to 3, highest rating then longest message, never fabricated) and `FeaturedReviews.tsx`
+   render near the top of each listing page, with a jump link to the existing full list
+   (`#reviews`). `src/lib/walkthrough-videos.ts` ships an empty per-slug URL map (no schema
+   migration, no media uploaded — searched `/workspace/hil-marketing`: Haven Reels are
+   persona videos, the m360 clips are a vendor-portal walkthrough, neither is a unit tour);
+   `PropertyWalkthrough.tsx` renders nothing until a real URL is added.
+5. **Booking CTA simplification** — removed the listing-page "Agree to Rules to Book"
+   checkbox gate from `BookingCard.tsx` (pure logic extracted to
+   `src/lib/booking-card-cta.ts`): it duplicated a gate `BookingForm.tsx`'s checkout
+   already enforces at both its form and payment steps. The CTA now reaches `/book` as soon
+   as dates are chosen.
+6. **TEMPORARY DEC-012 production content-correction route** —
+   `src/lib/listing-presentation-fixes.ts` + `/api/admin/dev/fix-listing-presentation`
+   (GET dry run + `planHash`, POST confirm + `planHash`) plans/applies the matching
+   production write: `Property.name` → canonical plain name for all 5 (prefix-preserving,
+   so a `[DEVDB] ` tag survives), and the 3 Mickey rows' "520 Mbps" substrings → "500+
+   Mbps" across `tagline`/`seoDescription`/`heroSummary`/`description`/`amenityDetails`/
+   `propertyFaqs`. Follows the `fix-b34-speed`/`fix-drive-times` precedent exactly (exact
+   `{id, slug}` assertions, no whole-field overwrite for the Mbps fields, residual-stale
+   abort, one transaction, post-write re-verification, `revalidatePath` on all 5 pages).
+   **Not yet run against production.**
+
+### Not built (proposals only, documented not implemented)
+- Any change to quote math, extra-guest fees, payment methods, availability locking, or
+  checkout charges — out of scope per the task's hard rules.
+- A broader Airbnb-comparison sweep beyond the surfaces listed above.
+- Uploading or producing new walkthrough-video media.
+
+---
+
 ## 2026-11-13, latest — Haven: English replies stay English, Tagalog date-only questions use the date (fix/haven-lang-leak-111326)
 
 Area: Website

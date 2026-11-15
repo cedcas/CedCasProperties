@@ -1,3 +1,5 @@
+import { CANONICAL_PROPERTY_DISPLAY } from "./property-display";
+
 /**
  * Pure, framework-free name helpers shared by both a server component
  * (src/app/properties/[slug]/page.tsx) and a client component (PropertyGallery.tsx) — kept
@@ -17,7 +19,14 @@ export function cityFromLocation(location: string): string {
   return location.split(",")[0].trim();
 }
 
-/** e.g. "Spacious 2BR Haven in Lipa City" — names the home and the city, never the Airbnb title. */
-export function buildPropertyPageH1(name: string, location: string): string {
-  return `${basePropertyName(name)} in ${cityFromLocation(location)}`;
+/**
+ * e.g. "Spacious 2BR Getaway in Lipa City" — names the home and the city, never the
+ * Airbnb-style listing title. Takes `slug` so a DEC-034 canonical name (the only way to
+ * disambiguate the three same-first-segment Mickey configurations, e.g. "Mickey in Lipa —
+ * Full Family House") wins over the plain first-pipe-segment fallback used for a slug with
+ * no canonical entry.
+ */
+export function buildPropertyPageH1(name: string, location: string, slug?: string): string {
+  const base = (slug && CANONICAL_PROPERTY_DISPLAY[slug]?.name) || basePropertyName(name);
+  return `${base} in ${cityFromLocation(location)}`;
 }
