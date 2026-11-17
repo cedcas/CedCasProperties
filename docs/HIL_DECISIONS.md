@@ -1689,12 +1689,13 @@ today) is exactly today's behavior: every night qualifies.
   returns 4xx with a short English message naming whichever bound(s) are set (e.g. "This
   code is only valid on Sunday–Thursday nights. None of the nights in this stay qualify.").
   The guest never sees a code "apply" for ₱0 while still being attached to the booking.
-- `computeBookingQuote` (used by the booking route, the Stripe payment-intent route, and
-  Haven's read-only quote tools) treats a zero-qualifying code the same as any other
-  invalid-code case already did before this decision — it drops the code and charges full
-  price, silently, because by the time a booking is actually submitted the interactive
-  validate call should already have caught it; the 4xx rejection with a reason is reserved
-  for that interactive moment, not threaded through the final booking write.
+- `computeBookingQuote` (used by the booking route, the checkout-attempts route, the Stripe
+  payment-intent route, booking amendment, and Haven's read-only quote tools) also rejects
+  an otherwise-valid, zero-qualifying code with the same `rejectionMessage`, returned as
+  `quoteResult.error` — checkout and payment-intent surface it to the guest the same way
+  they do any other quote error, not just the interactive validate endpoint. Only an
+  unknown/inactive/wrong-listing/`maxUses`-reached code is still dropped silently, unchanged
+  from before this decision.
 - Extra-guest fee and the Stripe 6% fee are unaffected — the discount still touches only the
   nightly base, same as before this decision.
 

@@ -36,8 +36,11 @@ full mixed-stay rule and reasoning.
   (admin form validation). `parsePropertyIds`/`scopeAppliesToProperty` are unchanged.
 - **`src/lib/booking-quote.ts`** — `computeBookingQuote`'s discount block now calls
   `evaluatePromoDiscount` against the server's own `dailyRates` instead of computing the
-  percentage/fixed amount inline against the full `nightlyTotal`. A zero-qualifying code is
-  dropped silently, same as any other invalid-code case already was.
+  percentage/fixed amount inline against the full `nightlyTotal`. A zero-qualifying code on
+  an otherwise-valid code rejects the quote (`ok:false`, the helper's `rejectionMessage`) —
+  surfaced as `quoteResult.error` by every caller (booking route, checkout-attempts, Stripe
+  payment-intent, booking amendment), the same as checkout rejects any other invalid quote.
+  Unknown/inactive/wrong-listing/max-uses-reached codes are still dropped silently.
 - **`POST /api/discount-codes/validate`** — now takes `checkIn`/`checkOut` (a client-sent
   `nightlyTotal` is accepted but never read) and recomputes the discount server-side via
   `getDailyRates` + `evaluatePromoDiscount`. Returns 4xx with a clear English message when

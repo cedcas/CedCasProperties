@@ -124,10 +124,11 @@ export async function computeBookingQuote(input: {
 
     if (discount && discount.isActive && codeAppliesToProperty(discount.propertyIds, propertyId)) {
       if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
-        // DEC-035: optional date-range / allowed-weekday limits. Zero qualifying nights
-        // (e.g. a stale client applied the code before changing dates) drops the code
-        // silently here, same as any other invalid-code case above — the guest-facing
-        // rejection with a clear reason lives in the interactive validate endpoint.
+        // DEC-035: optional date-range / allowed-weekday limits. The code is otherwise
+        // valid here (exists, active, in scope, under maxUses), so zero qualifying nights
+        // must REJECT the quote with the helper's guest-facing reason rather than silently
+        // charging full price as if no code were entered — checkout and payment-intent both
+        // surface `error` to the guest.
         const evaluation = evaluatePromoDiscount(
           {
             type: discount.type,
@@ -141,9 +142,17 @@ export async function computeBookingQuote(input: {
         if (evaluation.ok) {
           discountAmount = evaluation.discountAmount;
           discountCode = codeUpper;
+        } else {
+          return {
+            ok: false,
+            status: 400,
+            error: evaluation.rejectionMessage ?? "This code doesn't apply to any night of this stay.",
+          };
         }
       }
     }
+    // An unknown, inactive, wrong-listing, or max-uses-reached code falls through here and
+    // is silently ignored (discountCode stays null) — unchanged from before DEC-035.
   }
 
   // Extra-guest fee — recomputed from the property's own fields (never trust the client total).
