@@ -4,6 +4,75 @@
 
 ---
 
+## 2026-11-17, latest — Promo codes: optional date range and allowed weekdays (feature/discount-code-date-weekday-limits-111726)
+
+Area: Website
+
+Status: Built and tested on `feature/discount-code-date-weekday-limits-111726` (from `dev`
+at `e0ff767`, which equals production `main` / PR #119), Cedric pre-approved 2026-11-17
+(DEC-035). Lint, `tsc --noEmit`, and `npx vitest run` clean (279 files / 5,268 tests across
+all three timezone projects, 120 new). No `.env` file was read; no `npm run build`/Prisma
+`db push`/`migrate`/`seed`/`db:migrate` command was run against any database — only
+`npm ci` and `npx prisma generate` (codegen only, no DB connection). PR opened into `dev`,
+**not merged, not released to `main`.**
+
+### Outcome
+`DiscountCode` gains three optional columns — `validFrom`, `validUntil` (both inclusive
+calendar dates), `allowedWeekdays` (JSON int[], `0=Sun…6=Sat`) — so a code like
+`MICKEY-MIDWEEK` can be restricted to Sunday–Thursday nights and/or a date window, without
+changing how `WELCOME`/`WELCOMEBACK`/the existing unrestricted `MICKEY-MIDWEEK` row behave
+(all three fields null = exactly today's behavior). See [DEC-035](HIL_DECISIONS.md) for the
+full mixed-stay rule and reasoning.
+
+### Material Changes
+- **Migration `prisma/migrations/20261117194250_add_discount_code_validity_limits/`** —
+  additive only (three nullable columns, no defaults, no backfill). **Not applied to any
+  database by this PR** — per DEC-026, an operator must run it against dev before the
+  merge-to-`dev` build passes the release gate, and the Owner must approve and run it
+  against production before any future release to `main`.
+- **`src/lib/promo.ts`** — new pure, DB-free helpers: `parseAllowedWeekdays`,
+  `nightQualifiesForDiscount`, `describeDiscountLimits`, `buildPromoRejectionMessage`,
+  `evaluatePromoDiscount` (the single mixed-stay calculation), `parseDiscountLimitsInput`
+  (admin form validation). `parsePropertyIds`/`scopeAppliesToProperty` are unchanged.
+- **`src/lib/booking-quote.ts`** — `computeBookingQuote`'s discount block now calls
+  `evaluatePromoDiscount` against the server's own `dailyRates` instead of computing the
+  percentage/fixed amount inline against the full `nightlyTotal`. A zero-qualifying code is
+  dropped silently, same as any other invalid-code case already was.
+- **`POST /api/discount-codes/validate`** — now takes `checkIn`/`checkOut` (a client-sent
+  `nightlyTotal` is accepted but never read) and recomputes the discount server-side via
+  `getDailyRates` + `evaluatePromoDiscount`. Returns 4xx with a clear English message when
+  zero nights qualify; returns `valid:true` with the correct (possibly partial) amount and
+  a partial-aware message ("10% off eligible nights") otherwise. Unknown/inactive/
+  out-of-scope/max-uses-reached behavior is unchanged.
+- **`BookingForm.tsx`** — `applyDiscountCode` sends `checkIn`/`checkOut` instead of a
+  client-computed `nightlyTotal`. The "you save vs Airbnb" calculator (`airbnbTotal`/
+  `savings`) was already independent of `discountAmount` and needed no change.
+- **Admin `/admin/discount-codes`** (`DiscountCodesClient.tsx`,
+  `POST /api/admin/discount-codes`, `PATCH /api/admin/discount-codes/[id]`) — optional
+  Valid-From/Valid-Until date pickers and Sun–Sat weekday toggles on create and on the
+  existing per-row notes editor (now "edit notes, date range or allowed nights"); a new
+  "Limits" table column via `describeDiscountLimits` (e.g. "Sun–Thu, until 18 Dec 2026" /
+  "No date/day limits"). Validation shared with the pure helper.
+- **Tests**: `src/lib/__tests__/promo.test.ts` (new, 33 cases — all 8 required scenarios:
+  no-limits parity, weekday-only, date-range inclusivity, mixed-stay partial discount,
+  zero-qualifying rejection (weekday and date-range), listing-restriction parity, fixed-cap,
+  null/empty = no limit) and `src/lib/__tests__/discount-codes-validate-route.test.ts` (new,
+  7 cases — route-level wiring, listing-restriction 404 wording, zero-qualifying 400).
+  Pre-existing `stripe-payment-routes.test.ts` discount cases (mocked `DiscountCode` rows
+  without the three new fields) pass unmodified, confirming backward compatibility.
+- **Haven**: not touched. `get_quote`/`find_stay` (`src/lib/haven/tools.ts`) call
+  `computeBookingQuote` without ever passing `discountCode` — confirmed by inspection, not
+  assumed — so Haven does not apply promo codes today and this change doesn't affect her.
+
+### Outstanding — operator/Owner action required
+The migration above has not been applied to any database. After an operator applies it to
+dev and the PR is reviewed/merged to `dev`, and after the Owner later approves + applies it
+to production as part of a future `dev`→`main` release, Cedric sets `MICKEY-MIDWEEK`'s
+`validUntil` to `2026-12-18` and `allowedWeekdays` to Sun–Thu in `/admin/discount-codes` —
+not done by this PR.
+
+---
+
 ## 2026-11-15, latest — Production run of the listing-presentation correction, and the temporary route removed (chore/remove-listing-presentation-route-111526)
 
 Area: Website

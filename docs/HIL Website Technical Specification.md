@@ -1,8 +1,11 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-15 (listing-presentation production content correction ran —
-> planHash `914e8a633bfc9051`, 23 fields / 5 properties, verified live — and the
-> TEMPORARY DEC-012 route was removed; branch
+> **Last updated:** 2026-11-17 (Discount Code System: optional date-range / allowed-weekday
+> limits and the mixed-stay rule, [DEC-035](HIL_DECISIONS.md); branch
+> `feature/discount-code-date-weekday-limits-111726`, built on `dev`, not merged, migration
+> not applied to any database). Prior, 2026-11-15 (listing-presentation production content
+> correction ran — planHash `914e8a633bfc9051`, 23 fields / 5 properties, verified live —
+> and the TEMPORARY DEC-012 route was removed; branch
 > `chore/remove-listing-presentation-route-111526`, built on `dev`, not merged). Prior,
 > same day: DEC-034 product-led listing presentation: canonical
 > display names + "best for", featured reviews, walkthrough-video slot, booking CTA
@@ -551,7 +554,7 @@ The site is designed as a direct-booking alternative to Airbnb, with a savings c
 - The seeds still overwrite them, so mirror any admin edit into `prisma/property-content/*`.
 - Rendering rules live in the SEO spec → "Page titles and social metadata".
 - **Booking** — propertyId, guestName, guestEmail, guestPhone, checkIn, checkOut, guests, totalPrice, nightlyTotal, `extraGuestFee` (Decimal 10,2, nullable — added 2026-06-14), stripeFee, discountCode, discountAmount, status (pending/confirmed/cancelled), paymentMethod (gcash/bpi/stripe), stripePaymentIntentId, notes
-- **DiscountCode** — code (unique), type (fixed/percentage), value, isActive, usageCount, maxUses, `propertyIds` (added 2026-06-05; optional JSON int array — `null`/empty = applies to all properties, otherwise scopes the code to those Property ids)
+- **DiscountCode** — code (unique), type (fixed/percentage), value, isActive, usageCount, maxUses, `propertyIds` (added 2026-06-05; optional JSON int array — `null`/empty = applies to all properties, otherwise scopes the code to those Property ids), `validFrom`/`validUntil`/`allowedWeekdays` (added 2026-11-17, [DEC-035](HIL_DECISIONS.md); optional inclusive date bounds + JSON weekday int array, `null`/empty = no limit — see Discount Code System)
 - **AdditionalCharge** *(added 2026-06-28)* — bookingId (FK, `onDelete: Cascade`), description, amount (Decimal 10,2), `token` (unique, opaque — drives the public `/pay/<token>` URL), status (pending/awaiting_verification/paid/cancelled), paymentMethod (gcash/bpi/stripe, set when guest pays), stripeFee (Decimal 10,2, card only), stripePaymentIntentId, notifiedAt, paidAt; indexed on `(bookingId)` and `(status)`. See Additional Charges (Pay-by-Link).
 - **PropertyRate** — propertyId, rateType (weekday/weekend/override), dayOfWeek (0–6), specificDate, rate, note
 - **Testimonial** — propertyId, name, location, rating, message, isActive
@@ -640,7 +643,7 @@ Username: [redacted: SMTP/IMAP login, stored in Vercel env]
 - **Dynamic pricing:** manage weekday/weekend rates and date-specific overrides per property
 - Booking management: view all bookings, update status (pending → confirmed → cancelled)
 - Confirming a booking triggers email to guest automatically
-- **Discount codes:** create, edit, activate/deactivate promo codes (fixed ₱ or percentage); scope each code to all properties or a specific single/multiple set; track usage counts and max uses
+- **Discount codes:** create, edit, activate/deactivate promo codes (fixed ₱ or percentage); scope each code to all properties or a specific single/multiple set; optional date-range and allowed-weekday limits ([DEC-035](HIL_DECISIONS.md)); track usage counts and max uses
 - Contact message inbox with read/unread tracking (now under **Messages → Contact Us Messages**)
 - **Guest Messaging (Messages → Guest Messages):** Airbnb-style thread list keyed on booking with search, status chip, property thumbnail, and last-message preview; chat-style detail view with hybrid composer (template picker `+` OR free-text)
 - **Quick Replies (Messages → Quick Replies):** reusable email templates with `{{variable}}` substitution; manual or automatic trigger (anchor = check-in / check-out / booking confirmation, with signed offset in hours)
@@ -1736,8 +1739,22 @@ Optional per-property fee charged per extra guest, per night, once a booking exc
 | `maxUses` | Optional limit; `null` = unlimited |
 | `propertyIds` | Optional JSON int array (added 2026-06-05). `null`/empty = all properties; otherwise the code only redeems on those Property ids |
 | `notes` | Optional free-form admin notes (`TEXT`, nullable, added 2026-06-25). Editable anytime from the admin table; not surfaced to guests |
+| `validFrom` | Optional stay-night calendar date (`DATE`, UTC midnight — added 2026-11-17, [DEC-035](HIL_DECISIONS.md)). `null` = no start bound |
+| `validUntil` | Optional stay-night calendar date, inclusive (`DATE`, added 2026-11-17, DEC-035). `null` = no end bound |
+| `allowedWeekdays` | Optional JSON int array, `0=Sun…6=Sat` (`TEXT`, added 2026-11-17, DEC-035). `null`/empty = every weekday |
 
 Guests enter a code during checkout; it's validated via `/api/discount-codes/validate`. The discount is applied to the nightly total before Stripe fees (if applicable). Usage count is incremented when the booking is created.
+
+**Optional date-range / allowed-weekday limits — mixed-stay rule (added 2026-11-17, [DEC-035](HIL_DECISIONS.md)).** A stay night (a UTC-midnight calendar date, [src/lib/dates.ts](../src/lib/dates.ts)) qualifies for a code's discount only if it satisfies every bound the code has set: `validFrom ≤ night ≤ validUntil` (both inclusive) **and** the night's weekday is in `allowedWeekdays` (same `0=Sun…6=Sat` convention as `PropertyRate.dayOfWeek`). A code with all three fields null (every code before this decision) has no limit — every night qualifies, exactly as before.
+
+The single implementation lives in `evaluatePromoDiscount()` ([src/lib/promo.ts](../src/lib/promo.ts)), called by both `computeBookingQuote` ([src/lib/booking-quote.ts](../src/lib/booking-quote.ts)) and `POST /api/discount-codes/validate`:
+- **Percentage** discounts the sum of *qualifying* nights' server per-night rates only — never the full-stay total. A Thu→Sat stay (nights Thu, Fri) with a Sun–Thu-only 10% code discounts Thursday's rate only; Friday is full price.
+- **Fixed** is capped at the qualifying-nights subtotal, so it can never eat a non-qualifying night's price.
+- **Zero qualifying nights** on an otherwise-valid code (exists, active, in scope, under `maxUses`) is a rejection, not a silent ₱0 discount. `POST /api/discount-codes/validate` now takes `checkIn`/`checkOut` (a client-sent `nightlyTotal` from an older build is accepted but never read) and recomputes via `getDailyRates`; it returns a 4xx with a short English message naming whichever bound(s) are set (e.g. "This code is only valid on Sunday–Thursday nights. None of the nights in this stay qualify.") instead of `valid:true` with a ₱0 amount. When some but not all nights qualify, it returns `valid:true` with the correct partial amount and a partial-aware message ("10% off eligible nights" instead of "10% off nightly rate"). `BookingForm.tsx` sends the stay dates to this endpoint instead of a client-computed total.
+- `computeBookingQuote` treats a zero-qualifying code the same as any other invalid-code case it already handled before this decision — it drops the code and charges full price silently (no 4xx from the final booking write); the explicit rejection-with-reason is reserved for the interactive validate call, which should already have caught it before the guest reaches checkout.
+- Extra-guest fee and the Stripe 6% fee are unaffected — the discount still touches only the nightly base.
+
+Admin create/edit ([DiscountCodesClient.tsx](../src/app/admin/discount-codes/DiscountCodesClient.tsx)) gained optional Valid-From/Valid-Until date pickers and Sun–Sat weekday toggle pills, validated by `parseDiscountLimitsInput()` (`src/lib/promo.ts`: `validFrom` must not be after `validUntil`; weekday values must be 0–6; an empty/all-cleared weekday selection persists as `null`). The table gained a **Limits** column via `describeDiscountLimits()` (e.g. "Sun–Thu, until 18 Dec 2026" or "No date/day limits").
 
 **Editable notes (added 2026-06-25, `e5c0749`).** Each code carries free-form `notes` the owner can continuously edit — campaign name, who it's for, when to retire it, etc. The create form has an optional Notes textarea, and every row in the table has a sticky-note toggle (gold when notes exist, faint when empty) that expands an inline editor with a Save button + "Saved ✓" indicator, all in [DiscountCodesClient.tsx](../src/app/admin/discount-codes/DiscountCodesClient.tsx). Saved via `PATCH /api/admin/discount-codes/[id]`, which was **hardened the same session** — it formerly spread the raw request JSON into `prisma.discountCode.update`, and now whitelists only `isActive` + `notes`, so a crafted request can no longer overwrite `code`, `usageCount`, `value`, etc.
 

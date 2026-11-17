@@ -253,6 +253,9 @@ model DiscountCode {
   maxUses     Int? // null = unlimited
   propertyIds String?  @db.Text // JSON array of Property ids. null/empty = applies to ALL properties
   notes       String?  @db.Text // free-form admin notes/comments — editable after creation
+  validFrom   DateTime? @db.Date // first stay-night calendar date eligible (UTC midnight). null = no start bound (DEC-035)
+  validUntil  DateTime? @db.Date // last stay-night calendar date eligible, inclusive. null = no end bound (DEC-035)
+  allowedWeekdays String? @db.Text // JSON int[] 0=Sun..6=Sat (matches PropertyRate.dayOfWeek). null/empty = every weekday (DEC-035)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }

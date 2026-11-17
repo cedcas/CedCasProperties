@@ -414,7 +414,7 @@ export default function BookingForm({
 
   const applyDiscountCode = async () => {
     if (!discountCodeInput.trim()) return;
-    if (computedNightlyTotal <= 0) {
+    if (!form.checkIn || !form.checkOut || computedNightlyTotal <= 0) {
       setDiscountError("Please choose your stay dates first so we can calculate your discount.");
       return;
     }
@@ -424,7 +424,12 @@ export default function BookingForm({
       const res = await fetch("/api/discount-codes/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: discountCodeInput.trim(), nightlyTotal: computedNightlyTotal, propertyId }),
+        body: JSON.stringify({
+          code: discountCodeInput.trim(),
+          propertyId,
+          checkIn: form.checkIn,
+          checkOut: form.checkOut,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getDailyRates, sumDailyRates, calcStripeFee, calcExtraGuestFee, type DailyRateEntry } from "@/lib/pricing";
-import { codeAppliesToProperty } from "@/lib/promo";
+import { codeAppliesToProperty, evaluatePromoDiscount, parseAllowedWeekdays } from "@/lib/promo";
 import { toUtcMidnight } from "@/lib/dates";
 
 export { toStripeAmount, STRIPE_CURRENCY } from "@/lib/stripe-payment";
@@ -110,9 +110,9 @@ export async function computeBookingQuote(input: {
   const nightlyTotal = sumDailyRates(dailyRates);
 
   // ── Discount code validation ──────────────────────────────────────────────
-  // The discount base is the SERVER nightly total. It used to be the client-sent
-  // nightlyTotal/totalPrice, which let a tampered request inflate a percentage (or
-  // uncap a fixed) discount. Same formulas as /api/discount-codes/validate (UI preview).
+  // The discount base is the SERVER per-night rates (`dailyRates`), never a client-sent
+  // total. `evaluatePromoDiscount` (src/lib/promo.ts) is the single DEC-035 mixed-stay
+  // calculation shared with POST /api/discount-codes/validate (UI preview).
   let discountCode: string | null = null;
   let discountAmount: number = 0;
 
@@ -124,12 +124,24 @@ export async function computeBookingQuote(input: {
 
     if (discount && discount.isActive && codeAppliesToProperty(discount.propertyIds, propertyId)) {
       if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
-        if (discount.type === "percentage") {
-          discountAmount = Math.round(nightlyTotal * (Number(discount.value) / 100) * 100) / 100;
-        } else {
-          discountAmount = Math.min(Number(discount.value), nightlyTotal);
+        // DEC-035: optional date-range / allowed-weekday limits. Zero qualifying nights
+        // (e.g. a stale client applied the code before changing dates) drops the code
+        // silently here, same as any other invalid-code case above — the guest-facing
+        // rejection with a clear reason lives in the interactive validate endpoint.
+        const evaluation = evaluatePromoDiscount(
+          {
+            type: discount.type,
+            value: Number(discount.value),
+            validFrom: discount.validFrom,
+            validUntil: discount.validUntil,
+            allowedWeekdays: parseAllowedWeekdays(discount.allowedWeekdays),
+          },
+          dailyRates
+        );
+        if (evaluation.ok) {
+          discountAmount = evaluation.discountAmount;
+          discountCode = codeUpper;
         }
-        discountCode = codeUpper;
       }
     }
   }
