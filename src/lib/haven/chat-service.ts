@@ -59,10 +59,12 @@ import {
   ensureSingleNightNudge,
   needsAmenityHandoff,
   stripBatanguenoFromTagalog,
+  buildHourlyFeeFallbackText,
   MESSENGER_HREF,
   type LinkButton,
   type ToolExchange,
 } from "./post-process";
+import { hourlyFeeRateFor } from "@/lib/hourly-fee";
 import { isPropertyOverviewMessage } from "./overview-intent";
 import {
   OWNER_FACT_ALLOWED_AMOUNTS,
@@ -629,7 +631,14 @@ async function runToolLoop(body: ChatRequestBody, now: Date): Promise<ToolLoopRe
     lang,
     englishMode
   );
-  const priceChecked = limitToOneProvisional(enforcePriceClaims(dateAcknowledged, allowedAmounts));
+  // DEC-036: the early check-in/late checkout rate differs by listing group (₱400/hr
+  // Mickey in Lipa, ₱300/hr Original Haven in Lipa) — when this turn already knows which
+  // listing is being discussed, a hallucinated rate is corrected to THAT listing's own
+  // rate rather than the generic both-rates fallback.
+  const hourlyFeeFallback = buildHourlyFeeFallbackText(
+    propertyResolution.status === "unique" ? hourlyFeeRateFor(propertyResolution.slug) : null
+  );
+  const priceChecked = limitToOneProvisional(enforcePriceClaims(dateAcknowledged, allowedAmounts, hourlyFeeFallback));
   const basePrices = collectBasePrices(toolResultsThisTurn);
   listingBasePrices.forEach((amount) => basePrices.add(amount));
   const datedAmounts = collectDatedQuoteAmounts(toolResultsThisTurn);

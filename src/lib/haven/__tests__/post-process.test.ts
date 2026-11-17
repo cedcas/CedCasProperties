@@ -51,6 +51,7 @@ import {
   FALLBACK_TOTAL_TEXT,
   FALLBACK_FEE_TEXT,
   FALLBACK_HOURLY_FEE_TEXT,
+  buildHourlyFeeFallbackText,
   MESSENGER_HREF,
   type ToolExchange,
 } from "../post-process";
@@ -278,6 +279,55 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     expect(enforcePriceClaims("There's an extra fee of ₱500 per guest.", amounts)).toBe(FALLBACK_FEE_TEXT);
   });
 
+  describe("listing-aware hourly-fee fallback (DEC-036 — ₱400/hr Mickey, ₱300/hr Original Haven)", () => {
+    it("defaults to the both-rates fallback with no third argument", () => {
+      const amounts = new Set<number>();
+      expect(enforcePriceClaims("Late checkout is ₱200/hour.", amounts)).toBe(FALLBACK_HOURLY_FEE_TEXT);
+      expect(FALLBACK_HOURLY_FEE_TEXT).toContain("₱400/hour");
+      expect(FALLBACK_HOURLY_FEE_TEXT).toContain("₱300/hour");
+    });
+
+    it("corrects a leftover ₱200/hour claim to the specific listing's rate when one is passed", () => {
+      const amounts = new Set<number>();
+      const mickeyFallback = buildHourlyFeeFallbackText(400);
+      const result = enforcePriceClaims("Late checkout is ₱200/hour.", amounts, mickeyFallback);
+      expect(result).toBe(mickeyFallback);
+      expect(result).toContain("₱400/hour");
+      expect(result).not.toContain("₱300");
+      expect(result).not.toContain("₱200");
+    });
+
+    it("keeps a correct ₱400/hour (Mickey) statement untouched once 400 is an allowed amount", () => {
+      const amounts = new Set([400]);
+      const text = "Late checkout is ₱400/hour, subject to confirmation.";
+      expect(enforcePriceClaims(text, amounts, buildHourlyFeeFallbackText(400))).toBe(text);
+    });
+
+    it("keeps a correct ₱300/hour (Original Haven) statement untouched once 300 is an allowed amount", () => {
+      const amounts = new Set([300]);
+      const text = "Early check-in is ₱300/hour, subject to confirmation.";
+      expect(enforcePriceClaims(text, amounts, buildHourlyFeeFallbackText(300))).toBe(text);
+    });
+
+    it("never lets a hallucinated hours-based total survive, even for an allowed per-hour rate", () => {
+      const amounts = new Set([400]);
+      const fallback = buildHourlyFeeFallbackText(400);
+      const result = enforcePriceClaims("Early check-in for 5 hours comes to ₱400 x 5 = ₱2,000.", amounts, fallback);
+      // The early-check-in context wins the fallback classification even with arithmetic
+      // present — either way, the hallucinated multiplied total must never survive.
+      expect(result).toBe(fallback);
+      expect(result).not.toContain("2,000");
+      expect(result).not.toContain(" x ");
+    });
+
+    it("does not let an extra-guest-fee sentence with the same numeric rate be treated as an early/late claim", () => {
+      const amounts = new Set<number>();
+      const result = enforcePriceClaims("There's an extra guest fee of ₱400 per guest per night.", amounts, buildHourlyFeeFallbackText(400));
+      expect(result).toBe(FALLBACK_FEE_TEXT);
+      expect(result).not.toContain("early check-in");
+    });
+  });
+
   it("uses the checkout fallback for an unverified stay total with no fee language", () => {
     const amounts = new Set<number>();
     expect(enforcePriceClaims("Your total comes to ₱12,000.", amounts)).toBe(FALLBACK_TOTAL_TEXT);
@@ -352,16 +402,16 @@ describe("enforcePriceClaims — whole sentence/bullet-line replacement", () => 
     );
   });
 
-  it("recognizes P200/PHP 200/200 pesos as the same allowed amount as ₱200 (owner fact, any format)", () => {
-    const amounts = new Set([200]);
-    expect(enforcePriceClaims("Early check-in is P200/hour, subject to availability.", amounts)).toBe(
-      "Early check-in is P200/hour, subject to availability."
+  it("recognizes P400/PHP 400/400 pesos as the same allowed amount as ₱400 (owner fact, any format)", () => {
+    const amounts = new Set([400]);
+    expect(enforcePriceClaims("Early check-in is P400/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is P400/hour, subject to availability."
     );
-    expect(enforcePriceClaims("Late checkout runs PHP 200/hour, subject to confirmation.", amounts)).toBe(
-      "Late checkout runs PHP 200/hour, subject to confirmation."
+    expect(enforcePriceClaims("Late checkout runs PHP 400/hour, subject to confirmation.", amounts)).toBe(
+      "Late checkout runs PHP 400/hour, subject to confirmation."
     );
-    expect(enforcePriceClaims("Early check-in is 200 pesos/hour, subject to availability.", amounts)).toBe(
-      "Early check-in is 200 pesos/hour, subject to availability."
+    expect(enforcePriceClaims("Early check-in is 400 pesos/hour, subject to availability.", amounts)).toBe(
+      "Early check-in is 400 pesos/hour, subject to availability."
     );
   });
 

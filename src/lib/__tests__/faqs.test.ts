@@ -24,10 +24,12 @@ describe("faqs", () => {
     expect(item!.a.toLowerCase()).not.toContain("next question");
   });
 
-  it("preserves the separate early-check-in/late-checkout ₱200/hr FAQ", () => {
+  it("preserves the separate early-check-in/late-checkout FAQ, stating both per-listing rates (DEC-036)", () => {
     const item = faqs.find((f) => f.q === "Can I check in early or check out late?");
     expect(item).toBeDefined();
-    expect(item!.a).toContain("₱200 per hour");
+    expect(item!.a).toContain("₱400 per hour");
+    expect(item!.a).toContain("₱300 per hour");
+    expect(item!.a).not.toContain("₱200 per hour");
   });
 
   it("HOMEPAGE_FAQ_LIMIT never exceeds the total item count", () => {
