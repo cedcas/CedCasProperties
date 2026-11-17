@@ -1,7 +1,7 @@
 import "server-only";
 import { formatStayRangeShort, toUtcMidnight, addUtcDays } from "@/lib/dates";
 import { buildShortNames } from "@/lib/listings";
-import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
+import { HOURLY_FEE_RATES_DESCRIPTION } from "@/lib/hourly-fee";
 import { SOCIAL_LINKS, SOCIAL_LINK_URLS } from "@/lib/social-links";
 import type { HavenLang } from "./system-prompt";
 import type { StayLabel } from "./dates";
@@ -270,9 +270,17 @@ export const FALLBACK_FEE_TEXT = `For that fee, please ask us via Messenger (${M
  * Unlike `FALLBACK_FEE_TEXT`, this fee is a published owner fact Haven always knows the
  * answer to (see owner-facts.ts) — a hallucinated number for an early check-in/late
  * checkout question should fall back to restating the real rate, never to "ask us via
- * Messenger", which wrongly implies Haven doesn't know.
+ * Messenger", which wrongly implies Haven doesn't know. `rate` is the specific listing's
+ * hourly rate when the turn already knows which listing is being discussed (DEC-036 —
+ * ₱400/hr Mickey in Lipa, ₱300/hr Original Haven in Lipa); `null` falls back to stating
+ * both group rates.
  */
-export const FALLBACK_HOURLY_FEE_TEXT = `Early check-in and late checkout are ₱${HOURLY_FEE_RATE}/hour, subject to availability and confirmation with the team.`;
+export function buildHourlyFeeFallbackText(rate: number | null): string {
+  const rateText = rate !== null ? `₱${rate}/hour` : HOURLY_FEE_RATES_DESCRIPTION;
+  return `Early check-in and late checkout are ${rateText}, subject to availability and confirmation with the team.`;
+}
+
+export const FALLBACK_HOURLY_FEE_TEXT = buildHourlyFeeFallbackText(null);
 
 /** Rate/fee language (vs. a stay total) — decides which fallback sentence fits. Deliberately
  * excludes night/day/guest (see `RATE_CONTEXT` below): those describe a property's own base
@@ -289,8 +297,8 @@ const RATE_CONTEXT = /\/\s*(?:night|day|guest)\b|\bper\s+(?:night|day|guest)\b/i
 const HOURLY_FEE_CONTEXT_RE =
   /\/\s*(?:hr|hour)\b|\bper\s+hour\b|\ban\s+hour\b|\bkada\s+oras\b|\bbawat\s+oras\b|\bearly\s*check-?in\b|\blate\s*check-?out\b|\bmaagang\s+check-?in\b/i;
 
-function classifyFallback(unit: string): string {
-  if (HOURLY_FEE_CONTEXT_RE.test(unit)) return FALLBACK_HOURLY_FEE_TEXT;
+function classifyFallback(unit: string, hourlyFeeFallback: string): string {
+  if (HOURLY_FEE_CONTEXT_RE.test(unit)) return hourlyFeeFallback;
   return FEE_CONTEXT.test(unit) ? FALLBACK_FEE_TEXT : FALLBACK_TOTAL_TEXT;
 }
 
@@ -339,17 +347,17 @@ function splitSentences(line: string): string[] {
   return pieces.length > 0 ? pieces : [line];
 }
 
-function processSentencePiece(piece: string, allowedAmounts: Set<number>): string {
+function processSentencePiece(piece: string, allowedAmounts: Set<number>, hourlyFeeFallback: string): string {
   const trailingWs = piece.match(/\s+$/)?.[0] ?? "";
   const core = trailingWs ? piece.slice(0, -trailingWs.length) : piece;
   if (!pesoAmountRegex().test(core)) return piece;
   if (!unitHasDisallowedAmount(core, allowedAmounts)) return piece;
-  return classifyFallback(core) + trailingWs;
+  return classifyFallback(core, hourlyFeeFallback) + trailingWs;
 }
 
 const BULLET_LINE = /^(\s*(?:[-*•]|\d+[.)])\s+)(.*)$/;
 
-function processLine(line: string, allowedAmounts: Set<number>): string {
+function processLine(line: string, allowedAmounts: Set<number>, hourlyFeeFallback: string): string {
   const bulletMatch = line.match(BULLET_LINE);
   if (bulletMatch) {
     const [, marker, rest] = bulletMatch;
@@ -358,22 +366,28 @@ function processLine(line: string, allowedAmounts: Set<number>): string {
     if (!PRICE_ARITHMETIC_RE.test(rest) && RATE_CONTEXT.test(rest) && !HOURLY_FEE_CONTEXT_RE.test(rest) && !FEE_CONTEXT.test(rest)) {
       return marker + dropPriceFromBullet(rest, allowedAmounts);
     }
-    return marker + classifyFallback(rest);
+    return marker + classifyFallback(rest, hourlyFeeFallback);
   }
   return splitSentences(line)
-    .map((piece) => processSentencePiece(piece, allowedAmounts))
+    .map((piece) => processSentencePiece(piece, allowedAmounts, hourlyFeeFallback))
     .join("");
 }
 
 /**
  * Replace the WHOLE sentence/clause (or bullet line) containing any ₱/PHP amount that
  * can't be traced to this turn's tool results — never just the number — so a hallucinated
- * figure never leaves a dangling, grammatically broken fragment behind.
+ * figure never leaves a dangling, grammatically broken fragment behind. `hourlyFeeFallback`
+ * defaults to the both-rates text; pass a listing-specific one (`buildHourlyFeeFallbackText`)
+ * when this turn already knows which listing is being discussed.
  */
-export function enforcePriceClaims(text: string, allowedAmounts: Set<number>): string {
+export function enforcePriceClaims(
+  text: string,
+  allowedAmounts: Set<number>,
+  hourlyFeeFallback: string = FALLBACK_HOURLY_FEE_TEXT
+): string {
   return text
     .split("\n")
-    .map((line) => processLine(line, allowedAmounts))
+    .map((line) => processLine(line, allowedAmounts, hourlyFeeFallback))
     .join("\n");
 }
 

@@ -2,6 +2,7 @@ import "server-only";
 import { SOCIAL_LINKS } from "@/lib/social-links";
 import { buildOwnerFactsPrompt } from "./owner-facts";
 import { MESSENGER_HREF, PROVISIONAL_CAVEAT_EN, PROVISIONAL_CAVEAT_TL } from "./post-process";
+import { HOURLY_FEE_RATE_MICKEY, HOURLY_FEE_RATE_ORIGINAL_HAVEN } from "@/lib/hourly-fee";
 
 export type HavenLang = "en" | "tl" | "btg" | "auto";
 
@@ -378,15 +379,20 @@ export function buildHavenSystemPrompt(lang: HavenLang): string {
       "give the general answer directly instead of asking which house. Only ask which " +
       "house, or name both answers, when the rule genuinely differs by listing (e.g. " +
       "check-in time).",
-    "- For an early check-in or late checkout question with a specific date, call " +
-      "check_early_late with that property and date before answering — never guess " +
-      "whether it's possible. Relay its status plainly: likely_possible → say it's likely " +
-      "possible at the ₱200/hour rate, subject to confirmation with the team, never a " +
-      "promise; not_possible → say it isn't possible that day and why; unknown → don't " +
-      "guess, hand off to Messenger. With no specific date, give the general rule " +
-      "(₱200/hour, subject to availability) without calling the tool. Never compute a total " +
-      "peso amount for a specific number of hours early/late (e.g. \"5 hours × ₱200\") — " +
-      "always state the flat ₱200/hour rate, subject to availability/confirmation, and " +
+    "- The early check-in/late checkout rate differs by listing (DEC-036): " +
+      `₱${HOURLY_FEE_RATE_MICKEY}/hour for the Mickey in Lipa listings, ₱${HOURLY_FEE_RATE_ORIGINAL_HAVEN}/hour ` +
+      "for the Original Haven in Lipa listings (Cozy 1-Bedroom, Spacious 2-Bedroom) — never " +
+      "the same number for both. For a question with a specific date, call check_early_late " +
+      "with that property and date before answering — never guess whether it's possible, and " +
+      "always state the exact `fee` value its result returns (that's already the correct rate " +
+      "for the listing you called it with, so never substitute a different number). Relay its " +
+      "status plainly: likely_possible → say it's likely possible at that rate, subject to " +
+      "confirmation with the team, never a promise; not_possible → say it isn't possible that " +
+      "day and why; unknown → don't guess, hand off to Messenger. With no specific date: if the " +
+      "guest has already named a listing, give that listing's own rate; otherwise state both " +
+      "group rates, subject to availability — without calling the tool. Never compute a total " +
+      "peso amount for a specific number of hours early/late (e.g. \"5 hours × ₱400\") — " +
+      "always state the flat per-hour rate, subject to availability/confirmation, and " +
       "nothing else.",
     "- Terms of address: never use \"partner\", \"pare\", \"bro\", \"sis\", or \"dude\" unless " +
       "the guest used that exact word first. Use \"parekoy\" (male) or \"marekoy\" (female) " +

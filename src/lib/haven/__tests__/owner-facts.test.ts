@@ -30,8 +30,10 @@ describe("buildOwnerFactsPrompt", () => {
     expect(prompt).toMatch(/no down payment\/deposit/i);
   });
 
-  it("states the ₱200/hour early check-in/late checkout rate, subject to availability", () => {
-    expect(prompt).toContain("₱200 per hour");
+  it("states the per-listing early check-in/late checkout rates (DEC-036), subject to availability", () => {
+    expect(prompt).toContain("₱400 per hour");
+    expect(prompt).toContain("₱300 per hour");
+    expect(prompt).not.toContain("₱200 per hour");
     expect(prompt).toMatch(/subject to availability/i);
   });
 
@@ -96,8 +98,13 @@ describe("buildOwnerFactsPrompt", () => {
 });
 
 describe("OWNER_FACT_ALLOWED_AMOUNTS", () => {
-  it("allows the ₱200/hour early check-in/late checkout rate through the price guard", () => {
-    expect(OWNER_FACT_ALLOWED_AMOUNTS.has(200)).toBe(true);
+  it("allows both published early check-in/late checkout rates through the price guard", () => {
+    expect(OWNER_FACT_ALLOWED_AMOUNTS.has(400)).toBe(true);
+    expect(OWNER_FACT_ALLOWED_AMOUNTS.has(300)).toBe(true);
+  });
+
+  it("no longer allows the old flat ₱200/hour rate (DEC-036 superseded it)", () => {
+    expect(OWNER_FACT_ALLOWED_AMOUNTS.has(200)).toBe(false);
   });
 });
 

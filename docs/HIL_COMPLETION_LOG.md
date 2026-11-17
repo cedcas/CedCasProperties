@@ -4,7 +4,66 @@
 
 ---
 
-## 2026-11-17, latest — Promo codes: optional date range and allowed weekdays (feature/discount-code-date-weekday-limits-111726)
+## 2026-11-17, latest — Haven + site copy: per-listing early check-in/late checkout rates (feature/haven-per-listing-early-late-rates-111726)
+
+Area: Website
+
+Status: Built and tested on `feature/haven-per-listing-early-late-rates-111726` (from `dev`
+at `440e90a`, which equals production `main` / PR #121), Cedric corrected 2026-11-17 4:57 PM
+CT (DEC-036). Lint, `tsc --noEmit`, and `npx vitest run` clean (282 files / 5,343 tests
+across all three timezone projects). No `.env` file was read; no `npm run build`/Prisma
+`db push`/`migrate`/`seed` command was run against any database; **no Prisma migration —
+there is no DB field for this rate.** PR opened into `dev`, **not merged, not released to
+`main`.**
+
+### Outcome
+The early check-in / late checkout hourly fee is corrected from a single flat ₱200/hour
+(which was simply wrong for both listing groups) to two published rates: **₱400/hour** for
+the three Mickey in Lipa (B38) listings, **₱300/hour** for the two Original Haven in Lipa
+(B34) listings. Still always "subject to confirmation"/availability — only the rate's
+source changed. See [DEC-036](HIL_DECISIONS.md) for the full reasoning.
+
+### Material Changes
+- **`src/lib/hourly-fee.ts`** — the single flat `HOURLY_FEE_RATE` constant is replaced with
+  `HOURLY_FEE_RATE_MICKEY` (400) / `HOURLY_FEE_RATE_ORIGINAL_HAVEN` (300),
+  `hourlyFeeRateFor(property)` (returns `null` for an unrecognized listing — never a silent
+  flat default), `hourlyFeeLabelFor(property)` (a guest-facing `"₱400/hour"` or the
+  both-rates description), and `buildHourlyFeeDescription(feeType, hours, rate)` (rate is
+  now a required parameter, resolved by the caller).
+- **`src/app/api/admin/charges/route.ts`** — resolves the rate from the booking's own
+  `property.slug` server-side (never trusts a client-supplied rate); 400 if the listing has
+  no published hourly rate.
+- **`AdditionalChargesManager.tsx`** / **`admin/bookings/[id]/page.tsx`** — the component
+  takes a new `propertySlug` prop (the booking's own property) and computes the correct
+  rate for the "Charge type" dropdown and live total preview, disabling the two hourly fee
+  types if the listing resolves to neither group.
+- **`src/lib/haven/tools.ts`** — `get_property_details`'s `fees.earlyCheckInPerHour`/
+  `lateCheckoutPerHour` and `check_early_late`'s `fee` field both resolve from the tool's
+  own resolved listing slug instead of a flat constant; an unresolved listing in
+  `check_early_late` returns the both-rates description, never a guessed number.
+- **`src/lib/haven/owner-facts.ts`** — `OWNER_FACT_ALLOWED_AMOUNTS` now allows `{400, 300}`
+  (not 200); the owner-facts prompt states both per-listing rates.
+- **`src/lib/haven/post-process.ts`** — `buildHourlyFeeFallbackText(rate)` replaces the
+  single `FALLBACK_HOURLY_FEE_TEXT` string constant (now the function called with `null`,
+  i.e. both-rates wording); `enforcePriceClaims()` takes an optional third argument so the
+  price guard can correct a stale ₱200/hour claim to the specific listing's rate.
+- **`src/lib/haven/chat-service.ts`** — passes the resolved listing's rate into
+  `enforcePriceClaims()` whenever `propertyResolution` already resolved a single listing
+  this turn, falling back to the both-rates text otherwise.
+- **`src/lib/haven/system-prompt.ts`** — the early-check-in/late-checkout rule now states
+  both group rates and tells the model to relay `check_early_late`'s own `fee` value
+  verbatim rather than restating a flat number.
+- **Guest-facing copy** — `src/lib/faqs.ts` ("Can I check in early or check out late?"),
+  `src/app/terms/page.tsx` (§5), and `src/lib/chat/chat-tree.ts` (`info-checkin`) all state
+  both rates by listing group.
+- Extra-guest fees (also ₱300/₱400, but per guest per night, computed automatically by
+  `computeBookingQuote` — unrelated to this admin-assessed hourly fee) are unaffected; the
+  price guard's existing fee-vs-total context regexes already told the two apart and still
+  do.
+
+---
+
+## 2026-11-17 — Promo codes: optional date range and allowed weekdays (feature/discount-code-date-weekday-limits-111726)
 
 Area: Website
 

@@ -92,7 +92,7 @@ export const faqs: Faq[] = [
   },
   {
     q: "Can I check in early or check out late?",
-    a: "Early check-in and late checkout may be available, but they're never guaranteed — they depend on our cleaning schedule and whether another guest is arriving or departing the same day. When approved, early check-in or late checkout is charged at ₱200 per hour. Just message us as early as possible, ideally at the time of booking, and we'll let you know if it's possible for your dates.",
+    a: "Early check-in and late checkout may be available, but they're never guaranteed — they depend on our cleaning schedule and whether another guest is arriving or departing the same day. When approved, it's charged at ₱400 per hour for Mickey in Lipa (Sleeps 7 / 11 / 15), or ₱300 per hour for Original Haven in Lipa (Cozy 1-Bedroom, Spacious 2-Bedroom). Just message us as early as possible, ideally at the time of booking, and we'll let you know if it's possible for your dates.",
   },
   {
     q: "How and when will I get my check-in instructions?",

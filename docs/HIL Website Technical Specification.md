@@ -1,9 +1,13 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-17 (Discount Code System: optional date-range / allowed-weekday
+> **Last updated:** 2026-11-17 (Haven early check-in/late checkout rate is now per-listing —
+> ₱400/hour Mickey in Lipa, ₱300/hour Original Haven in Lipa, [DEC-036](HIL_DECISIONS.md),
+> superseding the flat ₱200/hour; branch
+> `feature/haven-per-listing-early-late-rates-111726`, built on `dev`, not merged, no
+> migration). Prior, same day: Discount Code System: optional date-range / allowed-weekday
 > limits and the mixed-stay rule, [DEC-035](HIL_DECISIONS.md); branch
 > `feature/discount-code-date-weekday-limits-111726`, built on `dev`, not merged, migration
-> not applied to any database). Prior, 2026-11-15 (listing-presentation production content
+> not applied to any database. Prior, 2026-11-15 (listing-presentation production content
 > correction ran — planHash `914e8a633bfc9051`, 23 fields / 5 properties, verified live —
 > and the TEMPORARY DEC-012 route was removed; branch
 > `chore/remove-listing-presentation-route-111526`, built on `dev`, not merged). Prior,
@@ -1770,7 +1774,7 @@ Admin create/edit ([DiscountCodesClient.tsx](../src/app/admin/discount-codes/Dis
 
 **Admin (on the booking detail page — no separate screen).** [AdditionalChargesManager.tsx](../src/components/admin/AdditionalChargesManager.tsx) renders an "Additional Charges" section inside [admin/bookings/[id]/page.tsx](../src/app/admin/bookings/%5Bid%5D/page.tsx): a "Charge type" selector (**Custom charge** / **Early Check-In** / **Late Checkout**) above the add form, and a per-charge list with **Mark paid · Cancel · Resend · Copy link · Copy SMS · Delete**. Custom charge shows the original reason + amount fields; the two hourly fee types swap those for a whole-hours input with a live description/rate/total preview before submit. APIs follow the discount-codes pattern (`auth()` guard, whitelisted PATCH, `logAction` audit): `POST /api/admin/charges` (create + auto-email guest) and `PATCH/DELETE /api/admin/charges/[id]` (PATCH whitelists only `status` → paid/cancelled and `resend: true`).
 
-**Early Check-In / Late Checkout (added 2026-09-06, DEC-014).** The published ₱200/hour early-check-in and late-checkout fee is a specialized creation mode of the same `AdditionalCharge` model and routes — no new columns, no parallel fee system. `POST /api/admin/charges` accepts either the original `{ description, amount }` body or `{ feeType: "early_checkin" | "late_checkout", hours }`; when `feeType` is present the server — never the client — computes `amount = hours × 200` and builds the `description` string via [src/lib/hourly-fee.ts](../src/lib/hourly-fee.ts), the single source of truth for the rate, the two labels, and whole-hours validation (`isValidHours` rejects zero, negative, decimal, and non-numeric values; there is no fractional-quantity precedent anywhere else in this codebase's pricing logic, so hours are whole numbers only). Everything past that point — token, guest email, admin log, PATCH/DELETE, the `/pay/[token]` guest payment page, the status-based duplicate-payment guard — is the unmodified path every other additional charge already uses. This is an admin-assessed charge for an approved accommodation request; nothing auto-imposes it from check-in/checkout timestamps, and there is no guest self-service purchase flow for it.
+**Early Check-In / Late Checkout (added 2026-09-06, DEC-014; per-listing rate 2026-11-17, DEC-036).** The published early-check-in and late-checkout fee is a specialized creation mode of the same `AdditionalCharge` model and routes — no new columns, no parallel fee system. The rate is **not** flat: **₱400/hour** for the three Mickey in Lipa (B38) listings, **₱300/hour** for the two Original Haven in Lipa (B34) listings (`cozy-1-bedroom`, `spacious-2-bedroom`) — resolved via `hourlyFeeRateFor(slug)` in [src/lib/hourly-fee.ts](../src/lib/hourly-fee.ts), the single source of truth for both rates, the two fee-type labels, and whole-hours validation (`isValidHours` rejects zero, negative, decimal, and non-numeric values; there is no fractional-quantity precedent anywhere else in this codebase's pricing logic, so hours are whole numbers only). An unrecognized listing returns `null` from `hourlyFeeRateFor` — never a silent fallback to either rate or to the old flat ₱200. `POST /api/admin/charges` accepts either the original `{ description, amount }` body or `{ feeType: "early_checkin" | "late_checkout", hours }`; when `feeType` is present the server — never the client — looks up the booking's own `property.slug`, resolves its rate, computes `amount = hours × rate`, and builds the `description` string via `buildHourlyFeeDescription(feeType, hours, rate)`. `AdditionalChargesManager.tsx` takes a `propertySlug` prop (passed from the booking detail page's own `booking.property.slug`) so the admin UI's "Charge type" dropdown and live total preview show the correct rate for that booking's listing, disabling the two hourly fee types if the listing somehow resolves to neither group. Everything past that point — token, guest email, admin log, PATCH/DELETE, the `/pay/[token]` guest payment page, the status-based duplicate-payment guard — is the unmodified path every other additional charge already uses. This is an admin-assessed charge for an approved accommodation request; nothing auto-imposes it from check-in/checkout timestamps, and there is no guest self-service purchase flow for it.
 
 **Guest (public, no auth).** [pay/[token]/page.tsx](../src/app/pay/%5Btoken%5D/page.tsx) is `force-dynamic`, `noindex`, and branches on status (payable / awaiting-verification / paid / cancelled / 404). [ChargePaymentClient.tsx](../src/components/charge/ChargePaymentClient.tsx) reuses the booking **PaymentQR** component (GCash/BPI) and Stripe **Elements** (card). `POST /api/charges/[token]/pay` handles both: GCash/BPI → `awaiting_verification` + admin verify email; card → retrieves the PaymentIntent, requires `status === "succeeded"`, then marks `paid` and records the 6% fee. The route is public (middleware only guards `/admin/*`).
 
@@ -2377,8 +2381,11 @@ buttons and "Talk to a Human" link are unaffected either way.
   injected into `system-prompt.ts`'s prompt and states the 24-guest combined capacity cap
   (counts adults; no documented kids/babies age policy — Haven must say the team will
   confirm via Messenger, never promise flexibility or that kids/babies are free/uncounted),
-  full payment up front (no half payment, no deposit), the ₱200/hour early-check-in/
-  late-checkout rate (subject to availability), quiet hours (10 PM–8 AM) plus the
+  full payment up front (no half payment, no deposit), the per-listing early-check-in/
+  late-checkout rate — ₱400/hour for Mickey in Lipa listings, ₱300/hour for Original Haven
+  in Lipa listings (DEC-036, 2026-11-17, superseding the old flat ₱200/hour) — stating the
+  one rate that applies once a listing is known, or both when it isn't, always subject to
+  availability, quiet hours (10 PM–8 AM) plus the
   no-pets/no-smoking-inside/no-parties-without-approval house rules that are the same at
   every listing, and the karaoke/amenities caution (answer only from `amenities`/
   `amenityDetails`, never infer equipment from marketing copy like "a karaoke-and-lechon
@@ -2403,9 +2410,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   "within your budget"/"kaya ba ng budget" is replaced with the nudge rather than silently
   dropped by the broader budget-question regex; (2) Haven must never share a Wi-Fi name/
   password or a door/gate/lock/keybox code — see `src/lib/haven/access-guard.ts` below.
-  `OWNER_FACT_ALLOWED_AMOUNTS` (currently `{200}`) is merged into the price
-  guard's allowlist in `chat-service.ts` so the ₱200/hour fact can be stated even when no
-  tool call happened to return it this turn. Independent, testable enforcement lives
+  `OWNER_FACT_ALLOWED_AMOUNTS` (currently `{400, 300}`, DEC-036) is merged into the price
+  guard's allowlist in `chat-service.ts` so either published hourly rate can be stated even
+  when no tool call happened to return it this turn; the price guard's hourly-fee fallback
+  text itself (`buildHourlyFeeFallbackText()` in `post-process.ts`) is listing-aware —
+  `chat-service.ts` passes the specific rate when `propertyResolution` already resolved a
+  single listing this turn, or `null` (both-rates wording) when it hasn't — so a stale
+  ₱200/hour claim is corrected to the right number, never a generic fallback. Independent, testable enforcement lives
   alongside the facts: `stripBudgetQuestions()` drops any sentence asking the guest's
   budget; `removeKidsFreeClaims()` replaces a sentence claiming kids/babies don't count or
   stay free with a Messenger-confirmation sentence; `needsCapacityHandoff()` (true for a
@@ -2475,7 +2486,10 @@ buttons and "Talk to a Human" link are unaffected either way.
   (the night of is occupied); otherwise `likely_possible` — never a guaranteed yes, always
   "subject to confirmation with the team." A missing property, invalid date, or a DB error
   returns `unknown` rather than fabricating a status. Returns
-  `{status, reason, standardTime, fee: "₱200/hour"}`. `get_quote` and `find_stay`'s
+  `{status, reason, standardTime, fee}`, where `fee` is the resolved listing's own rate via
+  `hourlyFeeLabelFor()` (e.g. `"₱400/hour"` for a Mickey in Lipa listing, `"₱300/hour"` for
+  an Original Haven in Lipa listing, DEC-036, 2026-11-17) or
+  `HOURLY_FEE_RATES_DESCRIPTION` (both rates) when no listing resolved. `get_quote` and `find_stay`'s
   per-property quote both also return a `perNight` array (`{date, weekday, rate}`, derived
   from the same `dailyRates` `computeBookingQuote` already returns) *(added 2026-10-14,
   preview-retest pass)* — so Haven can show a stay's nightly breakdown (e.g. a weekday vs.
@@ -2634,11 +2648,13 @@ buttons and "Talk to a Human" link are unaffected either way.
   may state for a stay is the exact one `get_quote`/`find_stay` returned THIS turn for the
   guest's exact `checkIn`/`checkOut` (a nightly breakdown, if shown, relays the tool's own
   `perNight` list verbatim); an early-check-in/late-checkout question never computes a
-  total for a specific number of hours (e.g. "5 hours × ₱200") — always the flat ₱200/hour
-  rate, subject to availability/confirmation, and nothing else *(both rules added
-  2026-10-14, preview-retest pass — fixes an owner-reported Thu→Sat quote that risked
-  reading as nights × one night's rate, and a price-guard sentence-replacement that nuked a
-  correct ₱200/hour fact alongside a hallucinated hours-based total)*); separately from the
+  total for a specific number of hours (e.g. "5 hours × ₱400") — always the flat per-hour
+  rate for the listing in question (₱400/hour Mickey in Lipa, ₱300/hour Original Haven in
+  Lipa — both rates if no listing is named yet; DEC-036, 2026-11-17, superseding the
+  original flat ₱200/hour), subject to availability/confirmation, and nothing else *(both
+  rules added 2026-10-14, preview-retest pass — fixes an owner-reported Thu→Sat quote that
+  risked reading as nights × one night's rate, and a price-guard sentence-replacement that
+  nuked a correct hourly-fee fact alongside a hallucinated hours-based total)*); separately from the
   arithmetic ban above, a base/listing rate (`pricePerNight`, `list_properties`, a property
   rundown) must always read "from ₱X/night" (Tagalog/Batangueño: "simula ₱X kada gabi"),
   never a bare number, since rates can change — explicitly carved out from an exact dated
@@ -2751,15 +2767,21 @@ buttons and "Talk to a Human" link are unaffected either way.
   **whole sentence or bullet line** containing a ₱/PHP amount not present in that turn's
   tool results (never just the number, which used to leave broken fragments like a
   dangling "/hour") — the replacement is "You'll see the exact total at checkout." for a
-  stay total, "Early check-in and late checkout are ₱200/hour, subject to availability and
-  confirmation with the team." (`FALLBACK_HOURLY_FEE_TEXT`) for an early-check-in/late-
+  stay total, `buildHourlyFeeFallbackText(rate)` — "Early check-in and late checkout are
+  ₱400/hour [or ₱300/hour, or both-rates text when `rate` is `null`], subject to
+  availability and confirmation with the team." (`FALLBACK_HOURLY_FEE_TEXT` is this function
+  called with `null`, i.e. the both-rates wording; DEC-036, 2026-11-17, superseded the old
+  single flat-₱200 string constant) — for an early-check-in/late-
   checkout context, or "For that fee, please ask us via Messenger
   (https://m.me/haveninlipa)." for any other rate/fee context (`/hour`, "fee", "charge") —
   `FEE_CONTEXT` deliberately excludes `/night`/`/day`/`/guest` as of 2026-10-22 (below), since
-  those describe a property's own base rate, not a fee.
+  those describe a property's own base rate, not a fee. `chat-service.ts` passes the
+  listing's own rate into `enforcePriceClaims()`'s third argument whenever
+  `propertyResolution` already resolved a single listing this turn, so a hallucinated
+  number is corrected to that listing's own rate rather than the generic both-rates text.
   The hourly fallback states the real owner fact instead of deflecting to Messenger,
   because Haven always knows that answer *(reclassification added 2026-10-14,
-  preview-retest pass — fixes a live reply that replaced a correct "₱200/hour" alongside a
+  preview-retest pass — fixes a live reply that replaced a correct hourly-fee fact alongside a
   hallucinated hours-based total with the generic Messenger fallback)*. The amount regex
   (`PESO_AMOUNT_SOURCE`) now also recognizes a bare "P" prefix (`P200`, never mid-word) and
   a "pesos" suffix with no symbol (`200 pesos`), not just `₱`/`PHP` *(same pass)*. A new

@@ -156,7 +156,7 @@ export const chatTree: Record<string, ChatNode> = {
       "• **B34** (Cozy 1-Bedroom, Spacious 2-Bedroom) — check-in from **2:00 PM**\n" +
       "• **B38, \"Mickey in Lipa\"** (Sleeps 7 / 11 / 15) — check-in from **3:00 PM**\n\n" +
       "**Check-out** is **12:00 PM (noon)** at both houses.\n\n" +
-      "Early check-in or late check-out may be available, subject to our cleaning schedule and other bookings — when approved, it's charged at ₱200 per hour. Just message us as early as possible, ideally at the time of booking.",
+      "Early check-in or late check-out may be available, subject to our cleaning schedule and other bookings — when approved, it's ₱400 per hour for Mickey in Lipa (Sleeps 7 / 11 / 15), or ₱300 per hour for Original Haven in Lipa (Cozy 1-Bedroom, Spacious 2-Bedroom). Just message us as early as possible, ideally at the time of booking.",
     options: [
       { label: "Amenities",         nodeId: "info-amenities" },
       { label: "← Back to topics",  nodeId: "root" },

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sendGuestMessage } from "@/lib/guestMessages";
 import { logAction, getIpFromRequest } from "@/lib/log";
 import { chargeUrl, buildChargeSms, buildChargeEmail } from "@/lib/charge-message";
-import { HOURLY_FEE_RATE, buildHourlyFeeDescription, isHourlyFeeType, isValidHours } from "@/lib/hourly-fee";
+import { hourlyFeeRateFor, buildHourlyFeeDescription, isHourlyFeeType, isValidHours } from "@/lib/hourly-fee";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -15,6 +15,12 @@ export async function POST(req: NextRequest) {
   if (!bookingId || Number.isNaN(bookingId)) {
     return NextResponse.json({ error: "Missing bookingId" }, { status: 400 });
   }
+
+  const booking = await prisma.booking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, guestName: true, property: { select: { slug: true } } },
+  });
+  if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
   // Early Check-In / Late Checkout: a specialized creation mode of the same
   // AdditionalCharge flow. The rate and total are always computed here on the
@@ -32,8 +38,14 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
-    description = buildHourlyFeeDescription(body.feeType, hours);
-    amount = hours * HOURLY_FEE_RATE;
+    // The hourly rate depends on which listing the booking is for (DEC-036) — never a
+    // flat default — so it's resolved from the booking's own property.
+    const rate = hourlyFeeRateFor(booking.property.slug);
+    if (rate === null) {
+      return NextResponse.json({ error: "This listing has no published hourly rate" }, { status: 400 });
+    }
+    description = buildHourlyFeeDescription(body.feeType, hours, rate);
+    amount = hours * rate;
   } else {
     description = typeof body.description === "string" ? body.description.trim() : "";
     amount = Number(body.amount);
@@ -44,12 +56,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Amount must be greater than 0" }, { status: 400 });
     }
   }
-
-  const booking = await prisma.booking.findUnique({
-    where: { id: bookingId },
-    select: { id: true, guestName: true },
-  });
-  if (!booking) return NextResponse.json({ error: "Booking not found" }, { status: 404 });
 
   const charge = await prisma.additionalCharge.create({
     data: {

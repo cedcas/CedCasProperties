@@ -72,7 +72,7 @@ export default function TermsPage() {
               <ul className="list-disc pl-5 space-y-2">
                 <li><strong>Check-in time:</strong> 2:00 PM onwards for B34 (Cozy 1-Bedroom, Spacious 2-Bedroom); 3:00 PM onwards for B38, &ldquo;Mickey in Lipa&rdquo; (Sleeps 7 / 11 / 15).</li>
                 <li><strong>Check-out time:</strong> 12:00 PM (noon) at both properties.</li>
-                <li>Early check-in or late check-out may be available upon request, subject to availability, our cleaning schedule, and adjacent reservations, and requires advance approval. When approved, it is charged at <strong>₱200 per hour</strong>. Please mention it in the &ldquo;Special Requests&rdquo; field when booking, or message us as early as possible. Approval and payment do not guarantee an exact time until confirmed with you directly.</li>
+                <li>Early check-in or late check-out may be available upon request, subject to availability, our cleaning schedule, and adjacent reservations, and requires advance approval. When approved, it is charged at <strong>₱400 per hour</strong> for Mickey in Lipa (Sleeps 7 / 11 / 15), or <strong>₱300 per hour</strong> for Original Haven in Lipa (Cozy 1-Bedroom, Spacious 2-Bedroom). Please mention it in the &ldquo;Special Requests&rdquo; field when booking, or message us as early as possible. Approval and payment do not guarantee an exact time until confirmed with you directly.</li>
               </ul>
             </section>
 
