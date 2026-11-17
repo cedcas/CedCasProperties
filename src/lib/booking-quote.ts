@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getDailyRates, sumDailyRates, calcStripeFee, calcExtraGuestFee, type DailyRateEntry } from "@/lib/pricing";
-import { codeAppliesToProperty } from "@/lib/promo";
+import { codeAppliesToProperty, evaluatePromoDiscount, parseAllowedWeekdays } from "@/lib/promo";
 import { toUtcMidnight } from "@/lib/dates";
 
 export { toStripeAmount, STRIPE_CURRENCY } from "@/lib/stripe-payment";
@@ -110,9 +110,9 @@ export async function computeBookingQuote(input: {
   const nightlyTotal = sumDailyRates(dailyRates);
 
   // ── Discount code validation ──────────────────────────────────────────────
-  // The discount base is the SERVER nightly total. It used to be the client-sent
-  // nightlyTotal/totalPrice, which let a tampered request inflate a percentage (or
-  // uncap a fixed) discount. Same formulas as /api/discount-codes/validate (UI preview).
+  // The discount base is the SERVER per-night rates (`dailyRates`), never a client-sent
+  // total. `evaluatePromoDiscount` (src/lib/promo.ts) is the single DEC-035 mixed-stay
+  // calculation shared with POST /api/discount-codes/validate (UI preview).
   let discountCode: string | null = null;
   let discountAmount: number = 0;
 
@@ -124,14 +124,35 @@ export async function computeBookingQuote(input: {
 
     if (discount && discount.isActive && codeAppliesToProperty(discount.propertyIds, propertyId)) {
       if (discount.maxUses === null || discount.usageCount < discount.maxUses) {
-        if (discount.type === "percentage") {
-          discountAmount = Math.round(nightlyTotal * (Number(discount.value) / 100) * 100) / 100;
+        // DEC-035: optional date-range / allowed-weekday limits. The code is otherwise
+        // valid here (exists, active, in scope, under maxUses), so zero qualifying nights
+        // must REJECT the quote with the helper's guest-facing reason rather than silently
+        // charging full price as if no code were entered — checkout and payment-intent both
+        // surface `error` to the guest.
+        const evaluation = evaluatePromoDiscount(
+          {
+            type: discount.type,
+            value: Number(discount.value),
+            validFrom: discount.validFrom,
+            validUntil: discount.validUntil,
+            allowedWeekdays: parseAllowedWeekdays(discount.allowedWeekdays),
+          },
+          dailyRates
+        );
+        if (evaluation.ok) {
+          discountAmount = evaluation.discountAmount;
+          discountCode = codeUpper;
         } else {
-          discountAmount = Math.min(Number(discount.value), nightlyTotal);
+          return {
+            ok: false,
+            status: 400,
+            error: evaluation.rejectionMessage ?? "This code doesn't apply to any night of this stay.",
+          };
         }
-        discountCode = codeUpper;
       }
     }
+    // An unknown, inactive, wrong-listing, or max-uses-reached code falls through here and
+    // is silently ignored (discountCode stays null) — unchanged from before DEC-035.
   }
 
   // Extra-guest fee — recomputed from the property's own fields (never trust the client total).

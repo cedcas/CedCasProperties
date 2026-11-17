@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseDiscountLimitsInput } from "@/lib/promo";
 
 export async function GET() {
   const session = await auth();
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   const session = await auth();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { code, type, value, maxUses, propertyIds, notes } = await req.json();
+  const { code, type, value, maxUses, propertyIds, notes, validFrom, validUntil, allowedWeekdays } = await req.json();
 
   if (!code || !type || value === undefined) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -28,6 +29,11 @@ export async function POST(req: Request) {
 
   if (type === "percentage" && (Number(value) <= 0 || Number(value) > 100)) {
     return NextResponse.json({ error: "Percentage must be between 1 and 100" }, { status: 400 });
+  }
+
+  const limitsResult = parseDiscountLimitsInput({ validFrom, validUntil, allowedWeekdays });
+  if (!limitsResult.ok) {
+    return NextResponse.json({ error: limitsResult.error }, { status: 400 });
   }
 
   // Normalize scope: null/empty array → all properties; otherwise validate the ids exist.
@@ -50,6 +56,9 @@ export async function POST(req: Request) {
         maxUses: maxUses ? Number(maxUses) : null,
         propertyIds: propertyIdsJson,
         notes: typeof notes === "string" && notes.trim() ? notes.trim() : null,
+        validFrom: limitsResult.limits.validFrom,
+        validUntil: limitsResult.limits.validUntil,
+        allowedWeekdays: limitsResult.limits.allowedWeekdays,
       },
     });
     return NextResponse.json(discount);

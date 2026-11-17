@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useState } from "react";
 import type { DiscountCode } from "@prisma/client";
-import { parsePropertyIds } from "@/lib/promo";
+import { parsePropertyIds, parseAllowedWeekdays, describeDiscountLimits } from "@/lib/promo";
 
 interface PropertyOption {
   id: number;
@@ -13,20 +13,35 @@ interface Props {
   properties: PropertyOption[];
 }
 
+const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+/** `YYYY-MM-DD` for a date input value from a Prisma `DateTime | string | null` (serialized as ISO over JSON). */
+function toDateInputValue(d: Date | string | null): string {
+  if (!d) return "";
+  return (typeof d === "string" ? d : d.toISOString()).slice(0, 10);
+}
+
 export default function DiscountCodesClient({ initialCodes, properties }: Props) {
   const [codes, setCodes] = useState<DiscountCode[]>(initialCodes);
-  const [form, setForm] = useState({ code: "", type: "percentage", value: "", maxUses: "", notes: "" });
+  const [form, setForm] = useState({
+    code: "", type: "percentage", value: "", maxUses: "", notes: "",
+    validFrom: "", validUntil: "",
+  });
+  const [allowedWeekdays, setAllowedWeekdays] = useState<number[]>([]);
   const [scope, setScope] = useState<"all" | "specific">("all");
   const [selectedPropertyIds, setSelectedPropertyIds] = useState<number[]>([]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // Per-row editable notes
+  // Per-row editable notes + limits
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
+  const [limitsDraft, setLimitsDraft] = useState({ validFrom: "", validUntil: "" });
+  const [weekdaysDraft, setWeekdaysDraft] = useState<number[]>([]);
   const [savingNotes, setSavingNotes] = useState(false);
   const [savedNotesId, setSavedNotesId] = useState<number | null>(null);
+  const [limitsError, setLimitsError] = useState("");
 
   const toggleNotes = (code: DiscountCode) => {
     if (expandedId === code.id) {
@@ -35,22 +50,41 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
     }
     setExpandedId(code.id);
     setNotesDraft(code.notes ?? "");
+    setLimitsDraft({ validFrom: toDateInputValue(code.validFrom), validUntil: toDateInputValue(code.validUntil) });
+    setWeekdaysDraft(parseAllowedWeekdays(code.allowedWeekdays));
     setSavedNotesId(null);
+    setLimitsError("");
   };
+
+  const toggleDraftWeekday = (d: number) =>
+    setWeekdaysDraft((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
 
   const saveNotes = async (code: DiscountCode) => {
     setSavingNotes(true);
     setSavedNotesId(null);
+    setLimitsError("");
+    if (limitsDraft.validFrom && limitsDraft.validUntil && limitsDraft.validFrom > limitsDraft.validUntil) {
+      setLimitsError("Valid-from date must not be after the valid-until date.");
+      setSavingNotes(false);
+      return;
+    }
     try {
       const res = await fetch(`/api/admin/discount-codes/${code.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notes: notesDraft }),
+        body: JSON.stringify({
+          notes: notesDraft,
+          validFrom: limitsDraft.validFrom || null,
+          validUntil: limitsDraft.validUntil || null,
+          allowedWeekdays: weekdaysDraft,
+        }),
       });
+      const data = await res.json();
       if (res.ok) {
-        const updated = await res.json();
-        setCodes((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+        setCodes((prev) => prev.map((c) => (c.id === data.id ? data : c)));
         setSavedNotesId(code.id);
+      } else {
+        setLimitsError(data.error ?? "Failed to save");
       }
     } finally {
       setSavingNotes(false);
@@ -79,6 +113,11 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
       setCreating(false);
       return;
     }
+    if (form.validFrom && form.validUntil && form.validFrom > form.validUntil) {
+      setError("Valid-from date must not be after the valid-until date.");
+      setCreating(false);
+      return;
+    }
     try {
       const res = await fetch("/api/admin/discount-codes", {
         method: "POST",
@@ -90,12 +129,16 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
           maxUses: form.maxUses ? parseInt(form.maxUses) : null,
           propertyIds: scope === "specific" ? selectedPropertyIds : null,
           notes: form.notes,
+          validFrom: form.validFrom || null,
+          validUntil: form.validUntil || null,
+          allowedWeekdays,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to create code");
       setCodes([data, ...codes]);
-      setForm({ code: "", type: "percentage", value: "", maxUses: "", notes: "" });
+      setForm({ code: "", type: "percentage", value: "", maxUses: "", notes: "", validFrom: "", validUntil: "" });
+      setAllowedWeekdays([]);
       setScope("all");
       setSelectedPropertyIds([]);
       setSuccess(`Promo code "${data.code}" created successfully.`);
@@ -217,6 +260,39 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
               </div>
             )}
           </div>
+          <div className="col-span-2 sm:col-span-2">
+            <label className={labelCls}>Valid From <span className="normal-case font-normal text-gray-400">(optional)</span></label>
+            <input
+              type="date"
+              value={form.validFrom}
+              onChange={(e) => setForm({ ...form, validFrom: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-2">
+            <label className={labelCls}>Valid Until <span className="normal-case font-normal text-gray-400">(optional, inclusive)</span></label>
+            <input
+              type="date"
+              value={form.validUntil}
+              onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+          <div className="col-span-2 sm:col-span-4">
+            <label className={labelCls}>Allowed Nights <span className="normal-case font-normal text-gray-400">(optional — leave all unchecked for every night)</span></label>
+            <div className="flex flex-wrap gap-2">
+              {WEEKDAY_LABELS.map((label, d) => (
+                <button
+                  type="button"
+                  key={d}
+                  onClick={() => setAllowedWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]))}
+                  className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors ${allowedWeekdays.includes(d) ? "bg-forest text-white border-forest" : "bg-white text-gray-600 border-black/10 hover:border-forest"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="col-span-2 sm:col-span-4">
             <label className={labelCls}>Notes</label>
             <textarea
@@ -250,6 +326,7 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Type</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Value</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Applies To</th>
+              <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Limits</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Uses</th>
               <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Status</th>
               <th className="px-4 py-3" />
@@ -257,7 +334,7 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
           </thead>
           <tbody>
             {codes.length === 0 && (
-              <tr><td colSpan={7} className="px-5 py-8 text-center text-gray-400 text-[13px]">No promo codes yet.</td></tr>
+              <tr><td colSpan={8} className="px-5 py-8 text-center text-gray-400 text-[13px]">No promo codes yet.</td></tr>
             )}
             {codes.map((code) => (
               <Fragment key={code.id}>
@@ -274,6 +351,13 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
                     scopeLabel(code)
                   )}
                 </td>
+                <td className="px-4 py-4 text-gray-600 max-w-[200px]">
+                  {describeDiscountLimits({
+                    validFrom: code.validFrom,
+                    validUntil: code.validUntil,
+                    allowedWeekdays: parseAllowedWeekdays(code.allowedWeekdays),
+                  })}
+                </td>
                 <td className="px-4 py-4 text-gray-500">
                   {code.usageCount}{code.maxUses !== null ? ` / ${code.maxUses}` : ""}
                 </td>
@@ -288,7 +372,7 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
                 <td className="px-4 py-4 text-right whitespace-nowrap">
                   <button
                     onClick={() => toggleNotes(code)}
-                    title={code.notes ? "Edit notes" : "Add notes"}
+                    title="Edit notes, date range or allowed nights"
                     className={`mr-3 transition-colors text-[13px] ${code.notes ? "text-gold hover:text-gold/80" : "text-gray-300 hover:text-gray-500"}`}
                   >
                     <i className={code.notes ? "fa-solid fa-note-sticky" : "fa-regular fa-note-sticky"} />
@@ -300,7 +384,43 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
               </tr>
               {expandedId === code.id && (
                 <tr className="border-b border-black/[.04] last:border-none bg-gray-50/60">
-                  <td colSpan={7} className="px-5 py-4">
+                  <td colSpan={8} className="px-5 py-4">
+                    <label className={labelCls}>Edit limits for {code.code}</label>
+                    <div className="grid grid-cols-2 gap-4 mb-3 sm:grid-cols-4">
+                      <div className="col-span-2 sm:col-span-2">
+                        <label className={labelCls}>Valid From <span className="normal-case font-normal text-gray-400">(optional)</span></label>
+                        <input
+                          type="date"
+                          value={limitsDraft.validFrom}
+                          onChange={(e) => setLimitsDraft((p) => ({ ...p, validFrom: e.target.value }))}
+                          className={inputCls}
+                        />
+                      </div>
+                      <div className="col-span-2 sm:col-span-2">
+                        <label className={labelCls}>Valid Until <span className="normal-case font-normal text-gray-400">(inclusive)</span></label>
+                        <input
+                          type="date"
+                          value={limitsDraft.validUntil}
+                          onChange={(e) => setLimitsDraft((p) => ({ ...p, validUntil: e.target.value }))}
+                          className={inputCls}
+                        />
+                      </div>
+                    </div>
+                    <div className="mb-3">
+                      <label className={labelCls}>Allowed Nights <span className="normal-case font-normal text-gray-400">(leave all unchecked for every night)</span></label>
+                      <div className="flex flex-wrap gap-2">
+                        {WEEKDAY_LABELS.map((label, d) => (
+                          <button
+                            type="button"
+                            key={d}
+                            onClick={() => toggleDraftWeekday(d)}
+                            className={`px-3 py-1.5 rounded-full text-[13px] font-medium border transition-colors ${weekdaysDraft.includes(d) ? "bg-forest text-white border-forest" : "bg-white text-gray-600 border-black/10 hover:border-forest"}`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <label className={labelCls}>Notes for {code.code}</label>
                     <textarea
                       value={notesDraft}
@@ -309,13 +429,14 @@ export default function DiscountCodesClient({ initialCodes, properties }: Props)
                       placeholder="Add anything — campaign, recipient, why it exists, when to retire it…"
                       className={`${inputCls} resize-y`}
                     />
+                    {limitsError && <p className="text-red-600 text-[13px] mt-2">{limitsError}</p>}
                     <div className="mt-2 flex items-center gap-3">
                       <button
                         onClick={() => saveNotes(code)}
                         disabled={savingNotes}
                         className="px-4 py-1.5 bg-forest text-white rounded-[8px] text-[13px] font-semibold hover:bg-forest/90 disabled:opacity-50 transition-colors"
                       >
-                        {savingNotes ? "Saving…" : "Save notes"}
+                        {savingNotes ? "Saving…" : "Save changes"}
                       </button>
                       <button
                         onClick={() => setExpandedId(null)}
