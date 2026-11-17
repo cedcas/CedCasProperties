@@ -1656,6 +1656,98 @@ correction needs a new temporary route, following the pattern above.
 
 ---
 
+## DEC-035 — Discount codes gain optional date-range and allowed-weekday limits; a mixed stay discounts qualifying nights only, and zero qualifying nights is a rejection, not a silent ₱0 discount
+
+Date: 2026-11-17
+Status: Active. Built on `feature/discount-code-date-weekday-limits-111726` (from `dev` at
+`e0ff767`, which equals production `main` / PR #119), Cedric pre-approved 2026-11-17. PR
+opened into `dev`, **not merged**; nothing in this decision has reached `dev` or production.
+**New migration `20261117194250_add_discount_code_validity_limits` is not applied to any
+database by this PR** — see Implications.
+Area: Website
+
+### Decision
+`DiscountCode` gains three optional, nullable columns: `validFrom` (`DateTime? @db.Date`),
+`validUntil` (`DateTime? @db.Date`, inclusive), and `allowedWeekdays` (`String? @db.Text`,
+a JSON `int[]` using the same `0=Sun…6=Sat` convention as `PropertyRate.dayOfWeek`). A stay
+night (a UTC-midnight calendar date, [src/lib/dates.ts](../src/lib/dates.ts)) qualifies for
+a code's discount only if it satisfies every bound the code has set — `validFrom ≤ night ≤
+validUntil` (both ends inclusive) **and** the night's weekday is in `allowedWeekdays` —
+where an unset bound imposes no constraint. Null/empty on all three (every existing code
+today) is exactly today's behavior: every night qualifies.
+
+**The mixed-stay rule** (`evaluatePromoDiscount` in
+[src/lib/promo.ts](../src/lib/promo.ts), the single implementation
+`computeBookingQuote` and `POST /api/discount-codes/validate` both call):
+- A percentage discount applies to the sum of *qualifying* nights' server per-night rates
+  only, never the full-stay total. Example: a 10%-off, Sun–Thu-only code on a Thu→Sat stay
+  (nights: Thu, Fri) discounts only Thursday's rate; Friday stays full price.
+- A fixed-amount discount is capped at the qualifying-nights subtotal, so it can never eat
+  into a non-qualifying night's price.
+- **Zero qualifying nights on an otherwise-valid code (exists, active, in scope, under
+  `maxUses`) is a rejection, not a silent ₱0 discount** — `POST /api/discount-codes/validate`
+  returns 4xx with a short English message naming whichever bound(s) are set (e.g. "This
+  code is only valid on Sunday–Thursday nights. None of the nights in this stay qualify.").
+  The guest never sees a code "apply" for ₱0 while still being attached to the booking.
+- `computeBookingQuote` (used by the booking route, the checkout-attempts route, the Stripe
+  payment-intent route, booking amendment, and Haven's read-only quote tools) also rejects
+  an otherwise-valid, zero-qualifying code with the same `rejectionMessage`, returned as
+  `quoteResult.error` — checkout and payment-intent surface it to the guest the same way
+  they do any other quote error, not just the interactive validate endpoint. Only an
+  unknown/inactive/wrong-listing/`maxUses`-reached code is still dropped silently, unchanged
+  from before this decision.
+- Extra-guest fee and the Stripe 6% fee are unaffected — the discount still touches only the
+  nightly base, same as before this decision.
+
+### Reason
+Cedric wants `MICKEY-MIDWEEK` (10% off, already created, scoped to the 3 Mickey listings)
+restricted to Sunday–Thursday stay nights, valid until 18 December 2026, without changing
+how `WELCOME`, `WELCOMEBACK`, or the existing unrestricted `MICKEY-MIDWEEK` row behave today.
+A full-stay-or-nothing discount would either over-discount a mixed Thu–Sat booking or force
+an all-or-nothing rejection of stays that only partially overlap the intended weekday
+window — neither matches a guest's or the Owner's expectation of "the midweek nights are
+cheaper." Silently dropping a zero-qualifying code to ₱0 (rather than rejecting) was
+rejected as a design because it would read to the guest as "the code didn't work" with no
+explanation, and because [DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount)
+already established that eligibility/amount decisions belong on the server, stated plainly,
+not inferred from a silently-smaller total.
+
+### Implications
+- `evaluatePromoDiscount`/`nightQualifiesForDiscount`/`buildPromoRejectionMessage`/
+  `describeDiscountLimits`/`parseDiscountLimitsInput` (all in `src/lib/promo.ts`, pure,
+  DB-free, unit-tested) are the only place this math and wording live. Any future caller
+  that needs to know whether a code applies to a stay must use these, not reimplement the
+  percentage/fixed/cap logic inline — the exact failure mode [DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount)
+  fixed once already (client-sent totals feeding a discount calculation).
+- `POST /api/discount-codes/validate` now requires `checkIn`/`checkOut` (in addition to
+  `code`/`propertyId`) and recomputes the discount from `getDailyRates` server-side; a
+  client-sent `nightlyTotal` (the old shape) is accepted but never read. `BookingForm.tsx`
+  sends the stay dates instead.
+- Admin (`/admin/discount-codes`) gained optional Valid-From/Valid-Until date pickers and
+  Sun–Sat weekday toggles on both create and edit, validated by `parseDiscountLimitsInput`
+  (validFrom must not be after validUntil; weekday values must be 0–6; an empty/all-cleared
+  weekday selection persists as `null`, identical to never having set it).
+- **Migration `20261117194250_add_discount_code_validity_limits`** adds the three columns —
+  nullable, no defaults, no backfill, no data written. Per
+  [DEC-026](#dec-026--deployments-never-change-the-schema-migrations-are-version-controlled-applied-by-an-operator-and-enforced-by-a-read-only-release-gate)
+  (migrate-first), an operator must run `npm run db:migrate -- deploy --target dev …`
+  against the dev database before the merge-to-`dev` Vercel build will pass the release
+  gate, and the Owner must approve and run the equivalent production `deploy` before any
+  future `dev`→`main` release that carries this change. This PR does not run either.
+- After the production migration and release, Cedric sets `MICKEY-MIDWEEK`'s `validUntil`
+  to `2026-12-18` and `allowedWeekdays` to `[0,1,2,3,4]` (Sun–Thu) in `/admin/discount-codes`
+  — not set by this PR, and not a database write this PR performs.
+- Haven's read-only tools (`get_quote`, `find_stay` in `src/lib/haven/tools.ts`) call
+  `computeBookingQuote` without ever passing a `discountCode` — Haven does not apply promo
+  codes today, so this decision does not change her behavior; confirmed by inspection, not
+  assumed.
+
+### Supersedes
+None — purely additive to the `DiscountCode` model and to the discount-amount calculation
+already established by [DEC-020](#dec-020--bookings-are-confirmed-only-after-server-side-pricing-and-stripe-paymentintent-verification-the-client-never-sets-the-amount).
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
