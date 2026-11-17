@@ -897,7 +897,7 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
     expect(result.reply).toContain("m.me/haveninlipa");
   });
 
-  it("allows the ₱200/hour early check-in fee through the price guard without a tool call", async () => {
+  it("corrects a stale ₱200/hour claim to the published per-listing rates when no listing is known (DEC-036)", async () => {
     providerChat.mockResolvedValue({
       text: "Early check-in is ₱200 per hour, subject to availability.",
       toolCalls: [],
@@ -911,7 +911,44 @@ describe("handleHavenChat — owner guardrails and facts (DEC-029 addendum, 2026
       "1.2.3.4"
     );
 
-    expect(result.reply).toContain("₱200 per hour");
+    expect(result.reply).not.toContain("₱200");
+    expect(result.reply).toContain("₱400/hour");
+    expect(result.reply).toContain("₱300/hour");
+  });
+
+  it("allows a correct ₱300/hour (Original Haven) early check-in claim through the price guard once the listing is known", async () => {
+    providerChat.mockResolvedValue({
+      text: "Early check-in is ₱300 per hour, subject to availability.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Can I check in early at the Cozy 1BR?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).toContain("₱300 per hour");
+  });
+
+  it("still corrects a leftover ₱200/hour claim to that listing's own rate once a Mickey in Lipa listing is known", async () => {
+    providerChat.mockResolvedValue({
+      text: "Late checkout is ₱200/hour, subject to confirmation.",
+      toolCalls: [],
+      usage: { inputTokens: 5, outputTokens: 5 },
+      stopReason: "end_turn",
+    });
+
+    const { handleHavenChat } = await freshChatService();
+    const result = await handleHavenChat(
+      validBody({ messages: [{ role: "user", content: "Can I get a late checkout at Mickey in Lipa Family House Sleeps 11?" }] }),
+      "1.2.3.4"
+    );
+
+    expect(result.reply).not.toContain("₱200");
+    expect(result.reply).toContain("₱400/hour");
   });
 
   it("fixes 'ilang guests ang dadalaw' phrasing in a Tagalog reply", async () => {

@@ -1748,6 +1748,76 @@ already established by [DEC-020](#dec-020--bookings-are-confirmed-only-after-ser
 
 ---
 
+## DEC-036 — Early check-in/late checkout is now a per-listing rate (₱400/hr Mickey in Lipa, ₱300/hr Original Haven in Lipa), not a flat ₱200/hr
+
+Date: 2026-11-17
+Status: Active. Built on `feature/haven-per-listing-early-late-rates-111726` (from `dev` at
+`440e90a`, which equals production `main` / PR #121), Cedric corrected 2026-11-17 4:57 PM CT.
+PR opened into `dev`, **not merged**; nothing in this decision has reached `dev` or
+production. No migration — see Implications.
+Area: Website
+
+### Decision
+The early check-in / late checkout hourly fee established by
+[DEC-014](#dec-014--a-metered-fee-₱200hr-early-check-in--late-checkout-rides-the-existing-additionalcharge-model-as-a-creation-mode-not-new-columns)
+is no longer a single flat ₱200/hour for every listing. It is now two group rates:
+**₱400/hour** for the three Mickey in Lipa (B38) listings (every slug beginning
+`mickey-in-lipa`) and **₱300/hour** for the two Original Haven in Lipa (B34) listings
+(`cozy-1-bedroom`, `spacious-2-bedroom`). The policy itself is unchanged — still never
+guaranteed, still subject to the cleaning schedule/adjacent reservations, still "subject to
+confirmation" — only the rate's source changed, from one constant to a per-listing lookup.
+
+Implemented entirely as a code constant keyed by listing group in
+[src/lib/hourly-fee.ts](../src/lib/hourly-fee.ts) (`hourlyFeeRateFor`, `hourlyFeeLabelFor`,
+`HOURLY_FEE_RATES_DESCRIPTION`) — **no Prisma migration, no new column.** There is still no
+DB field for this rate (`housePolicies` only carries check-in/check-out times); an
+unrecognized/future listing resolves to `null` from `hourlyFeeRateFor`, never a silent
+fallback to either number or to the old ₱200.
+
+Every call site that read the old flat `HOURLY_FEE_RATE` now resolves the rate from a real
+listing: the admin Additional Charge API/UI (`src/app/api/admin/charges/route.ts`,
+`AdditionalChargesManager.tsx`) resolve it from the booking's own `property.slug`; Haven's
+`get_property_details` and `check_early_late` tools (`src/lib/haven/tools.ts`) resolve it
+from the tool's own resolved slug; `owner-facts.ts`'s `OWNER_FACT_ALLOWED_AMOUNTS` now allows
+both 400 and 300 (not 200); `post-process.ts`'s price guard gained
+`buildHourlyFeeFallbackText(rate)` — `chat-service.ts` passes the specific listing's rate
+when one is already known this turn (`propertyResolution.status === "unique"`), or `null`
+(both-rates wording) when it isn't — so a hallucinated/stale ₱200/hour claim is corrected to
+the right number instead of a generic "ask us via Messenger" fallback. Extra-guest fees
+(also ₱300/₱400, but per guest per night, charged automatically via `computeBookingQuote` —
+unrelated to this admin-assessed hourly fee) are unaffected; the price guard's fee-vs-total
+context regexes already told the two apart before this change and still do.
+
+Guest-facing copy updated to state both rates: `src/lib/faqs.ts` ("Can I check in early or
+check out late?"), `src/app/terms/page.tsx` (§5 Check-in & Check-out), `src/lib/chat/chat-
+tree.ts` (`info-checkin` node).
+
+### Reason
+Cedric confirmed the hourly rate was never actually flat — Mickey in Lipa (the larger B38
+houses) has always been ₱400/hour and Original Haven in Lipa (B34) ₱300/hour. The ₱200/hour
+figure in DEC-014/SEO-DEC-013 was simply wrong for both groups and needed correcting in
+guest-facing copy and Haven before it caused an incorrect quote or admin charge.
+
+### Implications
+- `HOURLY_FEE_RATE` (the old single constant) no longer exists — any future code must call
+  `hourlyFeeRateFor`/`hourlyFeeLabelFor` with a real listing, never reintroduce a flat
+  default. A sixth listing outside both named groups needs this file updated explicitly;
+  it will not silently inherit either rate.
+- DEC-014's AdditionalCharge-as-creation-mode architecture (no new columns, amount computed
+  server-side from `hours × rate`) is otherwise unchanged — only the rate's source changed.
+- [SEO-DEC-013](#migrated-seo-decisions) is superseded for the ₱/hr figure only; its check-in
+  (2:00 PM/3:00 PM) and checkout (noon) times are still active and untouched by this decision.
+  The historical `content/seo/archive/` text for SEO-DEC-013 is not rewritten — only the live
+  cross-reference table above now points to this entry.
+
+### Supersedes
+[DEC-014](#dec-014--a-metered-fee-₱200hr-early-check-in--late-checkout-rides-the-existing-additionalcharge-model-as-a-creation-mode-not-new-columns)'s
+₱200/hour figure (its AdditionalCharge-as-creation-mode architecture is otherwise unchanged)
+and [SEO-DEC-013](#migrated-seo-decisions)'s ₱200/hr figure (its check-in/checkout times are
+unaffected).
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
@@ -1773,7 +1843,7 @@ is a summary only.
 | **SEO-DEC-010** | Active — Amended by SEO-DEC-029 (2026-09-27) | Direct WordPress content editing: modifying an existing published post is allowed via REST API; creating a post is always saved as a draft (`WP_ALLOW_PUBLISH=false`). |
 | **SEO-DEC-011** | Active | Standing content lens: "where to eat" → "where to stay," operationalizing SEO-DEC-005 as an ongoing weekly discipline. |
 | **SEO-DEC-012** | Active | Keyword-to-URL mapping rule: configuration-rental transactional queries map to the property/booking page; branded/franchise-adjacent terms map to the content hub, not a property page. |
-| **SEO-DEC-013** | Active | B34 check-in 2:00 PM / B38 "Mickey" check-in 3:00 PM; checkout 12:00 PM (noon) at both; ₱200/hr early-check-in/late-checkout policy confirmed for guest-facing copy. |
+| **SEO-DEC-013** | Superseded by [DEC-036](#dec-036--early-check-inlate-checkout-is-now-a-per-listing-rate-₱400hr-mickey-in-lipa-₱300hr-original-haven-in-lipa-not-a-flat-₱200hr) (2026-11-17) | B34 check-in 2:00 PM / B38 "Mickey" check-in 3:00 PM; checkout 12:00 PM (noon) at both (still active) — the ₱200/hr early-check-in/late-checkout figure is historical only; current guest-facing copy and Haven use DEC-036's per-listing rates. |
 | **SEO-DEC-014** | Active | B34 Cozy 1-Bedroom capacity corrected to 5 guests for all guest-facing content. |
 | **SEO-DEC-015** | Active | Guest-facing payment copy says "Credit/Debit Card," never "Stripe." |
 | **SEO-DEC-016** | Active | Public FAQ omits security-deposit and ID/KYC questions until a formal policy exists — states neither that a deposit is required nor that none is. |

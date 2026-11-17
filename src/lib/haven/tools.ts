@@ -7,7 +7,7 @@ import { computeBookingQuote } from "@/lib/booking-quote";
 import { sanitizeChargeProse } from "@/lib/occupancy";
 import { faqs as staticFaqs } from "@/lib/faqs";
 import { toUtcMidnight, addUtcDays, formatStayDate } from "@/lib/dates";
-import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
+import { hourlyFeeRateFor, hourlyFeeLabelFor, HOURLY_FEE_RATES_DESCRIPTION } from "@/lib/hourly-fee";
 import { resolveDates, buildStayLabel } from "./dates";
 import { resolvePropertyMatch, type PropertyCandidate } from "./property-resolver";
 import { shortPropertyLabels } from "./post-process";
@@ -246,8 +246,8 @@ const getPropertyDetailsTool: HavenToolSpec<z.infer<typeof getPropertyDetailsSch
       // src/lib/hourly-fee.ts and the occupancy fee note (never computed here).
       fees: {
         extraGuestFeePerNight: occupancy.extraGuestFeePerNight,
-        earlyCheckInPerHour: HOURLY_FEE_RATE,
-        lateCheckoutPerHour: HOURLY_FEE_RATE,
+        earlyCheckInPerHour: hourlyFeeRateFor(p.slug),
+        lateCheckoutPerHour: hourlyFeeRateFor(p.slug),
       },
     };
   },
@@ -574,8 +574,6 @@ export interface EarlyLateResult {
   fee: string;
 }
 
-const EARLY_LATE_FEE_LABEL = `₱${HOURLY_FEE_RATE}/hour`;
-
 type HousePoliciesShape = { checkInTime?: string; checkOutTime?: string };
 
 const checkEarlyLateSchema = z.object({
@@ -615,13 +613,17 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
   },
   schema: checkEarlyLateSchema,
   handler: async ({ slug, date, kind }) => {
-    const unknown = (reason: string, standardTime: string | null = null): EarlyLateResult => ({
+    // Default fee label before a listing is resolved — the both-rates description, never
+    // a flat/guessed number (DEC-036). Once a listing resolves, `feeLabel` below carries
+    // that listing's own rate instead.
+    const unknown = (reason: string, standardTime: string | null = null, fee = HOURLY_FEE_RATES_DESCRIPTION): EarlyLateResult => ({
       status: "unknown",
       reason,
       standardTime,
-      fee: EARLY_LATE_FEE_LABEL,
+      fee,
     });
 
+    let resolvedSlug = slug;
     let property = await prisma.property.findFirst({
       where: { slug, isActive: true, pricePerNight: { gt: 0 } },
       select: { id: true, housePolicies: true },
@@ -632,6 +634,7 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
         if ("ambiguous" in fallback.result) return fallback.result;
         return unknown(fallback.result.error);
       }
+      resolvedSlug = fallback.slug;
       property = await prisma.property.findFirst({
         where: { slug: fallback.slug, isActive: true, pricePerNight: { gt: 0 } },
         select: { id: true, housePolicies: true },
@@ -639,8 +642,10 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
     }
     if (!property) return unknown("Property not found.");
 
+    const feeLabel = hourlyFeeLabelFor(resolvedSlug);
+
     const target = toUtcMidnight(date);
-    if (isNaN(target.getTime())) return unknown("Invalid date.");
+    if (isNaN(target.getTime())) return unknown("Invalid date.", null, feeLabel);
 
     const policies = safeJsonParse<HousePoliciesShape>(property.housePolicies, {});
     const standardTime = (kind === "early_checkin" ? policies.checkInTime : policies.checkOutTime) ?? null;
@@ -653,7 +658,7 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
         end: addUtcDays(target, 1),
       });
     } catch {
-      return unknown("Could not check availability for that date right now.", standardTime);
+      return unknown("Could not check availability for that date right now.", standardTime, feeLabel);
     }
 
     const targetTime = target.getTime();
@@ -670,7 +675,7 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
             ? "Another guest is staying the night before and the house won't be ready early that day."
             : "Another guest is checking in that same day, so a late checkout isn't possible.",
         standardTime,
-        fee: EARLY_LATE_FEE_LABEL,
+        fee: feeLabel,
       };
     }
 
@@ -681,7 +686,7 @@ const checkEarlyLateTool: HavenToolSpec<z.infer<typeof checkEarlyLateSchema>> = 
           ? "No other guest is staying the night before, but this is always subject to confirmation with the team."
           : "No other guest is checking in that day, but this is always subject to confirmation with the team.",
       standardTime,
-      fee: EARLY_LATE_FEE_LABEL,
+      fee: feeLabel,
     };
   },
 };

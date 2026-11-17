@@ -1,5 +1,5 @@
 import "server-only";
-import { HOURLY_FEE_RATE } from "@/lib/hourly-fee";
+import { HOURLY_FEE_RATE_MICKEY, HOURLY_FEE_RATE_ORIGINAL_HAVEN } from "@/lib/hourly-fee";
 import { MESSENGER_HREF, type LinkButton, type ToolExchange, replaceMatchingSentences, isEnglishContext } from "./post-process";
 import type { HavenLang } from "./system-prompt";
 
@@ -21,7 +21,7 @@ export const MAX_TOTAL_CAPACITY = 24;
  * tool call happened to return them this turn — figures the Owner has confirmed are fixed,
  * published facts rather than something that could vary per property or stay.
  */
-export const OWNER_FACT_ALLOWED_AMOUNTS: Set<number> = new Set([HOURLY_FEE_RATE]);
+export const OWNER_FACT_ALLOWED_AMOUNTS: Set<number> = new Set([HOURLY_FEE_RATE_MICKEY, HOURLY_FEE_RATE_ORIGINAL_HAVEN]);
 
 export function buildOwnerFactsPrompt(): string {
   return [
@@ -30,7 +30,7 @@ export function buildOwnerFactsPrompt(): string {
     `- Capacity: the largest bookable combination, across both houses on the same dates, is ${MAX_TOTAL_CAPACITY} guests, and that count includes adults. For a group of ${MAX_TOTAL_CAPACITY} or more, or any question about squeezing in extra people, extra beds/mattresses beyond a listing's stated capacity, or whether kids/babies count toward the cap, do NOT promise flexibility — say the team will confirm directly and point to Messenger (${MESSENGER_HREF}).`,
     "- There is no documented age policy for babies or kids — never claim they don't count toward capacity or stay free. Say the team will confirm via Messenger instead.",
     "- Payment: full payment is due at the time of booking. There is no half payment and no down payment/deposit to reserve dates — the guest's full total is charged/paid up front via GCash, BPI InstaPay, or card, per the site's own payment methods.",
-    `- Early check-in / late checkout: ₱${HOURLY_FEE_RATE} per hour, the same rate for every listing, always subject to availability and confirmation with the team (never a guaranteed yes). Use the property's own standard check-in/check-out time when you have it from a tool result.`,
+    `- Early check-in / late checkout: ₱${HOURLY_FEE_RATE_MICKEY} per hour for the Mickey in Lipa listings, ₱${HOURLY_FEE_RATE_ORIGINAL_HAVEN} per hour for the Original Haven in Lipa listings (Cozy 1-Bedroom, Spacious 2-Bedroom) — the rate differs by listing, always subject to availability and confirmation with the team (never a guaranteed yes). State the rate for the listing the guest is asking about once it's known; if no listing is named yet, state both rates. Use the property's own standard check-in/check-out time when you have it from a tool result.`,
     "- Quiet hours are 10:00 PM to 8:00 AM at every listing — the same house rule everywhere, so answer it directly without asking which house. Other rules that are the same everywhere: no pets, no smoking inside, no parties/events without host approval. When a rule genuinely differs by house (e.g. check-in time), say so and name the difference instead of asking which house first.",
     "- Karaoke/videoke/pool/grill and other specific equipment: call find_amenity with the item — it searches every property's amenities/amenityDetails for you, so never ask the guest which house first. Marketing phrases like \"a karaoke-and-lechon dinner\" describe an experience, not confirmed equipment — never infer equipment from that kind of copy, even when find_amenity comes up empty. If find_amenity finds it, say which propert(y/ies) have it. If it finds nothing anywhere, say it's not listed in our amenities and the team will confirm via Messenger, and remind the guest quiet hours still apply.",
     `- (Cedric, 2026-10-15; amended same day) Our Welcome Book's restaurants and things-to-do lists apply to EVERY public listing, including the Mickey in Lipa (B38) houses — use \`get_property_details\`'s \`welcomeBook\` field or call \`get_local_guide\` for ANY property, and say these are "from our Welcome Book". Combine them with that property's own \`neighborhoodPlaces\` tool data when present, and never look up or invent a named restaurant/place online or from general knowledge for ANY property. The Welcome Book's HOUSE RULES, HOW-TOs, and CHECK-OUT STEPS stay scoped ONLY to the two B34 listings (\`cozy-1-bedroom\`, \`spacious-2-bedroom\`) — NEVER generalize those three to a Mickey in Lipa (B38) listing or any other property; for a B38 listing, point the guest to the printed "Welcome Book" inside that house for those. Fixed facts you may state directly for any property: there's an Alfamart right outside the subdivision, plus minimarts around the property. For anything the Welcome Book doesn't cover, offer the Messenger handoff (${MESSENGER_HREF}).`,

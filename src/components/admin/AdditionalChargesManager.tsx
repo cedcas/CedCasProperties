@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { buildChargeSms } from "@/lib/charge-message";
-import { HOURLY_FEE_RATE, HOURLY_FEE_LABELS, type HourlyFeeType } from "@/lib/hourly-fee";
+import { hourlyFeeRateFor, HOURLY_FEE_LABELS, type HourlyFeeType } from "@/lib/hourly-fee";
 
 const CARD_MULTIPLIER = 1.06; // base + 6% card fee
 type ChargeMode = "custom" | HourlyFeeType;
@@ -22,6 +22,7 @@ export interface ChargeView {
 interface Props {
   bookingId: number;
   guestName: string;
+  propertySlug: string;
   initialCharges: ChargeView[];
 }
 
@@ -40,8 +41,12 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
-export default function AdditionalChargesManager({ bookingId, guestName, initialCharges }: Props) {
+export default function AdditionalChargesManager({ bookingId, guestName, propertySlug, initialCharges }: Props) {
   const router = useRouter();
+  // The hourly rate depends on which listing this booking is for (DEC-036) — never a flat
+  // default. `rate` is null only if the listing somehow doesn't match either published
+  // group; the hourly charge type is disabled in that case rather than guessing a number.
+  const rate = hourlyFeeRateFor(propertySlug);
   const [charges, setCharges] = useState<ChargeView[]>(initialCharges);
   const [mode, setMode] = useState<ChargeMode>("custom");
   const [description, setDescription] = useState("");
@@ -72,8 +77,8 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
   };
 
   const hourlyHours = mode !== "custom" ? parseInt(hours, 10) : null;
-  const hourlyValid = mode !== "custom" && Number.isInteger(hourlyHours) && (hourlyHours as number) > 0;
-  const hourlyTotal = hourlyValid ? (hourlyHours as number) * HOURLY_FEE_RATE : 0;
+  const hourlyValid = mode !== "custom" && rate !== null && Number.isInteger(hourlyHours) && (hourlyHours as number) > 0;
+  const hourlyTotal = hourlyValid && rate !== null ? (hourlyHours as number) * rate : 0;
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -197,8 +202,12 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
             className={inputCls}
           >
             <option value="custom">Custom charge</option>
-            <option value="early_checkin">{HOURLY_FEE_LABELS.early_checkin} (₱{HOURLY_FEE_RATE}/hr)</option>
-            <option value="late_checkout">{HOURLY_FEE_LABELS.late_checkout} (₱{HOURLY_FEE_RATE}/hr)</option>
+            <option value="early_checkin" disabled={rate === null}>
+              {HOURLY_FEE_LABELS.early_checkin} {rate !== null ? `(₱${rate}/hr)` : "(no published rate for this listing)"}
+            </option>
+            <option value="late_checkout" disabled={rate === null}>
+              {HOURLY_FEE_LABELS.late_checkout} {rate !== null ? `(₱${rate}/hr)` : "(no published rate for this listing)"}
+            </option>
           </select>
         </div>
 
@@ -249,9 +258,9 @@ export default function AdditionalChargesManager({ bookingId, guestName, initial
               />
             </div>
             <div className="text-[13px] text-charcoal/60 pb-2">
-              {hourlyValid ? (
+              {hourlyValid && rate !== null ? (
                 <>
-                  {HOURLY_FEE_LABELS[mode]} — {hourlyHours} hour{hourlyHours === 1 ? "" : "s"} × {peso(HOURLY_FEE_RATE)}/hr ={" "}
+                  {HOURLY_FEE_LABELS[mode]} — {hourlyHours} hour{hourlyHours === 1 ? "" : "s"} × {peso(rate)}/hr ={" "}
                   <strong className="text-charcoal">{peso(hourlyTotal)}</strong>
                 </>
               ) : (

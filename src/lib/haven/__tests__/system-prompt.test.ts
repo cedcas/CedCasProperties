@@ -109,9 +109,15 @@ describe("buildHavenSystemPrompt", () => {
   describe("early check-in/late checkout fee", () => {
     const prompt = buildHavenSystemPrompt("en");
 
-    it("forbids computing a total for a specific number of hours, stating only the flat rate", () => {
+    it("forbids computing a total for a specific number of hours, stating only the flat per-listing rate", () => {
       expect(prompt).toMatch(/never compute a total peso amount for a specific number of hours/i);
-      expect(prompt).toMatch(/always state the flat ₱200\/hour rate/i);
+      expect(prompt).toMatch(/always state the flat per-hour rate/i);
+    });
+
+    it("states both per-listing rates (DEC-036), never a flat ₱200/hour", () => {
+      expect(prompt).toMatch(/₱400\/hour for the Mickey in Lipa listings/i);
+      expect(prompt).toMatch(/₱300\/hour for the Original Haven in Lipa listings/i);
+      expect(prompt).not.toMatch(/₱200\/hour/);
     });
   });
 
@@ -162,7 +168,7 @@ describe("buildHavenSystemPrompt", () => {
     it("includes a placeholder-only few-shot block with no digit prices or exact calendar dates", () => {
       expect(prompt).toMatch(/placeholder/i);
       // Scoped to the few-shot block itself — the owner-approved facts that follow it in
-      // the prompt legitimately state a real price (₱200/hour early check-in/late checkout).
+      // the prompt legitimately state real prices (₱400/₱300 per hour, early check-in/late checkout).
       const fewshot = prompt.slice(prompt.indexOf("Example exchanges"), prompt.indexOf("Owner-approved facts"));
       expect(fewshot.length).toBeGreaterThan(0);
       expect(fewshot).not.toMatch(/₱\d/);

@@ -28,6 +28,7 @@ vi.mock("@/lib/booking-quote", () => quoteApi);
 
 import { runHavenTool } from "../tools";
 import { buildStayLabel } from "../dates";
+import { HOURLY_FEE_RATES_DESCRIPTION } from "@/lib/hourly-fee";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -214,7 +215,7 @@ describe("check_early_late", () => {
         status: "not_possible",
         reason: "Another guest is staying the night before and the house won't be ready early that day.",
         standardTime: "3:00 PM",
-        fee: "₱200/hour",
+        fee: "₱300/hour",
       });
     });
   });
@@ -230,7 +231,7 @@ describe("check_early_late", () => {
         status: "not_possible",
         reason: "Another guest is checking in that same day, so a late checkout isn't possible.",
         standardTime: "12:00 PM (noon)",
-        fee: "₱200/hour",
+        fee: "₱300/hour",
       });
     });
   });
@@ -240,8 +241,21 @@ describe("check_early_late", () => {
     availabilityApi.getInventoryScopeConflicts.mockResolvedValue([]);
 
     return runHavenTool("check_early_late", { slug: "cozy-1-bedroom", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
-      expect(result).toMatchObject({ status: "likely_possible", standardTime: "3:00 PM", fee: "₱200/hour" });
+      expect(result).toMatchObject({ status: "likely_possible", standardTime: "3:00 PM", fee: "₱300/hour" });
       expect((result as { reason: string }).reason).toMatch(/subject to confirmation/i);
+    });
+  });
+
+  it("states the ₱400/hour Mickey in Lipa rate, not the Original Haven rate", () => {
+    db.property.findFirst.mockResolvedValue({ id: 1, housePolicies });
+    availabilityApi.getInventoryScopeConflicts.mockResolvedValue([]);
+
+    return runHavenTool("check_early_late", {
+      slug: "mickey-in-lipa--family-house--sleeps-11",
+      date: "2026-11-15",
+      kind: "late_checkout",
+    }).then((result) => {
+      expect(result).toMatchObject({ status: "likely_possible", fee: "₱400/hour" });
     });
   });
 
@@ -279,7 +293,12 @@ describe("check_early_late", () => {
     db.property.findFirst.mockResolvedValue(null);
 
     return runHavenTool("check_early_late", { slug: "ghost", date: "2026-11-15", kind: "early_checkin" }).then((result) => {
-      expect(result).toEqual({ status: "unknown", reason: "Property not found.", standardTime: null, fee: "₱200/hour" });
+      expect(result).toEqual({
+        status: "unknown",
+        reason: "Property not found.",
+        standardTime: null,
+        fee: HOURLY_FEE_RATES_DESCRIPTION,
+      });
     });
   });
 
@@ -433,14 +452,64 @@ describe("get_property_details", () => {
     });
 
     const result = (await runHavenTool("get_property_details", { slug: "cozy-1-bedroom" })) as {
-      fees: { extraGuestFeePerNight: number; earlyCheckInPerHour: number; lateCheckoutPerHour: number };
+      fees: { extraGuestFeePerNight: number; earlyCheckInPerHour: number | null; lateCheckoutPerHour: number | null };
     };
 
     expect(result.fees).toEqual({
       extraGuestFeePerNight: 300,
-      earlyCheckInPerHour: 200,
-      lateCheckoutPerHour: 200,
+      earlyCheckInPerHour: 300,
+      lateCheckoutPerHour: 300,
     });
+  });
+
+  it("returns the ₱400/hour Mickey in Lipa fee for a Mickey listing", async () => {
+    db.property.findFirst.mockResolvedValue({
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+      name: "Mickey Full Family House",
+      description: "A big place.",
+      amenities: "[]",
+      amenityDetails: null,
+      propertyRules: "Standard house rules.",
+      housePolicies: null,
+      pricingNotes: null,
+      propertyFaqs: null,
+      neighborhoodPlaces: null,
+      maxGuests: 15,
+      includedGuests: 10,
+      extraGuestFeePerNight: 400,
+    });
+
+    const result = (await runHavenTool("get_property_details", {
+      slug: "mickey-in-lipa--full-family-house--sleeps-15",
+    })) as { fees: { earlyCheckInPerHour: number | null; lateCheckoutPerHour: number | null } };
+
+    expect(result.fees.earlyCheckInPerHour).toBe(400);
+    expect(result.fees.lateCheckoutPerHour).toBe(400);
+  });
+
+  it("never defaults the hourly fee back to ₱200 for an unrecognized listing group", async () => {
+    db.property.findFirst.mockResolvedValue({
+      slug: "some-future-listing",
+      name: "Some Future Listing",
+      description: "",
+      amenities: "[]",
+      amenityDetails: null,
+      propertyRules: "",
+      housePolicies: null,
+      pricingNotes: null,
+      propertyFaqs: null,
+      neighborhoodPlaces: null,
+      maxGuests: 4,
+      includedGuests: 2,
+      extraGuestFeePerNight: 0,
+    });
+
+    const result = (await runHavenTool("get_property_details", { slug: "some-future-listing" })) as {
+      fees: { earlyCheckInPerHour: number | null; lateCheckoutPerHour: number | null };
+    };
+
+    expect(result.fees.earlyCheckInPerHour).toBeNull();
+    expect(result.fees.lateCheckoutPerHour).toBeNull();
   });
 
   it("reports the property-not-found error without fabricating fee data", async () => {

@@ -232,7 +232,12 @@ export default async function BookingDetailPage({ params }: { params: Promise<{ 
       </div>
 
       {/* Additional charges */}
-      <AdditionalChargesManager bookingId={booking.id} guestName={booking.guestName} initialCharges={charges} />
+      <AdditionalChargesManager
+        bookingId={booking.id}
+        guestName={booking.guestName}
+        propertySlug={booking.property.slug}
+        initialCharges={charges}
+      />
 
       {/* Additional charges notes */}
       <section className="bg-white rounded-[16px] p-6 shadow-[0_2px_12px_rgba(44,44,44,.07)] border border-black/[.04] mt-6">
