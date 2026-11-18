@@ -4,6 +4,35 @@
 
 ---
 
+## 2026-11-18, latest — Privacy policy §3: SMS/marketing consent and STOP opt-out (content/privacy-sms-consent-111826)
+
+Area: Website | Security/Privacy/Compliance
+
+Status: Built on `content/privacy-sms-consent-111826` (from `dev` at `42f0670`, which equals
+production `main` / PR #123, after PR #123 merged). Owner (Cedric) approved the wording
+2026-11-18. Copy + docs only — no code logic touched, no migration, no `.env` read, no
+database command run. PR opened into `dev`, **not merged, not released to `main`.**
+
+### Outcome
+`src/app/privacy/page.tsx` §3 ("How We Use Your Information") now discloses, in plain
+English, marketing-SMS consent and the STOP opt-out: SMS may be sent about a booking and
+occasional offers/promotions if a guest gives their mobile number and agrees; marketing SMS
+only with consent; message frequency varies; standard carrier charges may apply; opt out
+anytime by replying STOP (booking-related messages may still go out); consent is never a
+condition of booking; mobile numbers are handled under the Philippine Data Privacy Act of
+2012 (RA 10173) and are never sold. The existing §3 heading, bullet list, and closing
+sentence are unchanged, and no SMS vendor is named on the public page. "Last updated"
+changed to November 18, 2026. See [DEC-037](HIL_DECISIONS.md).
+
+### Material Changes
+- **`src/app/privacy/page.tsx`** — two new paragraphs added to §3, between the existing
+  bullet list and the existing closing sentence; "Last updated" date bumped.
+- **`docs/HIL_DECISIONS.md`** — new [DEC-037](HIL_DECISIONS.md).
+- **`docs/HIL Website Technical Specification.md`** — the `/privacy` mention and the SMS
+  compliance bullet both now point at DEC-037; `Last updated` stamp refreshed.
+
+---
+
 ## 2026-11-17, latest — Haven + site copy: per-listing early check-in/late checkout rates (feature/haven-per-listing-early-late-rates-111726)
 
 Area: Website
