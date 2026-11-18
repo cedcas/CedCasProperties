@@ -24,7 +24,7 @@ export default function PrivacyPage() {
       <main className="bg-offwhite min-h-screen pt-28 pb-20">
         <div className="max-w-3xl mx-auto px-6">
           <h1 className="font-serif font-semibold text-charcoal text-[2rem] mb-2">Privacy Policy</h1>
-          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: October 14, 2026</p>
+          <p className="text-charcoal/40 text-[13px] mb-10">Last updated: November 18, 2026</p>
 
           <div className="prose-custom space-y-8 text-[14.5px] text-charcoal/75 leading-[1.85]">
             <section>
@@ -60,6 +60,16 @@ export default function PrivacyPage() {
                 <li>Improve our website and services</li>
                 <li>Comply with legal obligations</li>
               </ul>
+              <p className="mt-3">
+                If you give us your mobile number and agree — for example when booking or signing up — we may send
+                SMS about your booking, and occasionally about offers and promotions. Marketing SMS is only sent
+                with your consent, message frequency varies, and standard carrier charges may apply.
+              </p>
+              <p className="mt-3">
+                You can opt out of marketing SMS at any time by replying STOP; booking-related messages may still
+                go out as needed. Agreeing to marketing SMS is never a condition of booking with us, and we handle
+                mobile numbers under the Philippine Data Privacy Act of 2012 (RA 10173) — we never sell them.
+              </p>
               <p className="mt-3">We do not sell, rent, or share your personal information with third parties for marketing purposes.</p>
             </section>
 
