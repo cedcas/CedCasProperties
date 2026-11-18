@@ -1,6 +1,9 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-17 (Haven early check-in/late checkout rate is now per-listing —
+> **Last updated:** 2026-11-18 (Public privacy policy §3 now discloses SMS/marketing consent
+> and the STOP opt-out, [DEC-037](HIL_DECISIONS.md); branch
+> `content/privacy-sms-consent-111826`, built on `dev`, not merged, copy + docs only, no
+> migration). Prior, 2026-11-17 (Haven early check-in/late checkout rate is now per-listing —
 > ₱400/hour Mickey in Lipa, ₱300/hour Original Haven in Lipa, [DEC-036](HIL_DECISIONS.md),
 > superseding the flat ₱200/hour; branch
 > `feature/haven-per-listing-early-late-rates-111726`, built on `dev`, not merged, no
@@ -815,7 +818,7 @@ The scheduler in [src/lib/scheduler.ts](../src/lib/scheduler.ts) snapshots `Quic
 **Operational notes**
 - Twilio number: any number that can SMS to PH works (US long codes do; +63 local numbers are not generally available on Twilio). Single number for sending and receiving — guests reply to the same number they received.
 - Cost guardrail: there's no monthly send-cap implemented yet. At 30 bookings/mo cap, even worst-case usage caps at ~$31/mo, so this is low-priority. Add a simple counter check in `sendSms()` if needed.
-- Compliance: transactional SMS (booking confirmations, reminders) does not require separate consent under the PH Data Privacy Act. The booking form copy adds a one-line consent disclosure: *"We'll send transactional SMS reminders about your stay (PH numbers only)."*
+- Compliance: transactional SMS (booking confirmations, reminders) does not require separate consent under the PH Data Privacy Act. The booking form copy adds a one-line consent disclosure: *"We'll send transactional SMS reminders about your stay (PH numbers only)."* The public privacy policy (`/privacy` §3) separately discloses marketing-SMS consent and the STOP opt-out — see [DEC-037](HIL_DECISIONS.md).
 - A2P 10DLC registration: if Twilio routes outbound through a US long code, you may receive a registration notice. For low-volume transactional traffic this is typically fine to skip, but Twilio may eventually require brand+campaign registration for sustained sending.
 
 ### Security
@@ -3335,7 +3338,8 @@ carries no separate metadata field), `haven_ai_booking_link_click` (`slug`, pars
 the clicked link's `/properties/<slug>/book` path).
 
 **Privacy policy** (`/privacy`) gained a short "Haven, Our Chat Assistant" section
-describing the 90-day masked retention and the no-payment-details rule.
+describing the 90-day masked retention and the no-payment-details rule. §3 separately
+discloses SMS/marketing consent and the STOP opt-out — see [DEC-037](HIL_DECISIONS.md).
 
 **Not yet built (tracked in Next steps):** H2 (lead capture/inquiry handoff from the chat)
 and a private, admin-only Haven mode (read-only bookings/revenue Q&A behind `/admin`). No

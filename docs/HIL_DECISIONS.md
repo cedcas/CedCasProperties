@@ -1818,6 +1818,47 @@ unaffected).
 
 ---
 
+## DEC-037 — Public privacy policy §3 now discloses SMS/marketing consent and the STOP opt-out
+
+Date: 2026-11-18
+Status: Active. Built on `content/privacy-sms-consent-111826` (from `dev` at `42f0670`, which
+equals production `main` / PR #123, after PR #123 merged). PR opened into `dev`, **not
+merged**, not released to `main`. No migration — copy + docs only.
+Area: Website | Security/Privacy/Compliance
+
+### Decision
+`src/app/privacy/page.tsx` §3 ("How We Use Your Information") now discloses, in plain
+English: if a guest gives their mobile number and agrees (e.g. at booking or a sign-up),
+Haven in Lipa may send SMS about their booking and occasional offers/promotions; marketing
+SMS is sent only with consent; message frequency varies and standard carrier charges may
+apply; a guest can opt out of marketing SMS at any time by replying STOP, and booking-related
+messages may still be sent after that; consent to marketing SMS is never a condition of
+booking; and mobile numbers are handled under the Philippine Data Privacy Act of 2012
+(RA 10173) and are never sold. The existing §3 heading, bullet list, and closing sentence
+("We do not sell, rent, or share your personal information with third parties for marketing
+purposes.") are unchanged. The public policy text does not name any SMS vendor, quote rates,
+or mention Wi-Fi.
+
+### Reason
+The Owner (Cedric) approved this wording on 2026-11-18, so the public policy accurately
+covers SMS/marketing consent and the STOP opt-out already implemented in the booking/guest-
+messaging system (`Booking.optedOutAt`) — the policy previously only covered transactional
+SMS compliance (see the SMS section of
+[HIL Website Technical Specification.md](HIL%20Website%20Technical%20Specification.md)), not
+a marketing-consent disclosure.
+
+### Implications
+This is a policy-page disclosure, not a change to SMS sending behavior or to the existing
+STOP handling (`POST /api/sms/inbound` still sets `Booking.optedOutAt`; nothing in that flow
+changed). No vendor name may appear on this public page in any future edit to §3. Any future
+change to the SMS sending/opt-out *behavior* itself is a separate decision, not covered by
+this entry.
+
+### Supersedes
+None
+
+---
+
 ## Migrated SEO Decisions
 
 Folded in verbatim (summary form; full text preserved) from the shared `/VSCode/seo`
