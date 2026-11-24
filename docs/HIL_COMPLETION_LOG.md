@@ -4,6 +4,49 @@
 
 ---
 
+## 2026-11-24 — Admin promo-code list crash after creating/editing a code with date limits (fix/promo-code-admin-client-crash-112426)
+
+Area: Website
+
+Status: Built and tested on `fix/promo-code-admin-client-crash-112426` (from `origin/dev`,
+currently equal to production `main` at `1263443` / PR #125). Reported by the Owner (Cedric)
+2026-11-24 (America/Chicago) against production `/admin/discount-codes`. Lint, `tsc
+--noEmit`, and `npx vitest run` clean (282 files / 5,346 tests across all three timezone
+projects, 3 new). No `.env` file was read; no `npm run build`/Prisma `db push`/`migrate`/
+`seed` command was run against any database. **No new Prisma migration — this was a
+client-side serialization bug, not a schema issue.** Committed locally; branch left unpushed,
+no PR opened (explicit task constraint).
+
+### Outcome
+`/admin/discount-codes` threw a full-page Next.js client-side exception immediately after
+creating a promo code that had `validUntil` (and/or `validFrom`) set — reproduced for the
+reported case (10% all-properties code, `validUntil: 2027-01-31`, `validFrom` empty) and for
+any other code with either date bound set. The save itself always succeeded; only the
+re-render crashed. Root cause: `describeDiscountLimits()`'s date formatter
+(`formatPromoDate()` in [src/lib/promo.ts](../src/lib/promo.ts)) assumed `validFrom`/
+`validUntil` were always real `Date` instances. That holds for the page's initial
+server-rendered rows — `prisma.discountCode.findMany()` results keep their `Date` objects
+across the React Server Components boundary — but `DiscountCodesClient.tsx`'s
+`handleCreate`/`toggleActive`/`saveNotes` all splice a plain `await res.json()` response
+into that same `codes` state array, and `NextResponse.json()` serializes `Date` fields to
+ISO strings. The next render called `.getUTCDate()` on a string and threw, taking down the
+whole admin page (not just that row) — matching "happens whenever he adds promo codes."
+`evaluatePromoDiscount`/`nightQualifiesForDiscount` (DEC-035) were never affected — they
+already normalized through `utcMidnightFromDateish()`, which accepts both shapes.
+
+### Material Changes
+- **`src/lib/promo.ts`** — `formatPromoDate()` now accepts `Date | string` (reuses
+  `utcMidnightFromDateish()`); `DiscountLimits.validFrom`/`validUntil` typed as
+  `Date | string | null` to match. No business-rule or discount-math change.
+- **`src/lib/__tests__/promo.test.ts`** — new regression case asserting
+  `describeDiscountLimits()` renders identically given `Date` objects (the SSR shape) or ISO
+  strings (the post-fetch shape).
+- No change to `DiscountCodesClient.tsx`, the discount-code API routes, or
+  `prisma/schema.prisma` — the bug was entirely in the one shared formatter, and the fix is a
+  no-op for every pre-existing call site that already passed a server-side `Date`.
+
+---
+
 ## 2026-11-18, latest — Privacy policy §3: SMS/marketing consent and STOP opt-out (content/privacy-sms-consent-111826)
 
 Area: Website | Security/Privacy/Compliance
