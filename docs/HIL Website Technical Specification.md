@@ -1,6 +1,10 @@
 # Haven in Lipa — Website Technical Specification
 
-> **Last updated:** 2026-11-18 (Public privacy policy §3 now discloses SMS/marketing consent
+> **Last updated:** 2026-11-24 (Admin promo-code list crash fixed — `describeDiscountLimits()`
+> in `src/lib/promo.ts` now accepts a `validFrom`/`validUntil` that arrives as an ISO string,
+> not just a `Date`; branch `fix/promo-code-admin-client-crash-112426`, built on `dev`, not
+> merged, no migration — see Discount Code System below). Prior, 2026-11-18 (Public privacy
+> policy §3 now discloses SMS/marketing consent
 > and the STOP opt-out, [DEC-037](HIL_DECISIONS.md); branch
 > `content/privacy-sms-consent-111826`, built on `dev`, not merged, copy + docs only, no
 > migration). Prior, 2026-11-17 (Haven early check-in/late checkout rate is now per-listing —
@@ -1762,6 +1766,8 @@ The single implementation lives in `evaluatePromoDiscount()` ([src/lib/promo.ts]
 - Extra-guest fee and the Stripe 6% fee are unaffected — the discount still touches only the nightly base.
 
 Admin create/edit ([DiscountCodesClient.tsx](../src/app/admin/discount-codes/DiscountCodesClient.tsx)) gained optional Valid-From/Valid-Until date pickers and Sun–Sat weekday toggle pills, validated by `parseDiscountLimitsInput()` (`src/lib/promo.ts`: `validFrom` must not be after `validUntil`; weekday values must be 0–6; an empty/all-cleared weekday selection persists as `null`). The table gained a **Limits** column via `describeDiscountLimits()` (e.g. "Sun–Thu, until 18 Dec 2026" or "No date/day limits").
+
+**Date-shape fix (2026-11-24).** `describeDiscountLimits()`'s date formatter must accept `validFrom`/`validUntil` as either a `Date` or an ISO string, because the two render paths hand it different shapes: the page's initial `initialCodes` prop keeps real `Date` objects crossing the React Server Components boundary, but `DiscountCodesClient.tsx`'s `handleCreate`/`toggleActive`/`saveNotes` all splice a plain `await res.json()` response into that same state array, and `NextResponse.json()` serializes `Date` fields to ISO strings. Before the fix, a freshly created/edited/toggled row with either date bound set crashed the whole admin page on render (`.getUTCDate()` on a string). `formatPromoDate()` now normalizes through the existing `utcMidnightFromDateish()` helper (already used by `nightQualifiesForDiscount`) instead of assuming a `Date`.
 
 **Editable notes (added 2026-06-25, `e5c0749`).** Each code carries free-form `notes` the owner can continuously edit — campaign name, who it's for, when to retire it, etc. The create form has an optional Notes textarea, and every row in the table has a sticky-note toggle (gold when notes exist, faint when empty) that expands an inline editor with a Save button + "Saved ✓" indicator, all in [DiscountCodesClient.tsx](../src/app/admin/discount-codes/DiscountCodesClient.tsx). Saved via `PATCH /api/admin/discount-codes/[id]`, which was **hardened the same session** — it formerly spread the raw request JSON into `prisma.discountCode.update`, and now whitelists only `isActive` + `notes`, so a crafted request can no longer overwrite `code`, `usageCount`, `value`, etc.
 

@@ -38,8 +38,11 @@ export const codeAppliesToProperty = scopeAppliesToProperty;
 export interface DiscountLimits {
   type: string; // "fixed" | "percentage"
   value: number;
-  validFrom?: Date | null;
-  validUntil?: Date | null;
+  // Date objects when read straight from Prisma; ISO strings when a value has made a
+  // round trip through a JSON API response (e.g. the admin client's create/update
+  // responses) and been stashed back into component state alongside RSC-served rows.
+  validFrom?: Date | string | null;
+  validUntil?: Date | string | null;
   allowedWeekdays?: number[] | null;
 }
 
@@ -94,11 +97,12 @@ function formatWeekdayList(weekdays: number[], opts: { abbr?: boolean } = {}): s
   return sorted.map((d) => names[d]).join(", ");
 }
 
-function formatPromoDate(d: Date): string {
-  return `${d.getUTCDate()} ${MONTH_ABBR[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+function formatPromoDate(d: Date | string): string {
+  const date = utcMidnightFromDateish(d);
+  return `${date.getUTCDate()} ${MONTH_ABBR[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
-function formatDateRangePart(validFrom?: Date | null, validUntil?: Date | null): string {
+function formatDateRangePart(validFrom?: Date | string | null, validUntil?: Date | string | null): string {
   if (validFrom && validUntil) return `from ${formatPromoDate(validFrom)} to ${formatPromoDate(validUntil)}`;
   if (validUntil) return `until ${formatPromoDate(validUntil)}`;
   if (validFrom) return `from ${formatPromoDate(validFrom)}`;
