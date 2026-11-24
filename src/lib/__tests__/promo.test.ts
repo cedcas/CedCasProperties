@@ -107,6 +107,26 @@ describe("describeDiscountLimits", () => {
       describeDiscountLimits({ validFrom: null, validUntil: null, allowedWeekdays: [0, 3, 6] })
     ).toBe("Sun, Wed, Sat");
   });
+
+  it("ISO date strings (e.g. a freshly-created row from a JSON API response, before any Date coercion) format the same as Date objects", () => {
+    // Regression: the admin create/edit/toggle responses are `NextResponse.json(...)`,
+    // which serializes Prisma Date fields to ISO strings — unlike the server-rendered
+    // `initialCodes` prop, which keeps real Date objects across the RSC boundary.
+    expect(
+      describeDiscountLimits({
+        validFrom: null,
+        validUntil: "2027-01-31T00:00:00.000Z",
+        allowedWeekdays: [],
+      })
+    ).toBe("until 31 Jan 2027");
+    expect(
+      describeDiscountLimits({
+        validFrom: "2026-12-01T00:00:00.000Z",
+        validUntil: "2026-12-18T00:00:00.000Z",
+        allowedWeekdays: [],
+      })
+    ).toBe("from 1 Dec 2026 to 18 Dec 2026");
+  });
 });
 
 describe("buildPromoRejectionMessage", () => {
